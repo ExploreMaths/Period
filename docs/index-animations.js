@@ -56,7 +56,7 @@ if (heroTitle) {
   // Period dot pulse
   gsap.to("#hero-title .period", {
     scale: 1.2,
-    textShadow: "0 0 40px rgba(110, 168, 255, 0.8)",
+    textShadow: "0 0 40px rgba(245, 158, 11, 0.8)",
     duration: 1,
     repeat: -1,
     yoyo: true,
@@ -107,8 +107,8 @@ if (heroBg) {
 const blob1 = document.getElementById("blob-1");
 const blob2 = document.getElementById("blob-2");
 if (blob1 && blob2) {
-  blob1.style.cssText = "width: 500px; height: 500px; background: rgba(110, 168, 255, 0.2); top: -100px; left: -100px;";
-  blob2.style.cssText = "width: 600px; height: 600px; background: rgba(188, 146, 255, 0.15); bottom: -150px; right: -150px;";
+  blob1.style.cssText = "width: 500px; height: 500px; background: rgba(245, 158, 11, 0.2); top: -100px; left: -100px;";
+  blob2.style.cssText = "width: 600px; height: 600px; background: rgba(251, 191, 36, 0.15); bottom: -150px; right: -150px;";
 
   gsap.to(blob1, {
     x: 200,
@@ -187,11 +187,11 @@ gsap.to("#hero-subtitle, #hero-cta, #hero-badge", {
   scrollTrigger: {
     trigger: ".hero",
     start: "top top",
-    end: "bottom top",
+    end: "80% top",
     scrub: true
   },
-  y: 80,
-  opacity: 0,
+  y: 50,
+  opacity: 0.7,
   ease: "none"
 });
 
@@ -414,7 +414,7 @@ if (typewriter && outputBody) {
       }, "+=0.3");
 
       tl.to(typewriter, {
-        boxShadow: "0 0 40px rgba(110, 168, 255, 0.15)",
+        boxShadow: "0 0 40px rgba(245, 158, 11, 0.15)",
         duration: 0.8,
         yoyo: true,
         repeat: 1,
@@ -496,7 +496,7 @@ if (hero && !window.matchMedia("(pointer: coarse)").matches) {
     position: absolute;
     width: 400px;
     height: 400px;
-    background: radial-gradient(circle, rgba(110, 168, 255, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
     border-radius: 50%;
     pointer-events: none;
     z-index: -1;

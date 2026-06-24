@@ -1,16 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #0b1021;
-  --surface: #131b2e;
-  --surface-hover: #1b2540;
-  --border: #253555;
-  --text: #f0f4f8;
-  --muted: #94a7c4;
-  --accent: #6ea8ff;
-  --accent-2: #bc92ff;
-  --accent-glow: rgba(110, 168, 255, 0.35);
-  --code-bg: #070b16;
+  --bg: #12100e;
+  --surface: #1c1917;
+  --surface-hover: #292524;
+  --border: #44403c;
+  --text: #fafaf9;
+  --muted: #a8a29e;
+  --accent: #f59e0b;
+  --accent-2: #fbbf24;
+  --accent-glow: rgba(245, 158, 11, 0.35);
+  --code-bg: #0c0a09;
 }
 
 * {
@@ -107,8 +107,8 @@ main > section {
   z-index: -2;
   pointer-events: none;
   background:
-    radial-gradient(circle at 20% 30%, rgba(110, 168, 255, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(188, 146, 255, 0.1) 0%, transparent 40%);
+    radial-gradient(circle at 20% 30%, rgba(245, 158, 11, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(251, 191, 36, 0.1) 0%, transparent 40%);
 }
 
 .hero-gradient-blob {
@@ -122,8 +122,8 @@ main > section {
 .hero-particle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(110, 168, 255, 0.4);
-  box-shadow: 0 0 10px rgba(110, 168, 255, 0.4);
+  background: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
   pointer-events: none;
 }
 
@@ -133,8 +133,8 @@ main > section {
   gap: 0.5rem;
   padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  background: rgba(110, 168, 255, 0.1);
-  border: 1px solid rgba(110, 168, 255, 0.25);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
   color: var(--accent);
   font-size: 0.85rem;
   font-weight: 600;
@@ -163,8 +163,8 @@ main > section {
   line-height: 1;
   color: #fff;
   text-shadow:
-    0 0 40px rgba(110, 168, 255, 0.4),
-    0 0 80px rgba(188, 146, 255, 0.2);
+    0 0 40px rgba(245, 158, 11, 0.4),
+    0 0 80px rgba(251, 191, 36, 0.2);
 }
 
 .hero h1 .char {
@@ -208,7 +208,7 @@ main > section {
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
-  box-shadow: 0 4px 30px rgba(110, 168, 255, 0.35);
+  box-shadow: 0 4px 30px rgba(245, 158, 11, 0.35);
 }
 
 .btn-secondary {
@@ -225,7 +225,7 @@ main > section {
   transform: translateX(-50%);
   width: 26px;
   height: 42px;
-  border: 2px solid rgba(110, 168, 255, 0.35);
+  border: 2px solid rgba(245, 158, 11, 0.35);
   border-radius: 13px;
   display: flex;
   justify-content: center;
@@ -284,7 +284,7 @@ code {
   padding: 0.15rem 0.4rem;
   border-radius: 0.35rem;
   font-size: 0.88em;
-  color: #dbe9ff;
+  color: #fef3c7;
 }
 
 pre {
@@ -304,12 +304,12 @@ pre code {
   line-height: 1.7;
 }
 
-.keyword { color: #c49dff; }
-.builtin { color: #6ea8ff; }
-.string { color: #a8e063; }
-.number { color: #ff8ab3; }
-.comment { color: #5d7a9c; font-style: italic; }
-.period { color: #ffd166; }
+.keyword { color: #fbbf24; }
+.builtin { color: #f59e0b; }
+.string { color: #a3e635; }
+.number { color: #f472b6; }
+.comment { color: #78716c; font-style: italic; }
+.period { color: #f59e0b; }
 
 .feature-grid {
   display: grid;
@@ -353,7 +353,7 @@ pre code {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: rgba(110, 168, 255, 0.1);
+  background: rgba(245, 158, 11, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -489,7 +489,7 @@ pre code {
 .cta-section {
   text-align: center;
   background:
-    radial-gradient(circle at 50% 50%, rgba(110, 168, 255, 0.1) 0%, transparent 60%);
+    radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.1) 0%, transparent 60%);
   border-radius: 1.5rem;
   border: 1px solid var(--border);
   padding: 4rem 2rem;
