@@ -16,9 +16,11 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
+  overflow-x: hidden;
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
@@ -413,6 +415,71 @@ pre code {
 .cta-section p {
   max-width: 500px;
   margin: 0 auto 1.5rem;
+}
+
+.horizontal-section {
+  width: 100vw;
+  margin-left: calc((100vw - 100%) / -2);
+  margin-right: calc((100vw - 100%) / -2);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.horizontal-track {
+  display: flex;
+  height: 100%;
+  will-change: transform;
+}
+
+.h-panel {
+  width: 100vw;
+  height: 100%;
+  flex-shrink: 0;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.h-panel h2 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin-bottom: 1rem;
+}
+
+.h-panel p {
+  max-width: 620px;
+  font-size: 1.05rem;
+}
+
+.h-panel pre {
+  max-width: 720px;
+  width: 100%;
+  text-align: left;
+  margin: 1.5rem 0 0;
+}
+
+@media (max-width: 800px) {
+  .horizontal-section {
+    height: auto;
+    overflow: visible;
+  }
+  .horizontal-track {
+    flex-direction: column;
+  }
+  .h-panel {
+    width: 100%;
+    height: auto;
+    padding: 3rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .h-panel:last-child {
+    border-bottom: none;
+  }
 }
 
 footer {

@@ -69,6 +69,41 @@
 <span class="builtin">show</span> greeting<span class="period">.</span></code></pre>
     </section>
 
+    <section class="horizontal-section" id="walkthrough">
+      <div class="horizontal-track">
+        <article class="h-panel h-panel-intro">
+          <span class="section-label">Walkthrough</span>
+          <h2>Scroll down, content moves left.</h2>
+          <p>Keep scrolling to explore how Period reads, reports errors, and fits into your editor.</p>
+        </article>
+
+        <article class="h-panel">
+          <span class="section-label">Syntax</span>
+          <h2>Reads like a sentence.</h2>
+          <pre><code><span class="comment">-- Declare a variable.</span>
+<span class="keyword">let</span> name <span class="keyword">be</span> <span class="string">"Period"</span><span class="period">.</span>
+<span class="builtin">show</span> name<span class="period">.</span></code></pre>
+          <p>Keywords like <code>let</code>, <code>be</code>, and <code>show</code> make intent obvious at a glance.</p>
+        </article>
+
+        <article class="h-panel">
+          <span class="section-label">Diagnostics</span>
+          <h2>Pinpoint error messages.</h2>
+          <pre><code>hello.period:2:11: error: Expected '.' at end of statement.
+     2 | show name
+       |           ^</code></pre>
+          <p>The parser recovers from errors and reports every issue with exact line and column ranges.</p>
+        </article>
+
+        <article class="h-panel">
+          <span class="section-label">Tooling</span>
+          <h2>VS Code extension included.</h2>
+          <p>Syntax highlighting, hover hints, auto-completion, formatting, go-to-definition, and live LSP diagnostics.</p>
+          <pre><code>code --install-extension period-language.vsix</code></pre>
+        </article>
+      </div>
+    </section>
+
     <section id="cta" class="cta-section">
       <h2>Start writing in Period.</h2>
       <p>Download the latest pre-release, install it in seconds, and write your first sentence-like program.</p>
@@ -137,6 +172,42 @@
 
       return () => {
         heroTl.kill();
+        ScrollTrigger.getAll().forEach(t => t.kill());
+      };
+    });
+
+    mm.add("(prefers-reduced-motion: no-preference) and (min-width: 800px)", () => {
+      const track = document.querySelector(".horizontal-track");
+      const panels = gsap.utils.toArray(".h-panel");
+      if (!track || panels.length < 2) return;
+
+      const scrollTween = gsap.to(track, {
+        xPercent: -100 * (panels.length - 1),
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".horizontal-section",
+          pin: true,
+          scrub: 1,
+          end: () => "+=" + track.offsetWidth
+        }
+      });
+
+      panels.forEach((panel) => {
+        gsap.from(panel.querySelectorAll("h2, p, pre"), {
+          y: 40,
+          autoAlpha: 0,
+          stagger: 0.1,
+          scrollTrigger: {
+            trigger: panel,
+            containerAnimation: scrollTween,
+            start: "left 85%",
+            end: "left 45%",
+            scrub: true
+          }
+        });
+      });
+
+      return () => {
         ScrollTrigger.getAll().forEach(t => t.kill());
       };
     });
