@@ -69,9 +69,9 @@ nav a.active {
 }
 
 main {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 .hero {
@@ -253,11 +253,11 @@ pre code {
 
 .docs-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 2.5rem;
-  max-width: 1100px;
+  grid-template-columns: 260px 1fr;
+  gap: 3rem;
+  max-width: 1300px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 0.75rem;
   align-items: start;
 }
 
@@ -422,11 +422,11 @@ pre code {
 
 footer {
   text-align: center;
-  padding: 2.5rem 2rem;
+  padding: 2.5rem 0.75rem;
   color: var(--muted);
   border-top: 1px solid var(--border);
   font-size: 0.9rem;
-  max-width: 800px;
+  max-width: 1300px;
   margin: 0 auto;
 }
 
