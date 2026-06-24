@@ -73,14 +73,73 @@
       <h2>Start writing in Period.</h2>
       <p>Download the latest pre-release, install it in seconds, and write your first sentence-like program.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases">Download v0.0.1</a>
+        <a class="btn btn-primary" href="install.html">Download Period</a>
         <a class="btn btn-secondary" href="docs.html">Explore Docs</a>
       </div>
     </section>
+
   </main>
 
   <footer>
     <p>&copy; 2026 Period Language. Released under the MIT License.</p>
   </footer>
+
+  <script type="module">
+    import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
+    import { ScrollTrigger } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/ScrollTrigger.js";
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const mm = gsap.matchMedia();
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const heroTl = gsap.timeline({ defaults: { duration: 0.7, ease: "power2.out" } });
+
+      heroTl
+        .from(".hero h1", { y: 40, autoAlpha: 0, duration: 0.8, ease: "power3.out" }, 0.1)
+        .from(".hero p", { y: 30, autoAlpha: 0 }, "-=0.5")
+        .from(".hero .cta a", { y: 20, autoAlpha: 0, stagger: 0.1 }, "-=0.4")
+        .from(".hero h1 .period", {
+          scale: 0,
+          rotation: -45,
+          duration: 0.6,
+          ease: "back.out(1.7)",
+          transformOrigin: "center center"
+        }, "-=0.65");
+
+      const reveal = { y: 35, autoAlpha: 0, duration: 0.6 };
+
+      gsap.from("#features .section-label, #features h2, #features > p", {
+        ...reveal,
+        stagger: 0.1,
+        scrollTrigger: { trigger: "#features", start: "top 80%" }
+      });
+
+      gsap.from(".feature", {
+        y: 45,
+        autoAlpha: 0,
+        duration: 0.6,
+        stagger: 0.1,
+        scrollTrigger: { trigger: ".feature-grid", start: "top 82%" }
+      });
+
+      gsap.from("#hello-period .section-label, #hello-period h2, #hello-period > p, #hello-period pre", {
+        ...reveal,
+        stagger: 0.12,
+        scrollTrigger: { trigger: "#hello-period", start: "top 78%" }
+      });
+
+      gsap.from("#cta h2, #cta p, #cta .cta", {
+        ...reveal,
+        stagger: 0.1,
+        scrollTrigger: { trigger: "#cta", start: "top 80%" }
+      });
+
+      return () => {
+        heroTl.kill();
+        ScrollTrigger.getAll().forEach(t => t.kill());
+      };
+    });
+  </script>
 </body>
 </html>
