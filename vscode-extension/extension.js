@@ -27,7 +27,7 @@ function findServerExecutable(context) {
     return commandName;
 }
 
-function startClient(context) {
+async function startClient(context) {
     const serverExecutable = findServerExecutable(context);
     const serverOptions = {
         run: { command: serverExecutable, args: ['--lsp'], transport: TransportKind.stdio },
@@ -42,7 +42,7 @@ function startClient(context) {
     };
 
     client = new LanguageClient('period', 'Period Language Server', serverOptions, clientOptions);
-    client.start();
+    await client.start();
 }
 
 function runCurrentFile(context) {
@@ -60,13 +60,17 @@ function runCurrentFile(context) {
     terminal.sendText(`${JSON.stringify(executable)} ${JSON.stringify(filePath)}`, true);
 }
 
-function activate(context) {
-    startClient(context);
-
+async function activate(context) {
     const runCommand = vscode.commands.registerCommand('period.runFile', () => {
         runCurrentFile(context);
     });
     context.subscriptions.push(runCommand);
+
+    try {
+        await startClient(context);
+    } catch (err) {
+        console.error('Period language server failed to start:', err);
+    }
 }
 
 function deactivate() {
