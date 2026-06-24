@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 project = 'Period'
 copyright = '2026, Period Language'
 author = 'Period Language'
-release = '1.0.0'
+release = '0.0.1'
 
 extensions = [
     'sphinx.ext.autodoc',
