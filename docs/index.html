@@ -463,7 +463,7 @@
 
           const st = scrollTween.scrollTrigger;
 
-          const threshold = 90;
+          const threshold = 160;
 
           const goToPanel = (index) => {
             index = gsap.utils.clamp(0, panelCount - 1, index);
@@ -472,7 +472,7 @@
             const targetScroll = st.start + (st.end - st.start) * (index / (panelCount - 1));
             gsap.to(window, {
               scrollTo: { y: targetScroll, autoKill: true },
-              duration: 0.55,
+              duration: 0.85,
               ease: "power2.inOut",
               onComplete: () => {
                 isNavigating = false;
@@ -508,6 +508,7 @@
             preventDefault: true,
             onChangeY: (self) => {
               accumulated += self.deltaY;
+              accumulated = gsap.utils.clamp(-threshold * 1.5, threshold * 1.5, accumulated);
               if (!isNavigating) tryAdvance(self.deltaY);
             },
             onStop: () => { accumulated = 0; }
