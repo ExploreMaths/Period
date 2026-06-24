@@ -15,7 +15,6 @@ sphinx-docs/build/
 # VS Code extension
 vscode-extension/node_modules/
 vscode-extension/*.vsix
-!vscode-extension/period-language.vsix
 
 # IDE
 .vscode/
