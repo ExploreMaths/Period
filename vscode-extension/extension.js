@@ -53,11 +53,20 @@ function runCurrentFile(context) {
     }
 
     const filePath = editor.document.fileName;
-    const executable = findServerExecutable(context);
+    let executable = findServerExecutable(context);
+    if (process.platform === 'win32') {
+        executable = executable.replace(/\.exe$/i, '');
+    }
+
+    const fileArg = JSON.stringify(filePath);
+    const command = executable.includes(' ')
+        ? `& ${JSON.stringify(executable)} ${fileArg}`
+        : `${executable} ${fileArg}`;
+
     const terminal = vscode.window.terminals.find(t => t.name === 'Period')
         || vscode.window.createTerminal('Period');
     terminal.show();
-    terminal.sendText(`${JSON.stringify(executable)} ${JSON.stringify(filePath)}`, true);
+    terminal.sendText(command, true);
 }
 
 async function activate(context) {
