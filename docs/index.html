@@ -215,8 +215,10 @@
   <script type="module">
     import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
     import { ScrollTrigger } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/ScrollTrigger.js";
+    import { ScrollToPlugin } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/ScrollToPlugin.js";
+    import { Observer } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/Observer.js";
 
-    gsap.registerPlugin(ScrollTrigger);
+    gsap.registerPlugin(ScrollTrigger, ScrollToPlugin, Observer);
 
     const mm = gsap.matchMedia();
 
@@ -431,22 +433,74 @@
         const hPanels = gsap.utils.toArray(".h-panel");
         if (hTrack && hPanels.length >= 2) {
           const panelCount = hPanels.length;
+          let currentIndex = 0;
+          let isNavigating = false;
+          let accumulated = 0;
+
           const scrollTween = gsap.to(hTrack, {
             xPercent: -100 * (panelCount - 1),
             ease: "none",
             scrollTrigger: {
               trigger: ".horizontal-section",
               pin: true,
-              scrub: 1,
+              scrub: 0.5,
               end: () => "+=" + hTrack.offsetWidth,
               snap: {
                 snapTo: 1 / (panelCount - 1),
-                duration: { min: 0.15, max: 0.4 },
+                duration: { min: 0.1, max: 0.25 },
                 delay: 0,
-                ease: "power1.inOut"
-              }
+                ease: "power1.out"
+              },
+              onSnapComplete: (self) => {
+                currentIndex = Math.round(self.progress * (panelCount - 1));
+              },
+              onEnter: () => observer.enable(),
+              onLeave: () => observer.disable(),
+              onEnterBack: () => observer.enable(),
+              onLeaveBack: () => observer.disable()
             }
           });
+
+          const st = scrollTween.scrollTrigger;
+
+          const goToPanel = (index) => {
+            index = gsap.utils.clamp(0, panelCount - 1, index);
+            if (index === currentIndex || isNavigating) return;
+            isNavigating = true;
+            const targetScroll = st.start + (st.end - st.start) * (index / (panelCount - 1));
+            gsap.to(window, {
+              scrollTo: { y: targetScroll, autoKill: true },
+              duration: 0.5,
+              ease: "power2.inOut",
+              onComplete: () => { isNavigating = false; currentIndex = index; }
+            });
+          };
+
+          const observer = Observer.create({
+            target: ".horizontal-section",
+            type: "wheel,touch",
+            preventDefault: false,
+            onChangeY: (self) => {
+              if (isNavigating) return;
+              accumulated += self.deltaY;
+              const threshold = 40;
+              if (accumulated > threshold) {
+                accumulated = 0;
+                if (currentIndex < panelCount - 1) {
+                  self.event.preventDefault();
+                  goToPanel(currentIndex + 1);
+                }
+              } else if (accumulated < -threshold) {
+                accumulated = 0;
+                if (currentIndex > 0) {
+                  self.event.preventDefault();
+                  goToPanel(currentIndex - 1);
+                }
+              }
+            },
+            onStop: () => { accumulated = 0; }
+          });
+          observer.disable();
 
           hPanels.forEach((panel) => {
             gsap.from(panel.querySelectorAll("h2, p, pre"), {
@@ -462,6 +516,8 @@
               }
             });
           });
+
+          cleanups.push(() => observer.kill());
         }
       }
 
