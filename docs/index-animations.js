@@ -159,40 +159,30 @@ gsap.to(".scroll-indicator span", {
   ease: "power1.inOut"
 });
 
-ScrollTrigger.create({
-  trigger: ".hero",
-  start: "top top",
-  end: "50% top",
-  scrub: true,
-  onUpdate: (self) => {
-    gsap.set(".scroll-indicator", { opacity: 1 - self.progress });
-  }
-});
-
 // ===== Hero parallax on scroll =====
-gsap.to("#hero-title", {
+const heroTl = gsap.timeline({
   scrollTrigger: {
     trigger: ".hero",
     start: "top top",
     end: "bottom top",
-    scrub: true
-  },
-  y: 120,
-  opacity: 0.1,
-  filter: "blur(10px)",
-  ease: "none"
+    scrub: 0.5
+  }
 });
 
-gsap.to("#hero-subtitle, #hero-cta, #hero-badge", {
-  scrollTrigger: {
-    trigger: ".hero",
-    start: "top top",
-    end: "80% top",
-    scrub: true
-  },
-  y: 50,
-  opacity: 0.7,
-  ease: "none"
+heroTl
+  .to("#hero-title", { y: 80, opacity: 0.15, duration: 1, ease: "none" }, 0)
+  .to("#hero-subtitle", { y: 30, opacity: 0.75, duration: 1, ease: "none" }, 0)
+  .to("#hero-cta", { y: 40, opacity: 0.6, duration: 1, ease: "none" }, 0)
+  .to("#hero-badge", { y: 20, opacity: 0.5, duration: 1, ease: "none" }, 0)
+  .to(".scroll-indicator", { opacity: 0, duration: 0.3, ease: "none" }, 0);
+
+// Refresh ScrollTrigger after fonts and layout settle
+document.fonts.ready.then(() => {
+  ScrollTrigger.refresh();
+});
+
+window.addEventListener("load", () => {
+  ScrollTrigger.refresh();
 });
 
 // ===== Stats count-up animation =====
@@ -334,7 +324,10 @@ const outputBody = document.getElementById("code-output-body");
 
 if (typewriter && outputBody) {
   const originalHTML = typewriter.innerHTML;
+  const naturalHeight = typewriter.offsetHeight;
+  typewriter.style.minHeight = naturalHeight + "px";
   typewriter.innerHTML = "";
+  typewriter.style.opacity = "0";
   const wrapper = document.createElement("code");
   typewriter.appendChild(wrapper);
 
@@ -366,10 +359,12 @@ if (typewriter && outputBody) {
 
   ScrollTrigger.create({
     trigger: "#hello-period",
-    start: "top 70%",
+    start: "top 75%",
     once: true,
     onEnter: () => {
       typewriter.innerHTML = originalHTML;
+      typewriter.style.opacity = "1";
+      typewriter.style.minHeight = "";
       const code = typewriter.querySelector("code");
       code.innerHTML = "";
 
