@@ -616,7 +616,11 @@ pre code {
   max-width: 720px;
   width: 100%;
   text-align: left;
-  margin: 1.5rem 0 0;
+  margin: 1.5rem 0 1rem;
+}
+
+.h-panel p {
+  margin: 0;
 }
 
 @media (max-width: 800px) {
