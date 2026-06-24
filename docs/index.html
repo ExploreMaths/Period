@@ -479,7 +479,7 @@
           const observer = Observer.create({
             target: ".horizontal-section",
             type: "wheel,touch",
-            preventDefault: false,
+            preventDefault: true,
             onChangeY: (self) => {
               if (isNavigating) return;
               accumulated += self.deltaY;
@@ -487,14 +487,16 @@
               if (accumulated > threshold) {
                 accumulated = 0;
                 if (currentIndex < panelCount - 1) {
-                  self.event.preventDefault();
                   goToPanel(currentIndex + 1);
+                } else {
+                  window.scrollBy(0, self.deltaY);
                 }
               } else if (accumulated < -threshold) {
                 accumulated = 0;
                 if (currentIndex > 0) {
-                  self.event.preventDefault();
                   goToPanel(currentIndex - 1);
+                } else {
+                  window.scrollBy(0, self.deltaY);
                 }
               }
             },
