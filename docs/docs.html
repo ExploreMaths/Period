@@ -23,10 +23,10 @@
   </header>
 
   <main>
-    <h1 class="gsap-fade-up">Language Documentation</h1>
-    <p class="gsap-fade-up">Every statement in Period ends with a period (<code>.</code>). Comments begin with two dashes and extend to the end of the line.</p>
+    <h1>Language Documentation</h1>
+    <p>Every statement in Period ends with a period (<code>.</code>). Comments begin with two dashes and extend to the end of the line.</p>
 
-    <div class="toc gsap-fade-left">
+    <div class="toc">
       <h4>On this page</h4>
       <ul>
         <li><a href="#install">Installation & First Steps</a></li>
@@ -46,7 +46,7 @@
       </ul>
     </div>
 
-    <section id="install" class="gsap-reveal">
+    <section id="install">
       <h2>Installation & First Steps</h2>
       <p>Download <code>Period-Setup.exe</code> from the <a href="https://github.com/ExploreMaths/Period/releases">GitHub Releases</a> page and run it. The installer will:</p>
       <ul>
@@ -62,7 +62,7 @@
       <pre><code>period</code></pre>
     </section>
 
-    <section id="basics" class="gsap-reveal">
+    <section id="basics">
       <h2>Basics</h2>
       <p>A Period program is a sequence of statements. Each statement ends with a period. Whitespace and blank lines are ignored.</p>
       <pre><code><span class="comment">-- This is a comment.</span>
@@ -71,7 +71,7 @@
       <p>Period is case-insensitive for keywords. <code>Let</code>, <code>LET</code>, and <code>let</code> are all valid.</p>
     </section>
 
-    <section id="variables" class="gsap-reveal">
+    <section id="variables">
       <h2>Variables</h2>
       <p>Use <code>let</code> to declare a variable and <code>set</code> to reassign an existing variable or index.</p>
       <pre><code><span class="keyword">let</span> name <span class="keyword">be</span> <span class="string">"Period"</span><span class="period">.</span>
@@ -82,7 +82,7 @@
       <p>Variable names must start with a letter or underscore and may contain letters, digits, and underscores.</p>
     </section>
 
-    <section id="data" class="gsap-reveal">
+    <section id="data">
       <h2>Data Types</h2>
 
       <h3>Numbers</h3>
@@ -116,7 +116,7 @@
 <span class="builtin">show</span> length <span class="keyword">with</span> person<span class="period">.</span></code></pre>
     </section>
 
-    <section id="operators" class="gsap-reveal">
+    <section id="operators">
       <h2>Operators</h2>
       <h3>Arithmetic</h3>
       <ul>
@@ -135,7 +135,7 @@
       <p>From highest to lowest: parentheses, indexing, function calls, unary <code>not</code> and <code>-</code>, <code>**</code>, <code>*</code> <code>/</code> <code>%</code>, <code>+</code> <code>-</code>, comparisons, <code>and</code>, <code>or</code>.</p>
     </section>
 
-    <section id="conditionals" class="gsap-reveal">
+    <section id="conditionals">
       <h2>Conditionals</h2>
       <p>Use <code>if ... then.</code> to branch. The optional <code>otherwise.</code> block runs when the condition is false.</p>
       <pre><code><span class="keyword">let</span> score <span class="keyword">be</span> <span class="number">85</span><span class="period">.</span>
@@ -147,7 +147,7 @@
       <p>You can nest conditionals inside any block.</p>
     </section>
 
-    <section id="loops" class="gsap-reveal">
+    <section id="loops">
       <h2>Loops</h2>
       <p>Use <code>while</code> with <code>repeat</code> to loop while a condition is true. There is no <code>for</code> loop; use a counter variable with <code>while</code>.</p>
       <pre><code><span class="keyword">let</span> i <span class="keyword">be</span> <span class="number">0</span><span class="period">.</span>
@@ -157,7 +157,7 @@
 <span class="keyword">end while</span><span class="period">.</span></code></pre>
     </section>
 
-    <section id="functions" class="gsap-reveal">
+    <section id="functions">
       <h2>Functions</h2>
       <p>Define functions with <code>define</code> and call them with <code>with</code>. Use <code>return</code> to send a value back. Functions that do not explicitly return yield <code>nothing</code>.</p>
       <pre><code><span class="keyword">define</span> greet <span class="keyword">with</span> name<span class="period">.</span>
@@ -175,7 +175,7 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
       <p>Parameters are passed by value. Functions close over the environment in which they are defined.</p>
     </section>
 
-    <section id="builtins" class="gsap-reveal">
+    <section id="builtins">
       <h2>Built-in Functions</h2>
       <p>Period provides a small set of built-in functions. They are called like any other function using <code>with</code>.</p>
 
@@ -203,7 +203,7 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
 <span class="builtin">show</span> <span class="string">"Nice to meet you, "</span> + name + <span class="string">"."</span><span class="period">.</span></code></pre>
     </section>
 
-    <section id="repl" class="gsap-reveal">
+    <section id="repl">
       <h2>REPL</h2>
       <p>Running <code>period</code> without arguments starts the interactive Read-Eval-Print Loop. Type statements ending with a period and press Enter.</p>
       <pre><code>$ period
@@ -217,7 +217,7 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
       <p>Use <code>exit.</code>, <code>quit.</code>, or <code>Ctrl+C</code> to leave the REPL.</p>
     </section>
 
-    <section id="vscode" class="gsap-reveal">
+    <section id="vscode">
       <h2>VS Code Extension</h2>
       <p>The Windows installer automatically installs the Period VS Code extension. If you need to install it manually:</p>
       <pre><code>code --install-extension period-language.vsix</code></pre>
@@ -233,7 +233,7 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
       <p>If the language server is not found automatically, set <code>period.languageServerPath</code> in VS Code settings to the full path of <code>period.exe</code>.</p>
     </section>
 
-    <section id="errors" class="gsap-reveal">
+    <section id="errors">
       <h2>Error Messages</h2>
       <p>Period reports errors with the exact line and column range. The parser recovers from errors so multiple problems can be reported in a single pass.</p>
       <pre><code>example.period:1:11: error: Expected '.' at the end of a 'let' statement.
@@ -243,7 +243,7 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
       <pre><code>example.period: runtime error: [line 2, columns 6-11] Division by zero.</code></pre>
     </section>
 
-    <section id="grammar" class="gsap-reveal">
+    <section id="grammar">
       <h2>Grammar Reference</h2>
       <p>A concise reference for the Period language grammar.</p>
       <pre><code>program        := statement*
@@ -270,7 +270,7 @@ primary        := NUMBER | STRING | "true" | "false" | "nothing" | "input"
                 | IDENTIFIER | "(" expression ")" | "[" arguments? "]" | "{" pairs? "}"</code></pre>
     </section>
 
-    <section id="tips" class="gsap-reveal">
+    <section id="tips">
       <h2>Tips & Best Practices</h2>
       <ul>
         <li><strong>End every statement with a period.</strong> Missing periods are the most common parse error.</li>
@@ -286,8 +286,5 @@ primary        := NUMBER | STRING | "true" | "false" | "nothing" | "input"
     <p>&copy; 2026 Period Language. Released under the MIT License.</p>
   </footer>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-  <script src="animations.js"></script>
-</body>
+  </body>
 </html>
