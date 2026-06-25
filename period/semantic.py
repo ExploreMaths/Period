@@ -194,12 +194,13 @@ class SemanticChecker:
     def _visit_import(self, stmt: ast.ImportStmt):
         from .module_loader import resolve_module
 
+        self._add_token(stmt.module_span, TOKEN_CLASS)
         resolved = resolve_module(stmt.module_path, self.filename)
         if resolved is None:
             self.diagnostics.append(
                 Diagnostic(
                     f"Module '{stmt.module_path}' not found.",
-                    stmt.span,
+                    stmt.module_span,
                     "error",
                 )
             )

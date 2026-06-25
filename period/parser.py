@@ -290,13 +290,19 @@ class Parser:
 
     def _import_statement(self) -> ast.Stmt:
         start = self._advance()  # import
+        first_module_tok = None
         dots = 0
         while self._match(TokenType.DOT):
+            if first_module_tok is None:
+                first_module_tok = self._previous()
             dots += 1
         first = self._consume(TokenType.IDENTIFIER, "Expected a module name after 'import'.")
         if first is None:
             return None
+        if first_module_tok is None:
+            first_module_tok = first
         parts = [first.value]
+        last_tok = first
         # Allow dotted module paths like foo.bar, stopping before the statement terminator.
         while self._check(TokenType.DOT) and self._peek(1).type == TokenType.IDENTIFIER:
             self._advance()  # consume the separator dot
@@ -304,12 +310,14 @@ class Parser:
             if part is None:
                 break
             parts.append(part.value)
+            last_tok = part
         end = self._consume(TokenType.DOT, "Expected '.' at the end of an 'import' statement.")
         if end is None:
             end = self._previous()
         module_path = ("." * dots) + ".".join(parts)
         span = self._span_from(start, end)
-        return ast.ImportStmt(span=span, module_path=module_path)
+        module_span = self._span_from(first_module_tok, last_tok)
+        return ast.ImportStmt(span=span, module_path=module_path, module_span=module_span)
 
     def _class_body(self) -> List[ast.Stmt]:
         while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):

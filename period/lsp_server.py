@@ -22,6 +22,7 @@ class Document:
         self.scoped: List[dict] = []  # variables/parameters with scope ranges
         self.methods: List[dict] = []  # class methods
         self.properties: List[dict] = []  # class properties (this.name assignments)
+        self.imports: Dict[str, dict] = {}  # name -> imported symbol info
         self._func_returns: Dict[str, Optional[str]] = {}
         self._class_names: set = set()
         self._parse()
@@ -51,6 +52,7 @@ class Document:
         self.scoped = []
         self.methods = []
         self.properties = []
+        self.imports = {}
         if self.ast is not None:
             self._precompute_types()
             self._build_symbols()
@@ -342,6 +344,8 @@ class Document:
                             class_name=stmt.name,
                         )
                     )
+            elif isinstance(stmt, ast.ImportStmt):
+                self._collect_import_symbols(stmt)
             elif isinstance(stmt, ast.IfStmt):
                 then_end = self._block_end(stmt.then_branch) or stmt.span.line
                 self._collect_stmts(stmt.then_branch, then_end)
@@ -353,6 +357,79 @@ class Document:
             elif isinstance(stmt, ast.BlockStmt):
                 block_end = self._block_end(stmt.statements) or stmt.span.line
                 self._collect_stmts(stmt.statements, block_end)
+
+    def _collect_import_symbols(self, stmt: ast.ImportStmt):
+        """Index names exported by an imported module for completion/hover."""
+        from .module_loader import resolve_module
+
+        resolved = resolve_module(stmt.module_path, self.uri)
+        if resolved is None:
+            return
+
+        if isinstance(resolved, str):
+            # Built-in module.
+            import importlib
+
+            try:
+                mod = importlib.import_module(f"period.stdlib.{resolved}")
+            except Exception:
+                return
+            exports = getattr(mod, "EXPORTS", [])
+            for name in exports:
+                if not hasattr(mod, name):
+                    continue
+                value = getattr(mod, name)
+                kind = "function" if callable(value) else "variable"
+                self.imports[name] = {
+                    "name": name,
+                    "kind": kind,
+                    "line": stmt.module_span.line,
+                    "col_start": stmt.module_span.col_start,
+                    "col_end": stmt.module_span.col_end,
+                    "detail": f"Imported from {resolved}",
+                }
+            return
+
+        # File-based module.
+        from .lexer import Lexer
+        from .parser import Parser
+
+        source = resolved.read_text(encoding="utf-8")
+        lexer = Lexer(source, str(resolved))
+        tokens = lexer.scan()
+        parser = Parser(tokens, source, str(resolved))
+        program = parser.parse()
+        if parser.diagnostics:
+            return
+        module_name = resolved.name
+        for s in program.statements:
+            if isinstance(s, ast.DefineStmt):
+                self.imports[s.name] = {
+                    "name": s.name,
+                    "kind": "function",
+                    "line": s.name_span.line,
+                    "col_start": s.name_span.col_start,
+                    "col_end": s.name_span.col_end,
+                    "detail": f"Imported from {module_name}",
+                }
+            elif isinstance(s, ast.ClassStmt):
+                self.imports[s.name] = {
+                    "name": s.name,
+                    "kind": "class",
+                    "line": s.name_span.line,
+                    "col_start": s.name_span.col_start,
+                    "col_end": s.name_span.col_end,
+                    "detail": f"Imported from {module_name}",
+                }
+            elif isinstance(s, ast.LetStmt):
+                self.imports[s.name] = {
+                    "name": s.name,
+                    "kind": "variable",
+                    "line": s.span.line,
+                    "col_start": s.span.col_start,
+                    "col_end": s.span.col_end,
+                    "detail": f"Imported from {module_name}",
+                }
 
 
 class LSPServer:
@@ -755,6 +832,7 @@ class LSPServer:
             ("tell", "Call a method"),
             ("of", "Property access"),
             ("the", "Property access"),
+            ("import", "Import a module"),
             ("length", "Built-in: length"),
             ("string", "Built-in: string"),
             ("number", "Built-in: number"),
@@ -770,6 +848,15 @@ class LSPServer:
                 }
             )
 
+        kind_map = {
+            "function": 3,
+            "method": 2,
+            "class": 7,
+            "variable": 6,
+            "parameter": 6,
+            "property": 5,
+        }
+
         uri = params["textDocument"]["uri"]
         doc = self.documents.get(uri)
         if doc and doc.ast:
@@ -780,6 +867,15 @@ class LSPServer:
                         "kind": 6,  # Variable
                         "detail": "Defined in this file",
                         "insertText": name,
+                    }
+                )
+            for info in doc.imports.values():
+                items.append(
+                    {
+                        "label": info["name"],
+                        "kind": kind_map.get(info["kind"], 6),
+                        "detail": info.get("detail", "Imported"),
+                        "insertText": info["name"],
                     }
                 )
 
