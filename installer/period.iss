@@ -1,5 +1,5 @@
 #define MyAppName "Period"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Period Language"
 #define MyAppURL "https://exploremaths.github.io/Period/"
 
@@ -21,6 +21,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
+ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -43,6 +44,10 @@ Filename: "{cmd}"; Parameters: "/c code --install-extension ""{tmp}\period-langu
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath('{app}')
+Root: HKLM; Subkey: "Software\Classes\.period"; ValueType: string; ValueName: ""; ValueData: "PeriodFile"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\PeriodFile"; ValueType: string; ValueName: ""; ValueData: "Period Source File"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\PeriodFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\period.ico"
+Root: HKLM; Subkey: "Software\Classes\PeriodFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\period.exe"" ""%1"""
 
 [Code]
 function NeedsAddPath(Param: string): boolean;
