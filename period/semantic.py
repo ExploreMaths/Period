@@ -1,5 +1,5 @@
 """Semantic analysis for Period, including identifier kind resolution."""
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from . import ast_nodes as ast
 from .errors import Diagnostic, SourceSpan
