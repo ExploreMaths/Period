@@ -14,6 +14,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: ver
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "file_version=$VERSION.0" >> "$GITHUB_OUTPUT"
+
+      - name: Apply version to installer script and VS Code extension
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          (Get-Content installer\period.iss) -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$ver`"" | Set-Content installer\period.iss
+          $pkg = Get-Content vscode-extension\package.json -Raw | ConvertFrom-Json
+          $pkg.version = $ver
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content vscode-extension\package.json
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -26,7 +43,7 @@ jobs:
 
       - name: Build compiler executable with Nuitka
         run: |
-          python -m nuitka --standalone --onefile --assume-yes-for-downloads --windows-icon-from-ico=assets/period.ico --company-name="Period Language" --product-name="Period" --file-version=1.1.0.0 --product-version=1.1.0.0 --output-dir=dist --output-filename=period compiler.py
+          python -m nuitka --standalone --onefile --assume-yes-for-downloads --windows-icon-from-ico=assets/period.ico --company-name="Period Language" --product-name="Period" --file-version=${{ steps.ver.outputs.file_version }} --product-version=${{ steps.ver.outputs.file_version }} --output-dir=dist --output-filename=period compiler.py
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
