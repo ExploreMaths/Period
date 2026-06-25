@@ -82,7 +82,7 @@
           "match": "\\b(let|be|set|to|show|with|this|new|tell|of|the)\\b"
         },
         {
-          "name": "keyword.control.period",
+          "name": "keyword.operator.logical.period",
           "match": "\\b(and|or|not)\\b"
         },
         {
