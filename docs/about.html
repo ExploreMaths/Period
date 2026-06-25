@@ -37,6 +37,64 @@
     </section>
 
     <section>
+      <h2>Why Period?</h2>
+      <p>Most programming languages treat readability as an afterthought. Period starts from the opposite assumption: code is read far more often than it is written, so its syntax should feel natural. The period at the end of every statement is a small constraint that nudges authors toward complete thoughts and calm pacing, much like sentences in an article.</p>
+    </section>
+
+    <section>
+      <h2>Design Principles</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="feature-icon">📝</div>
+          <h4>Prose over punctuation</h4>
+          <p>Keywords are chosen to read like English: <code>let x be 10</code>, <code>show x</code>, <code>if ... then</code>.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎯</div>
+          <h4>Errors that point</h4>
+          <p>Diagnostics include exact line and column ranges, so beginners spend less time hunting for mistakes.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <h4>Fast feedback</h4>
+          <p>A single executable, a built-in REPL, and LSP-powered editor support keep the loop tight.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔧</div>
+          <h4>Real language features</h4>
+          <p>Variables, conditionals, loops, functions, lists, and dictionaries are all first-class citizens.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Technology Stack</h2>
+      <ul>
+        <li><strong>Language runtime:</strong> Python 3 with a hand-written lexer, parser, and tree-walking interpreter</li>
+        <li><strong>Executable packaging:</strong> Nuitka compiles the runtime into a single Windows executable</li>
+        <li><strong>LSP server:</strong> JSON-RPC language server served over stdio from the same executable</li>
+        <li><strong>VS Code extension:</strong> TypeScript client built on <code>vscode-languageclient</code></li>
+        <li><strong>Documentation site:</strong> Static HTML/CSS with no build step</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Roadmap</h2>
+      <ul>
+        <li>Richer standard library (file I/O, math, dates)</li>
+        <li>Package manager and module imports</li>
+        <li>Bytecode compiler and faster VM</li>
+        <li>Cross-platform executables (macOS and Linux)</li>
+        <li>Online playground in the browser</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Get Involved</h2>
+      <p>Period is open source and welcomes contributions. Report bugs, suggest syntax ideas, or submit pull requests on the <a href="https://github.com/ExploreMaths/Period">GitHub repository</a>. Discussion and design notes live in the repository issues.</p>
+    </section>
+
+    <section>
       <h2>License</h2>
       <p>Period is released under the MIT License. See the repository for full details.</p>
     </section>
