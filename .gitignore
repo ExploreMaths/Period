@@ -8,6 +8,9 @@ venv/
 # Build artifacts
 dist/
 *.exe
+*.build/
+*.dist/
+*.onefile-build/
 
 # Sphinx build
 sphinx-docs/build/
