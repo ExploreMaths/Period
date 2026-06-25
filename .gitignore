@@ -21,4 +21,4 @@ vscode-extension/*.vsix
 .idea/
 
 # Other
-gsap-skills/
+gsap-skills/*.pfx

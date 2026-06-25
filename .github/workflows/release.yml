@@ -59,9 +59,40 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --yes
 
-      - name: Build installer
+      - name: Locate signtool
+        id: signtool
+        shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\period.iss
+          $tool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+                  Select-Object -First 1
+          if (-not $tool) {
+            Write-Error "signtool.exe not found. Make sure Windows SDK is available on the runner."
+          }
+          echo "path=$($tool.FullName)" >> "$env:GITHUB_OUTPUT"
+
+      - name: Decode code signing certificate
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.CODE_SIGNING_CERT }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CERT_BASE64)) { exit 0 }
+          $bytes = [Convert]::FromBase64String($env:CERT_BASE64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\code-signing.pfx", $bytes)
+
+      - name: Build signed installer
+        shell: pwsh
+        env:
+          CERT_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
+        run: |
+          $signtool = "${{ steps.signtool.outputs.path }}"
+          $cert = "$env:RUNNER_TEMP\code-signing.pfx"
+          if (Test-Path $cert) {
+            $signcmd = "`"$signtool`" sign /f `"$cert`" /p `"$env:CERT_PASSWORD`" /tr http://timestamp.digicert.com /td sha256 /fd sha256 `"$f`""
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Ssigntool="$signcmd" installer\period.iss
+          } else {
+            Write-Warning "No code signing certificate found; building unsigned installer."
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\period.iss
+          }
 
       - name: Upload installer to release
         uses: softprops/action-gh-release@v2
