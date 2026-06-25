@@ -24,6 +24,7 @@ class Document:
         self.methods: List[dict] = []  # class methods
         self.properties: List[dict] = []  # class properties (this.name assignments)
         self.imports: Dict[str, dict] = {}  # name -> imported symbol info
+        self.module_infos: Dict[str, dict] = {}  # module_path -> hover info
         self._func_returns: Dict[str, Optional[str]] = {}
         self._class_names: set = set()
         self._parse()
@@ -476,6 +477,73 @@ class Document:
                 block_end = self._block_end(stmt.statements) or stmt.span.line
                 self._collect_stmts(stmt.statements, block_end)
 
+    def _module_info_builtin(self, mod) -> dict:
+        """Return hover information for a built-in module."""
+        exports = []
+        for name, entry in getattr(mod, "EXPORTS", {}).items():
+            if isinstance(entry, tuple):
+                value, doc_entry = entry
+            else:
+                value = entry
+                doc_entry = None
+            kind = "function" if callable(value) else "variable"
+            signature = None
+            docstring = None
+            if isinstance(doc_entry, tuple):
+                signature, docstring = doc_entry
+            elif isinstance(doc_entry, str):
+                docstring = doc_entry
+            exports.append(
+                {
+                    "name": name,
+                    "kind": kind,
+                    "signature": signature,
+                    "docstring": docstring,
+                }
+            )
+        return {"exports": exports}
+
+    def _module_info_file(self, program: ast.Program) -> dict:
+        """Return hover information for a file-based module."""
+        exports = []
+        for s in program.statements:
+            if isinstance(s, ast.DefineStmt):
+                sig = self._func_signature(
+                    s.name,
+                    s.parameters,
+                    s.parameter_types,
+                    s.return_type,
+                )
+                exports.append(
+                    {
+                        "name": s.name,
+                        "kind": "function",
+                        "signature": sig,
+                        "docstring": s.docstring,
+                    }
+                )
+            elif isinstance(s, ast.ClassStmt):
+                exports.append(
+                    {
+                        "name": s.name,
+                        "kind": "class",
+                        "signature": None,
+                        "docstring": s.docstring,
+                    }
+                )
+            elif isinstance(s, ast.LetStmt):
+                type_name = s.type_annotation or self._infer_type(s.initializer)
+                exports.append(
+                    {
+                        "name": s.name,
+                        "kind": "variable",
+                        "signature": None,
+                        "docstring": None,
+                        "type_name": type_name,
+                    }
+                )
+        return {"exports": exports}
+
     def _collect_import_symbols(self, stmt: ast.ImportStmt):
         """Index names exported by each imported module for completion/hover."""
         from .module_loader import resolve_module
@@ -493,6 +561,8 @@ class Document:
                     mod = importlib.import_module(f"period.stdlib.{resolved}")
                 except Exception:
                     continue
+                if module_path not in self.module_infos:
+                    self.module_infos[module_path] = self._module_info_builtin(mod)
                 exports = getattr(mod, "EXPORTS", {})
                 for name, entry in exports.items():
                     if isinstance(entry, tuple):
@@ -548,6 +618,8 @@ class Document:
             program = parser.parse()
             if parser.diagnostics:
                 continue
+            if module_path not in self.module_infos:
+                self.module_infos[module_path] = self._module_info_file(program)
             module_name = resolved.name
             for s in program.statements:
                 if isinstance(s, ast.DefineStmt):
@@ -753,7 +825,10 @@ class LSPServer:
             return
         word = self._word_at(doc.text, pos["line"], pos["character"])
         hover_text = self._hover_text(word)
+        module_text = self._hover_module_text(doc, word)
         symbol_text = self._hover_symbol_text(doc, word, pos["line"] + 1, pos["character"] + 1)
+        if module_text:
+            hover_text = f"{module_text}\n\n---\n\n{hover_text}" if hover_text else module_text
         if symbol_text:
             hover_text = f"{symbol_text}\n\n---\n\n{hover_text}" if hover_text else symbol_text
         if hover_text:
@@ -833,6 +908,34 @@ class LSPServer:
             return None
         if symbol.get("detail"):
             lines.append(f"*{symbol['detail']}*")
+        return "\n".join(lines)
+
+    def _hover_module_text(self, doc: Document, word: str) -> Optional[str]:
+        """Return hover documentation for an imported module name."""
+        info = doc.module_infos.get(word)
+        if info is None:
+            return None
+        lines = [
+            "```period",
+            f"module {word}",
+            "```",
+            "",
+            "**Exports:**",
+            "",
+        ]
+        for exp in info["exports"]:
+            name = exp["name"]
+            kind = exp["kind"]
+            signature = exp.get("signature")
+            docstring = exp.get("docstring")
+            if signature:
+                lines.append(f"- `{signature}`")
+            elif exp.get("type_name"):
+                lines.append(f"- `{name}: {exp['type_name']}` ({kind})")
+            else:
+                lines.append(f"- `{name}` ({kind})")
+            if docstring:
+                lines.append(f"  {docstring}")
         return "\n".join(lines)
 
     def _word_at(self, text: str, line: int, character: int) -> str:

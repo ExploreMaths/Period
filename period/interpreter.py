@@ -109,6 +109,7 @@ class Interpreter:
         self.output: List[str] = []
         self.filename: str = "<stdin>"
         self.modules: Dict[str, Environment] = {}
+        self.module_keys: Dict[str, str] = {}
         self._install_builtins()
 
     def _install_builtins(self):
@@ -372,19 +373,16 @@ class Interpreter:
         if resolved is None:
             raise RuntimeError(f"Module '{module_path}' not found.", SourceSpan(0, 0, 0))
 
-        if isinstance(resolved, Path):
-            cache_key = str(resolved.resolve())
-            if cache_key in self.modules:
-                module_env = self.modules[cache_key]
-            else:
-                module_env = self._load_file_module(resolved)
-                self.modules[cache_key] = module_env
+        cache_key = str(resolved)
+        self.module_keys[module_path] = cache_key
+        if cache_key in self.modules:
+            module_env = self.modules[cache_key]
+        elif isinstance(resolved, Path):
+            module_env = self._load_file_module(resolved)
+            self.modules[cache_key] = module_env
         else:
-            if resolved in self.modules:
-                module_env = self.modules[resolved]
-            else:
-                module_env = self._load_builtin_module(resolved)
-                self.modules[resolved] = module_env
+            module_env = self._load_builtin_module(resolved)
+            self.modules[cache_key] = module_env
 
         for name, value in module_env.values.items():
             self.environment.define(name, value)
@@ -487,6 +485,8 @@ class Interpreter:
             return self._read_input(expr.span)
         if isinstance(expr, ast.VariableExpr):
             return self.environment.get(expr.name, expr.span)
+        if isinstance(expr, ast.QualifiedExpr):
+            return self._eval_qualified(expr)
         if isinstance(expr, ast.ListExpr):
             return [self._evaluate(e) for e in expr.elements]
         if isinstance(expr, ast.DictExpr):
@@ -506,6 +506,15 @@ class Interpreter:
         if isinstance(expr, ast.TellExpr):
             return self._eval_tell(expr)
         raise RuntimeError(f"Unknown expression type: {type(expr).__name__}.", expr.span)
+
+    def _eval_qualified(self, expr: ast.QualifiedExpr) -> Any:
+        cache_key = self.module_keys.get(expr.module)
+        if cache_key is None:
+            raise RuntimeError(f"Module '{expr.module}' has not been imported.", expr.span)
+        module_env = self.modules.get(cache_key)
+        if module_env is None:
+            raise RuntimeError(f"Module '{expr.module}' has not been loaded.", expr.span)
+        return module_env.get(expr.name, expr.span)
 
     def _eval_unary(self, expr: ast.UnaryExpr) -> Any:
         operand = self._evaluate(expr.operand)

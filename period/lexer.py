@@ -30,6 +30,7 @@ class TokenType(Enum):
     WITH = auto()
     RETURN = auto()
     RETURNS = auto()
+    FROM = auto()
     AND = auto()
     OR = auto()
     NOT = auto()
@@ -97,6 +98,7 @@ KEYWORDS = {
     "with": TokenType.WITH,
     "return": TokenType.RETURN,
     "returns": TokenType.RETURNS,
+    "from": TokenType.FROM,
     "and": TokenType.AND,
     "or": TokenType.OR,
     "not": TokenType.NOT,

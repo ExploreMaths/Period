@@ -48,6 +48,15 @@ class VariableExpr(Expr):
 
 
 @dataclass
+class QualifiedExpr(Expr):
+    """A reference to a name qualified by a module, e.g., 'sin from math'."""
+    name: str
+    module: str
+    name_span: Optional[SourceSpan] = None
+    module_span: Optional[SourceSpan] = None
+
+
+@dataclass
 class BinaryExpr(Expr):
     left: Expr
     operator: str

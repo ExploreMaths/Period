@@ -532,6 +532,19 @@ class Parser:
 
     def _call(self) -> ast.Expr:
         expr = self._primary()
+        # Qualified reference: name from module.
+        if isinstance(expr, ast.VariableExpr) and self._match(TokenType.FROM):
+            module_path, first_module_tok, last_module_tok = self._parse_module_path()
+            if module_path is not None:
+                module_span = self._span_from(first_module_tok, last_module_tok)
+                span = self._span_from(expr.span, last_module_tok)
+                expr = ast.QualifiedExpr(
+                    span=span,
+                    name=expr.name,
+                    module=module_path,
+                    name_span=expr.span,
+                    module_span=module_span,
+                )
         while True:
             if self._check(TokenType.IDENTIFIER):
                 name_tok = self._advance()

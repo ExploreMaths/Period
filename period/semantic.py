@@ -47,20 +47,30 @@ class SemanticChecker:
         self.scopes: List[Dict[str, str]] = []
         self.tokens: List[Tuple[SourceSpan, str, bool]] = []
         self.filename: str = "<stdin>"
+        self.local_names: Set[str] = set()
+        self.imported_names: Dict[str, List[str]] = {}
+        self.imported_kinds: Dict[str, Dict[str, str]] = {}
+        self.imported_modules: Set[str] = set()
 
     def check(self, program: ast.Program, filename: str = "<stdin>") -> List[Diagnostic]:
         self.diagnostics = []
         self.tokens = []
         self.scopes = [self._builtin_scope()]
         self.filename = filename
+        self.local_names = set()
+        self.imported_names = {}
+        self.imported_kinds = {}
+        self.imported_modules = set()
 
         # First pass: register all top-level function and class names so they can
         # be referenced before their definition.
         for stmt in program.statements:
             if isinstance(stmt, ast.DefineStmt):
                 self.scopes[0][stmt.name] = TOKEN_FUNCTION
+                self.local_names.add(stmt.name)
             elif isinstance(stmt, ast.ClassStmt):
                 self.scopes[0][stmt.name] = TOKEN_CLASS
+                self.local_names.add(stmt.name)
 
         for stmt in program.statements:
             self._visit_stmt(stmt)
@@ -81,6 +91,10 @@ class SemanticChecker:
     def _declare(self, name: str, kind: str):
         if self.scopes:
             self.scopes[-1][name] = kind
+
+    def _declare_local(self, name: str, kind: str):
+        self._declare(name, kind)
+        self.local_names.add(name)
 
     def _lookup(self, name: str) -> Optional[str]:
         for scope in reversed(self.scopes):
@@ -182,7 +196,7 @@ class SemanticChecker:
                 )
                 if self._is_valid_type(stmt.type_annotation):
                     self._check_let_type(stmt)
-            self._declare(stmt.name, TOKEN_VARIABLE)
+            self._declare_local(stmt.name, TOKEN_VARIABLE)
         elif isinstance(stmt, ast.SetStmt):
             self._visit_expr(stmt.value)
             self._visit_set_target(stmt.target)
@@ -202,11 +216,11 @@ class SemanticChecker:
                 self._visit_expr(stmt.value)
         elif isinstance(stmt, ast.DefineStmt):
             self._add_token(stmt.name_span, TOKEN_FUNCTION, is_declaration=True)
-            self._declare(stmt.name, TOKEN_FUNCTION)
+            self._declare_local(stmt.name, TOKEN_FUNCTION)
             self._scope(self._visit_function_body, stmt)
         elif isinstance(stmt, ast.ClassStmt):
             self._add_token(stmt.name_span, TOKEN_CLASS, is_declaration=True)
-            self._declare(stmt.name, TOKEN_CLASS)
+            self._declare_local(stmt.name, TOKEN_CLASS)
             self._visit_class_body(stmt)
         elif isinstance(stmt, ast.ImportStmt):
             self._visit_import(stmt)
@@ -230,14 +244,30 @@ class SemanticChecker:
                 )
                 continue
 
-            if isinstance(resolved, str):
-                self._declare_builtin_module_exports(resolved)
-            else:
-                self._declare_file_module_exports(resolved)
+            self.imported_modules.add(module_path)
 
-    def _declare_builtin_module_exports(self, name: str):
+            if isinstance(resolved, str):
+                exports = self._collect_builtin_module_exports(resolved)
+            else:
+                exports = self._collect_file_module_exports(resolved)
+
+            for export_name, kind in exports:
+                modules = self.imported_names.setdefault(export_name, [])
+                if module_path not in modules:
+                    modules.append(module_path)
+                self.imported_kinds.setdefault(export_name, {})[module_path] = kind
+
+                if len(modules) == 1 and export_name not in self.local_names:
+                    self._declare(export_name, kind)
+                elif len(modules) > 1:
+                    # Name is ambiguous across imports; remove it from scopes.
+                    for scope in self.scopes:
+                        scope.pop(export_name, None)
+
+    def _collect_builtin_module_exports(self, name: str) -> List[Tuple[str, str]]:
         import importlib
 
+        exports: List[Tuple[str, str]] = []
         try:
             mod = importlib.import_module(f"period.stdlib.{name}")
         except Exception as exc:
@@ -248,21 +278,22 @@ class SemanticChecker:
                     "error",
                 )
             )
-            return
+            return exports
 
-        exports = getattr(mod, "EXPORTS", {})
-        for export_name, entry in exports.items():
+        for export_name, entry in getattr(mod, "EXPORTS", {}).items():
             if isinstance(entry, tuple):
                 value = entry[0]
             else:
                 value = entry
             kind = TOKEN_FUNCTION if callable(value) else TOKEN_VARIABLE
-            self._declare(export_name, kind)
+            exports.append((export_name, kind))
+        return exports
 
-    def _declare_file_module_exports(self, path):
+    def _collect_file_module_exports(self, path) -> List[Tuple[str, str]]:
         from .lexer import Lexer
         from .parser import Parser
 
+        exports: List[Tuple[str, str]] = []
         source = path.read_text(encoding="utf-8")
         lexer = Lexer(source, str(path))
         tokens = lexer.scan()
@@ -275,15 +306,16 @@ class SemanticChecker:
         if diagnostics:
             for diag in diagnostics:
                 self.diagnostics.append(diag)
-            return
+            return exports
 
         for s in program.statements:
             if isinstance(s, ast.DefineStmt):
-                self._declare(s.name, TOKEN_FUNCTION)
+                exports.append((s.name, TOKEN_FUNCTION))
             elif isinstance(s, ast.ClassStmt):
-                self._declare(s.name, TOKEN_CLASS)
+                exports.append((s.name, TOKEN_CLASS))
             elif isinstance(s, ast.LetStmt):
-                self._declare(s.name, TOKEN_VARIABLE)
+                exports.append((s.name, TOKEN_VARIABLE))
+        return exports
 
     def _visit_stmts(self, statements: List[ast.Stmt]):
         for stmt in statements:
@@ -291,7 +323,7 @@ class SemanticChecker:
 
     def _visit_function_body(self, stmt: ast.DefineStmt):
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
-            self._declare(param, TOKEN_PARAMETER)
+            self._declare_local(param, TOKEN_PARAMETER)
         for param_type, param_type_span in zip(
             stmt.parameter_types, stmt.parameter_type_spans
         ):
@@ -313,9 +345,9 @@ class SemanticChecker:
                 self._scope(self._visit_method_body, member)
 
     def _visit_init_body(self, stmt: ast.InitStmt):
-        self._declare("this", TOKEN_VARIABLE)
+        self._declare_local("this", TOKEN_VARIABLE)
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
-            self._declare(param, TOKEN_PARAMETER)
+            self._declare_local(param, TOKEN_PARAMETER)
         for param_type, param_type_span in zip(
             stmt.parameter_types, stmt.parameter_type_spans
         ):
@@ -326,9 +358,9 @@ class SemanticChecker:
         self._visit_stmts(stmt.body)
 
     def _visit_method_body(self, stmt: ast.DefineStmt):
-        self._declare("this", TOKEN_VARIABLE)
+        self._declare_local("this", TOKEN_VARIABLE)
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
-            self._declare(param, TOKEN_PARAMETER)
+            self._declare_local(param, TOKEN_PARAMETER)
         for param_type, param_type_span in zip(
             stmt.parameter_types, stmt.parameter_type_spans
         ):
@@ -361,9 +393,25 @@ class SemanticChecker:
     def _visit_expr(self, expr: ast.Expr):
         if isinstance(expr, ast.VariableExpr):
             if not self._is_defined(expr.name):
-                self._error(expr.name, expr.span)
+                if (
+                    expr.name in self.imported_names
+                    and len(self.imported_names[expr.name]) > 1
+                    and expr.name not in self.local_names
+                ):
+                    modules = ", ".join(self.imported_names[expr.name])
+                    self.diagnostics.append(
+                        Diagnostic(
+                            f"Ambiguous name '{expr.name}' imported from multiple modules: {modules}. Use '{expr.name} from <module>'.",
+                            expr.span,
+                            "error",
+                        )
+                    )
+                else:
+                    self._error(expr.name, expr.span)
             kind = self._lookup(expr.name) or TOKEN_VARIABLE
             self._add_token(expr.span, kind)
+        elif isinstance(expr, ast.QualifiedExpr):
+            self._visit_qualified_expr(expr)
         elif isinstance(expr, ast.BinaryExpr):
             self._visit_expr(expr.left)
             self._visit_expr(expr.right)
@@ -405,3 +453,28 @@ class SemanticChecker:
             self._add_token(expr.span, TOKEN_METHOD)
             for arg in expr.arguments:
                 self._visit_expr(arg)
+
+    def _visit_qualified_expr(self, expr: ast.QualifiedExpr):
+        if expr.module not in self.imported_modules:
+            self.diagnostics.append(
+                Diagnostic(
+                    f"Module '{expr.module}' has not been imported.",
+                    expr.module_span or expr.span,
+                    "error",
+                )
+            )
+            return
+
+        kinds = self.imported_kinds.get(expr.name, {})
+        if expr.module not in kinds:
+            self.diagnostics.append(
+                Diagnostic(
+                    f"Module '{expr.module}' does not export '{expr.name}'.",
+                    expr.span,
+                    "error",
+                )
+            )
+            return
+
+        self._add_token(expr.name_span or expr.span, kinds[expr.module])
+        self._add_token(expr.module_span or expr.span, TOKEN_CLASS)

@@ -213,6 +213,12 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
 <span class="keyword">let</span> n <span class="keyword">be</span> random <span class="keyword">with</span> nothing<span class="period">.</span>
 <span class="keyword">let</span> greeting <span class="keyword">be</span> upper <span class="keyword">with</span> <span class="string">"hello"</span><span class="period">.</span>
 <span class="builtin">show</span> sqrt <span class="keyword">with</span> <span class="number">2</span><span class="period">.</span></code></pre>
+      <p>If two imported modules export the same name, you must qualify it with <code>from</code>:</p>
+      <pre><code><span class="keyword">import</span> math, random <span class="keyword">and</span> string<span class="period">.</span>
+
+<span class="builtin">show</span> sin <span class="keyword">from</span> math <span class="keyword">with</span> <span class="number">5</span><span class="period">.</span>
+<span class="keyword">let</span> joined <span class="keyword">be</span> join <span class="keyword">from</span> string <span class="keyword">with</span> <span class="string">"-"</span>, [<span class="string">"a"</span>, <span class="string">"b"</span>]<span class="period">.</span></code></pre>
+      <p>Using an unqualified name that is exported by more than one imported module is an error.</p>
       <p>Period ships with the following built-in modules:</p>
       <ul>
         <li><code>math</code> &mdash; trigonometry, roots, rounding, and constants</li>
@@ -322,7 +328,7 @@ additive       := multiplicative (("+"|"-") multiplicative)*
 multiplicative := power (("*"|"/"|"%") power)*
 power          := unary ("**" power)?
 unary          := ("-"|"not") unary | call
-call           := primary ("with" arguments)? ("[" expression "]")*
+call           := primary ("from" module-path)? ("with" arguments)? ("[" expression "]")*
 primary        := NUMBER | STRING | "true" | "false" | "nothing" | "input" | "this"
                 | IDENTIFIER | "(" expression ")" | "[" arguments? "]" | "{" pairs? "}"
                 | "new" primary ("with" arguments)?
