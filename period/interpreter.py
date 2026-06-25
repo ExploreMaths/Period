@@ -389,33 +389,30 @@ class Interpreter:
             self.environment.define(name, value)
 
     def _load_builtin_module(self, name: str) -> Environment:
-        from .lexer import Lexer
-        from .parser import Parser
-        from .semantic import SemanticChecker
-
         try:
             mod = importlib.import_module(f"period.stdlib.{name}")
         except Exception as exc:
             raise RuntimeError(f"Could not load built-in module '{name}': {exc}.", SourceSpan(0, 0, 0))
 
         env = Environment()
-        exports = getattr(mod, "EXPORTS", [])
-        for export in exports:
-            if not hasattr(mod, export):
-                continue
-            value = getattr(mod, export)
+        exports = getattr(mod, "EXPORTS", {})
+        for export_name, entry in exports.items():
+            if isinstance(entry, tuple):
+                value = entry[0]
+            else:
+                value = entry
             if callable(value):
                 arity = len(inspect.signature(value).parameters)
                 env.define(
-                    export,
+                    export_name,
                     PeriodBuiltIn(
-                        export,
+                        export_name,
                         arity,
                         lambda args, span, fn=value: fn(*args),
                     ),
                 )
             else:
-                env.define(export, value)
+                env.define(export_name, value)
         return env
 
     def _load_file_module(self, path: Path) -> Environment:

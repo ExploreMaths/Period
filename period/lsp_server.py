@@ -374,21 +374,23 @@ class Document:
                 mod = importlib.import_module(f"period.stdlib.{resolved}")
             except Exception:
                 return
-            exports = getattr(mod, "EXPORTS", [])
-            docs = getattr(mod, "DOCS", {})
-            for name in exports:
-                if not hasattr(mod, name):
-                    continue
-                value = getattr(mod, name)
+            exports = getattr(mod, "EXPORTS", {})
+            for name, entry in exports.items():
+                if isinstance(entry, tuple):
+                    value, doc_entry = entry
+                else:
+                    value = entry
+                    doc_entry = None
+
                 kind = "function" if callable(value) else "variable"
                 signature = None
                 docstring = None
                 type_name = None
-                doc_entry = docs.get(name)
                 if isinstance(doc_entry, tuple):
                     signature, docstring = doc_entry
                 elif isinstance(doc_entry, str):
                     docstring = doc_entry
+
                 if not callable(value):
                     if isinstance(value, bool):
                         type_name = "boolean"
@@ -402,6 +404,7 @@ class Document:
                         type_name = "dictionary"
                     else:
                         type_name = type(value).__name__
+
                 self.imports[name] = {
                     "name": name,
                     "kind": kind,

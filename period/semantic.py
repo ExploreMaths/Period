@@ -226,13 +226,14 @@ class SemanticChecker:
             )
             return
 
-        exports = getattr(mod, "EXPORTS", [])
-        for export in exports:
-            if not hasattr(mod, export):
-                continue
-            value = getattr(mod, export)
+        exports = getattr(mod, "EXPORTS", {})
+        for export_name, entry in exports.items():
+            if isinstance(entry, tuple):
+                value = entry[0]
+            else:
+                value = entry
             kind = TOKEN_FUNCTION if callable(value) else TOKEN_VARIABLE
-            self._declare(export, kind)
+            self._declare(export_name, kind)
 
     def _declare_file_module_exports(self, path):
         from .lexer import Lexer
