@@ -1,0 +1,22 @@
+-- Example with docstrings and type annotations.
+
+"A top-level module docstring.".
+
+define add with number a, number b returns number:
+    "Return the sum of two numbers.".
+    return a + b.
+
+class Person:
+    "Represents a person with a name and age.".
+
+    init with string name, number age:
+        "Create a new person.".
+        set this name to name.
+        set this age to age.
+
+    define greet returns string:
+        "Return a friendly greeting.".
+        return "Hello, I am " + this name.
+
+let p be new Person with "Alice", 30.
+show p.

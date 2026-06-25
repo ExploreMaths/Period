@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from . import ast_nodes as ast
 from .errors import RuntimeError, SourceSpan
+from .semantic import BUILTINS, TYPE_NAMES
 
 
 class ReturnValue(Exception):
@@ -34,6 +35,16 @@ class PeriodBuiltIn:
 
     def __repr__(self) -> str:
         return f"<built-in {self.name}>"
+
+
+class PeriodType:
+    """A named type value, e.g. boolean, any, never."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"<type {self.name}>"
 
 
 class PeriodClass:
@@ -136,6 +147,10 @@ class Interpreter:
                 lambda args, span: self._read_input(span),
             ),
         )
+        # Non-callable type names are also available as values (e.g. boolean, any, never).
+        for type_name in TYPE_NAMES:
+            if type_name not in BUILTINS:
+                self.globals.define(type_name, PeriodType(type_name))
 
     # Built-in implementations ------------------------------------------------
 
@@ -198,11 +213,21 @@ class Interpreter:
         """Raise a runtime error if value does not match the expected type annotation."""
         if expected is None:
             return
+        if expected == "any":
+            return
         actual = self._type_name(value, span)
+        if expected == "never":
+            raise RuntimeError(
+                f"Type mismatch: expected 'never' but got '{actual}'.",
+                span,
+            )
         if expected == actual:
             return
         # 'number' accepts both integer and number.
         if expected == "number" and actual == "integer":
+            return
+        # 'function' accepts both user functions and built-ins.
+        if expected == "function" and actual in ("function", "built-in"):
             return
         # Class annotations match instances of that class.
         if actual == f"instance of {expected}":
@@ -211,6 +236,22 @@ class Interpreter:
             f"Type mismatch: expected '{expected}' but got '{actual}'.",
             span,
         )
+
+    def _default_for_type(self, type_name: str) -> Any:
+        """Return a sensible default value for a typed declaration without an initializer."""
+        if type_name == "string":
+            return ""
+        if type_name == "number":
+            return 0
+        if type_name == "integer":
+            return 0
+        if type_name == "boolean":
+            return False
+        if type_name == "list":
+            return []
+        if type_name == "dictionary":
+            return {}
+        return None
 
     def _read_input(self, span: SourceSpan) -> str:
         try:
@@ -260,6 +301,10 @@ class Interpreter:
             return
         if isinstance(stmt, ast.LetStmt):
             value = self._evaluate(stmt.initializer)
+            if stmt.type_annotation is not None:
+                if value is None and stmt.is_default_initialization:
+                    value = self._default_for_type(stmt.type_annotation)
+                self._check_type(value, stmt.type_annotation, stmt.span)
             self.environment.define(stmt.name, value)
             return
         if isinstance(stmt, ast.SetStmt):

@@ -10,7 +10,7 @@ from .semantic import SemanticChecker
 
 
 class Document:
-    """Holds the current source text and cached AST for a file."""
+    """Holds the current source text, cached AST, and symbol table for a file."""
 
     def __init__(self, uri: str, text: str):
         self.uri = uri
@@ -18,6 +18,12 @@ class Document:
         self.ast: Optional[ast.Program] = None
         self.diagnostics: List[dict] = []
         self.definitions: Dict[str, tuple] = {}  # name -> (line, col_start)
+        self.top_level: Dict[str, dict] = {}  # name -> symbol info
+        self.scoped: List[dict] = []  # variables/parameters with scope ranges
+        self.methods: List[dict] = []  # class methods
+        self.properties: List[dict] = []  # class properties (this.name assignments)
+        self._func_returns: Dict[str, Optional[str]] = {}
+        self._class_names: set = set()
         self._parse()
 
     def update(self, text: str):
@@ -41,14 +47,312 @@ class Document:
         self.diagnostics = [d.to_dict() for d in diagnostics]
 
         self.definitions = {}
+        self.top_level = {}
+        self.scoped = []
+        self.methods = []
+        self.properties = []
         if self.ast is not None:
-            for stmt in self.ast.statements:
-                if isinstance(stmt, ast.LetStmt):
-                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
-                elif isinstance(stmt, ast.DefineStmt):
-                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
-                elif isinstance(stmt, ast.ClassStmt):
-                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
+            self._precompute_types()
+            self._build_symbols()
+
+    def _precompute_types(self):
+        """Gather function return types and class names for type inference."""
+        self._func_returns = {}
+        self._class_names = set()
+        if self.ast is None:
+            return
+        for stmt in self.ast.statements:
+            if isinstance(stmt, ast.DefineStmt):
+                self._func_returns[stmt.name] = stmt.return_type
+            elif isinstance(stmt, ast.ClassStmt):
+                self._class_names.add(stmt.name)
+                for member in stmt.body:
+                    if isinstance(member, ast.DefineStmt):
+                        self._func_returns[member.name] = member.return_type
+
+    @staticmethod
+    def _block_end(statements: List[ast.Stmt]) -> Optional[int]:
+        """Return the line number of the last statement in a block, if any."""
+        if not statements:
+            return None
+        return statements[-1].span.line
+
+    def _infer_type(self, expr: ast.Expr) -> str:
+        """Infer a Period type name from an expression using available annotations."""
+        if isinstance(expr, ast.NumberLiteral):
+            return "number"
+        if isinstance(expr, ast.StringLiteral):
+            return "string"
+        if isinstance(expr, ast.BooleanLiteral):
+            return "boolean"
+        if isinstance(expr, ast.NothingLiteral):
+            return "nothing"
+        if isinstance(expr, ast.ListExpr):
+            return "list"
+        if isinstance(expr, ast.DictExpr):
+            return "dictionary"
+        if isinstance(expr, ast.NewExpr):
+            if isinstance(expr.class_expr, ast.VariableExpr):
+                return f"instance of {expr.class_expr.name}"
+            return "instance"
+        if isinstance(expr, ast.CallExpr):
+            if isinstance(expr.callee, ast.VariableExpr):
+                name = expr.callee.name
+                if name in self._func_returns and self._func_returns[name]:
+                    return self._func_returns[name]
+                if name == "length":
+                    return "number"
+                if name in {"string", "input"}:
+                    return "string"
+                if name == "number":
+                    return "number"
+                if name == "type":
+                    return "string"
+            return "unknown"
+        if isinstance(expr, ast.VariableExpr):
+            if expr.name in self._class_names:
+                return expr.name
+            return "unknown"
+        return "unknown"
+
+    def _find_properties(
+        self,
+        statements: List[ast.Stmt],
+        local_types: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        """Scan statements for assignments to this.<name> and infer their types."""
+        if local_types is None:
+            local_types = {}
+        props: Dict[str, str] = {}
+        for stmt in statements:
+            if isinstance(stmt, ast.SetStmt):
+                if (
+                    isinstance(stmt.target, ast.PropertyExpr)
+                    and isinstance(stmt.target.object, ast.VariableExpr)
+                    and stmt.target.object.name == "this"
+                ):
+                    value_type = self._infer_type(stmt.value)
+                    if value_type == "unknown" and isinstance(stmt.value, ast.VariableExpr):
+                        value_type = local_types.get(stmt.value.name, "unknown")
+                    props[stmt.target.name] = value_type
+            elif isinstance(stmt, ast.IfStmt):
+                props.update(self._find_properties(stmt.then_branch, local_types))
+                props.update(self._find_properties(stmt.else_branch, local_types))
+            elif isinstance(stmt, ast.WhileStmt):
+                props.update(self._find_properties(stmt.body, local_types))
+            elif isinstance(stmt, ast.BlockStmt):
+                props.update(self._find_properties(stmt.statements, local_types))
+        return props
+
+    def _func_signature(
+        self,
+        name: str,
+        parameters: List[str],
+        parameter_types: List[Optional[str]],
+        return_type: Optional[str],
+        class_name: Optional[str] = None,
+    ) -> str:
+        parts = []
+        for param, param_type in zip(parameters, parameter_types):
+            if param_type:
+                parts.append(f"{param}: {param_type}")
+            else:
+                parts.append(param)
+        sig = f"{name}({', '.join(parts)})"
+        if return_type:
+            sig += f" -> {return_type}"
+        if class_name:
+            sig = f"{class_name}.{sig}"
+        return sig
+
+    def _record_symbol(
+        self,
+        name: str,
+        kind: str,
+        scope_start: int,
+        scope_end: int,
+        span,
+        type_name: Optional[str] = None,
+        signature: Optional[str] = None,
+        docstring: Optional[str] = None,
+        class_name: Optional[str] = None,
+    ) -> dict:
+        return {
+            "name": name,
+            "kind": kind,
+            "scope_start": scope_start,
+            "scope_end": scope_end,
+            "line": span.line,
+            "col_start": span.col_start,
+            "col_end": span.col_end,
+            "type_name": type_name,
+            "signature": signature,
+            "docstring": docstring,
+            "class_name": class_name,
+        }
+
+    def _build_symbols(self):
+        """Index user-defined symbols for hover, completion, and definition."""
+        if self.ast is None:
+            return
+        global_end = 10**9
+        self._collect_stmts(self.ast.statements, global_end)
+
+    def _collect_stmts(self, statements: List[ast.Stmt], scope_end: int):
+        for stmt in statements:
+            if isinstance(stmt, ast.LetStmt):
+                type_name = stmt.type_annotation or self._infer_type(stmt.initializer)
+                sym = self._record_symbol(
+                    stmt.name,
+                    "variable",
+                    stmt.span.line,
+                    scope_end,
+                    stmt.span,
+                    type_name=type_name,
+                )
+                self.scoped.append(sym)
+                self.definitions[sym["name"]] = (sym["line"], sym["col_start"])
+            elif isinstance(stmt, ast.DefineStmt):
+                body_end = self._block_end(stmt.body) or stmt.span.line
+                sig = self._func_signature(
+                    stmt.name,
+                    stmt.parameters,
+                    stmt.parameter_types,
+                    stmt.return_type,
+                )
+                sym = self._record_symbol(
+                    stmt.name,
+                    "function",
+                    1,
+                    scope_end,
+                    stmt.name_span,
+                    signature=sig,
+                    docstring=stmt.docstring,
+                )
+                self.top_level[sym["name"]] = sym
+                self.definitions[sym["name"]] = (sym["line"], sym["col_start"])
+                for param, param_type in zip(stmt.parameters, stmt.parameter_types):
+                    ptype = param_type or "unknown"
+                    self.scoped.append(
+                        self._record_symbol(
+                            param,
+                            "parameter",
+                            stmt.span.line,
+                            body_end,
+                            stmt.span,
+                            type_name=ptype,
+                        )
+                    )
+                self._collect_stmts(stmt.body, body_end)
+            elif isinstance(stmt, ast.ClassStmt):
+                sym = self._record_symbol(
+                    stmt.name,
+                    "class",
+                    1,
+                    scope_end,
+                    stmt.name_span,
+                    docstring=stmt.docstring,
+                )
+                self.top_level[sym["name"]] = sym
+                self.definitions[sym["name"]] = (sym["line"], sym["col_start"])
+                class_body_end = self._block_end(stmt.body) or stmt.span.line
+                init_signature = None
+                for member in stmt.body:
+                    if isinstance(member, ast.InitStmt):
+                        body_end = self._block_end(member.body) or member.span.line
+                        init_signature = self._func_signature(
+                            "init",
+                            member.parameters,
+                            member.parameter_types,
+                            None,
+                            class_name=stmt.name,
+                        )
+                        for param, param_type in zip(member.parameters, member.parameter_types):
+                            ptype = param_type or "unknown"
+                            self.scoped.append(
+                                self._record_symbol(
+                                    param,
+                                    "parameter",
+                                    member.span.line,
+                                    body_end,
+                                    member.span,
+                                    type_name=ptype,
+                                )
+                            )
+                        self._collect_stmts(member.body, body_end)
+                    elif isinstance(member, ast.DefineStmt):
+                        body_end = self._block_end(member.body) or member.span.line
+                        sig = self._func_signature(
+                            member.name,
+                            member.parameters,
+                            member.parameter_types,
+                            member.return_type,
+                            class_name=stmt.name,
+                        )
+                        self.methods.append(
+                            self._record_symbol(
+                                member.name,
+                                "method",
+                                member.span.line,
+                                class_body_end,
+                                member.name_span,
+                                signature=sig,
+                                docstring=member.docstring,
+                                class_name=stmt.name,
+                            )
+                        )
+                        for param, param_type in zip(member.parameters, member.parameter_types):
+                            ptype = param_type or "unknown"
+                            self.scoped.append(
+                                self._record_symbol(
+                                    param,
+                                    "parameter",
+                                    member.span.line,
+                                    body_end,
+                                    member.span,
+                                    type_name=ptype,
+                                )
+                            )
+                        self._collect_stmts(member.body, body_end)
+                if init_signature:
+                    sym["init_signature"] = init_signature
+                props = {}
+                for member in stmt.body:
+                    if isinstance(member, ast.InitStmt):
+                        local_types = {
+                            p: t or "unknown"
+                            for p, t in zip(member.parameters, member.parameter_types)
+                        }
+                        props.update(self._find_properties(member.body, local_types))
+                    elif isinstance(member, ast.DefineStmt):
+                        local_types = {
+                            p: t or "unknown"
+                            for p, t in zip(member.parameters, member.parameter_types)
+                        }
+                        props.update(self._find_properties(member.body, local_types))
+                for prop_name, prop_type in props.items():
+                    self.properties.append(
+                        self._record_symbol(
+                            prop_name,
+                            "property",
+                            stmt.span.line,
+                            class_body_end,
+                            stmt.name_span,
+                            type_name=prop_type,
+                            class_name=stmt.name,
+                        )
+                    )
+            elif isinstance(stmt, ast.IfStmt):
+                then_end = self._block_end(stmt.then_branch) or stmt.span.line
+                self._collect_stmts(stmt.then_branch, then_end)
+                else_end = self._block_end(stmt.else_branch) or stmt.span.line
+                self._collect_stmts(stmt.else_branch, else_end)
+            elif isinstance(stmt, ast.WhileStmt):
+                body_end = self._block_end(stmt.body) or stmt.span.line
+                self._collect_stmts(stmt.body, body_end)
+            elif isinstance(stmt, ast.BlockStmt):
+                block_end = self._block_end(stmt.statements) or stmt.span.line
+                self._collect_stmts(stmt.statements, block_end)
 
 
 class LSPServer:
@@ -211,6 +515,9 @@ class LSPServer:
             return
         word = self._word_at(doc.text, pos["line"], pos["character"])
         hover_text = self._hover_text(word)
+        symbol_text = self._hover_symbol_text(doc, word, pos["line"] + 1, pos["character"] + 1)
+        if symbol_text:
+            hover_text = f"{symbol_text}\n\n---\n\n{hover_text}" if hover_text else symbol_text
         if hover_text:
             self._respond(
                 request_id,
@@ -223,6 +530,67 @@ class LSPServer:
             )
         else:
             self._respond(request_id, None)
+
+    def _lookup_symbols(self, doc: Document, word: str, line: int, character: int) -> List[dict]:
+        """Return symbol records that match the word at the given 1-based position."""
+        # Prefer scoped symbols (variables/parameters) that are currently in scope.
+        scoped = [
+            s
+            for s in doc.scoped
+            if s["name"] == word and s["scope_start"] <= line <= s["scope_end"]
+        ]
+        if scoped:
+            scoped.sort(key=lambda s: s["scope_start"], reverse=True)
+            return scoped
+        if word in doc.top_level:
+            return [doc.top_level[word]]
+        methods = [s for s in doc.methods if s["name"] == word]
+        if methods:
+            return methods
+        properties = [s for s in doc.properties if s["name"] == word]
+        if properties:
+            return properties
+        return []
+
+    def _hover_symbol_text(self, doc: Document, word: str, line: int, character: int) -> Optional[str]:
+        symbols = self._lookup_symbols(doc, word, line, character)
+        if not symbols:
+            return None
+        parts = []
+        for symbol in symbols:
+            text = self._format_hover(symbol)
+            if text:
+                parts.append(text)
+        return "\n\n---\n\n".join(parts) if parts else None
+
+    def _format_hover(self, symbol: dict) -> Optional[str]:
+        kind = symbol["kind"]
+        name = symbol["name"]
+        docstring = symbol.get("docstring")
+        lines = []
+        if kind in ("function", "method"):
+            lines.append(f"```period")
+            lines.append(symbol.get("signature") or name)
+            lines.append("```")
+            if docstring:
+                lines.append(docstring)
+        elif kind == "class":
+            lines.append(f"```period")
+            lines.append(f"class {name}")
+            init_sig = symbol.get("init_signature")
+            if init_sig:
+                lines.append(init_sig)
+            lines.append("```")
+            if docstring:
+                lines.append(docstring)
+        elif kind in ("variable", "parameter", "property"):
+            lines.append(f"```period")
+            type_name = symbol.get("type_name") or "unknown"
+            lines.append(f"{name}: {type_name}")
+            lines.append("```")
+        else:
+            return None
+        return "\n".join(lines)
 
     def _word_at(self, text: str, line: int, character: int) -> str:
         lines = text.splitlines()
@@ -243,7 +611,6 @@ class LSPServer:
         docs = {
             "let": "`let <name> be <value>.`\n\nDeclare a new variable.",
             "set": "`set <target> to <value>.`\n\nAssign a new value to an existing variable or property.",
-            "show": "`show <expression>.`\n\nPrint the value of the expression.",
             "if": "`if <condition> then.`\n`    <statements>`\n`[otherwise.`\n`    <statements>]`\n\nConditional statement using indentation.",
             "while": "`while <condition> repeat.`\n`    <statements>`\n\nLoop while the condition is true.",
             "define": "`define <name> [with <args>].`\n`    <statements>`\n\nDefine a function or method using indentation.",
@@ -257,12 +624,104 @@ class LSPServer:
             "of": "Used with `the` to read an instance property.",
             "true": "Boolean true value.",
             "false": "Boolean false value.",
-            "nothing": "The absence of a value.",
-            "input": "`input` reads a line from standard input.",
-            "length": "`length with <value>` returns the length of a string, list, or dictionary.",
-            "string": "`string with <value>` converts a value to a string.",
-            "number": "`number with <value>` converts a value to a number.",
-            "type": "`type with <value>` returns the name of the value's type.",
+            "show": (
+                "```period\n"
+                "show <expression>\n"
+                "```\n\n"
+                "Print the value of the expression to standard output.\n\n"
+                "Example: `show 1 + 2.` prints `3`."
+            ),
+            "input": (
+                "```period\n"
+                "input -> string\n"
+                "```\n\n"
+                "Read a line from standard input and return it as a string.\n\n"
+                "Example: `let name be input.`"
+            ),
+            "length": (
+                "```period\n"
+                "length with <value> -> number\n"
+                "```\n\n"
+                "Return the length of a string, list, or dictionary.\n\n"
+                "Examples:\n"
+                "- `length with \"hello\"` returns `5`.\n"
+                "- `length with [1, 2, 3]` returns `3`."
+            ),
+            "string": (
+                "```period\n"
+                "string with <value> -> string\n"
+                "```\n\n"
+                "Convert a value to a string.\n\n"
+                "Also used as the `string` type annotation.\n\n"
+                "Example: `string with 42.` returns `\"42\"`."
+            ),
+            "number": (
+                "```period\n"
+                "number with <value> -> number\n"
+                "```\n\n"
+                "Convert a value to a number. Booleans become `0` or `1`.\n\n"
+                "Also used as the `number` type annotation, which accepts both integers and floating-point values.\n\n"
+                "Example: `number with \"3.14\".` returns `3.14`."
+            ),
+            "type": (
+                "```period\n"
+                "type with <value> -> string\n"
+                "```\n\n"
+                "Return the name of the value's type as a string.\n\n"
+                "Examples:\n"
+                "- `type with 5.` returns `\"integer\"`.\n"
+                "- `type with [1, 2].` returns `\"list\"`."
+            ),
+            "any": (
+                "```period\n"
+                "any\n"
+                "```\n\n"
+                "The `any` type annotation matches any value. It is useful when a variable may hold values of different types."
+            ),
+            "never": (
+                "```period\n"
+                "never\n"
+                "```\n\n"
+                "The `never` type annotation never matches a value. It represents an impossible type."
+            ),
+            "nothing": (
+                "```period\n"
+                "nothing\n"
+                "```\n\n"
+                "The absence of a value. `nothing` is the value returned by functions that do not explicitly return a value.\n\n"
+                "Also used as the `nothing` type annotation."
+            ),
+            "boolean": (
+                "```period\n"
+                "boolean\n"
+                "```\n\n"
+                "The `boolean` type annotation matches the values `true` and `false`."
+            ),
+            "integer": (
+                "```period\n"
+                "integer\n"
+                "```\n\n"
+                "The `integer` type annotation matches whole numbers without a fractional part.\n\n"
+                "Unlike `number`, an `integer` annotation rejects floating-point values."
+            ),
+            "list": (
+                "```period\n"
+                "list\n"
+                "```\n\n"
+                "The `list` type annotation matches list values created with `[...]`."
+            ),
+            "dictionary": (
+                "```period\n"
+                "dictionary\n"
+                "```\n\n"
+                "The `dictionary` type annotation matches dictionary values created with `{key: value, ...}`."
+            ),
+            "function": (
+                "```period\n"
+                "function\n"
+                "```\n\n"
+                "The `function` type annotation matches user-defined functions and built-in functions."
+            ),
         }
         return docs.get(word)
 

@@ -13,6 +13,7 @@
     { "include": "#property-access" },
     { "include": "#function-call" },
     { "include": "#string" },
+    { "include": "#docstring" },
     { "include": "#number" },
     { "include": "#constant" },
     { "include": "#operator" },
@@ -122,7 +123,7 @@
         },
         {
           "name": "support.type.builtin.period",
-          "match": "\\b(nothing|boolean|integer|number|string|list|dictionary|function|class)\\b"
+          "match": "\\b(any|never|nothing|boolean|integer|number|string|list|dictionary|function|class)\\b"
         },
         {
           "name": "support.function.builtin.period",
@@ -139,6 +140,21 @@
         {
           "name": "entity.name.function.period",
           "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?=\\s+with)"
+        }
+      ]
+    },
+    "docstring": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.docstring.period",
+          "begin": "^\\s*\"",
+          "end": "\"\\s*(?=\\.)",
+          "patterns": [
+            {
+              "name": "constant.character.escape.period",
+              "match": "\\\\."
+            }
+          ]
         }
       ]
     },

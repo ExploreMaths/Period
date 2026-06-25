@@ -13,6 +13,22 @@ BUILTINS: Set[str] = {
     "show",
 }
 
+# Recognized Period type names. They are treated as predefined identifiers and
+# highlighted as classes. They do not have to be runtime built-ins.
+TYPE_NAMES: Set[str] = {
+    "any",
+    "never",
+    "nothing",
+    "boolean",
+    "integer",
+    "number",
+    "string",
+    "list",
+    "dictionary",
+    "function",
+    "class",
+}
+
 # Token kinds used for LSP semantic highlighting.
 TOKEN_FUNCTION = "function"
 TOKEN_CLASS = "class"
@@ -55,7 +71,10 @@ class SemanticChecker:
         return self.tokens
 
     def _builtin_scope(self) -> Dict[str, str]:
-        return {name: TOKEN_BUILTIN for name in BUILTINS}
+        scope = {name: TOKEN_BUILTIN for name in BUILTINS}
+        for name in TYPE_NAMES:
+            scope[name] = TOKEN_CLASS
+        return scope
 
     def _declare(self, name: str, kind: str):
         if self.scopes:
@@ -79,6 +98,53 @@ class SemanticChecker:
             )
         )
 
+    def _infer_expr_type(self, expr: ast.Expr) -> Optional[str]:
+        """Statically infer the Period type name of an expression, if obvious."""
+        if isinstance(expr, ast.NumberLiteral):
+            return "number"
+        if isinstance(expr, ast.StringLiteral):
+            return "string"
+        if isinstance(expr, ast.BooleanLiteral):
+            return "boolean"
+        if isinstance(expr, ast.NothingLiteral):
+            return "nothing"
+        if isinstance(expr, ast.ListExpr):
+            return "list"
+        if isinstance(expr, ast.DictExpr):
+            return "dictionary"
+        if isinstance(expr, ast.NewExpr):
+            if isinstance(expr.class_expr, ast.VariableExpr):
+                return f"instance of {expr.class_expr.name}"
+            return "instance"
+        if isinstance(expr, ast.VariableExpr):
+            if expr.name in TYPE_NAMES:
+                return expr.name
+        return None
+
+    def _check_let_type(self, stmt: ast.LetStmt):
+        """Report a diagnostic if the initializer doesn't match the declared type."""
+        expected = stmt.type_annotation
+        if expected == "any":
+            return
+        actual = self._infer_expr_type(stmt.initializer)
+        if actual is None:
+            return
+        if expected == actual:
+            return
+        # 'number' accepts integer values.
+        if expected == "number" and actual == "integer":
+            return
+        # Class annotations match instances of that class.
+        if actual == f"instance of {expected}":
+            return
+        self.diagnostics.append(
+            Diagnostic(
+                f"Type mismatch: expected '{expected}' but got '{actual}'.",
+                stmt.initializer.span,
+                "error",
+            )
+        )
+
     def _add_token(self, span: SourceSpan, kind: str, is_declaration: bool = False):
         self.tokens.append((span, kind, is_declaration))
 
@@ -87,6 +153,10 @@ class SemanticChecker:
             self._visit_expr(stmt.expression)
         elif isinstance(stmt, ast.LetStmt):
             self._visit_expr(stmt.initializer)
+            if stmt.type_annotation_span is not None:
+                self._add_token(stmt.type_annotation_span, TOKEN_CLASS)
+            if stmt.type_annotation is not None:
+                self._check_let_type(stmt)
             self._declare(stmt.name, TOKEN_VARIABLE)
         elif isinstance(stmt, ast.SetStmt):
             self._visit_expr(stmt.value)
@@ -124,6 +194,11 @@ class SemanticChecker:
     def _visit_function_body(self, stmt: ast.DefineStmt):
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
             self._declare(param, TOKEN_PARAMETER)
+        for param_type_span in stmt.parameter_type_spans:
+            if param_type_span is not None:
+                self._add_token(param_type_span, TOKEN_CLASS)
+        if stmt.return_type_span is not None:
+            self._add_token(stmt.return_type_span, TOKEN_CLASS)
         self._visit_stmts(stmt.body)
 
     def _visit_class_body(self, stmt: ast.ClassStmt):
@@ -138,12 +213,20 @@ class SemanticChecker:
         self._declare("this", TOKEN_VARIABLE)
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
             self._declare(param, TOKEN_PARAMETER)
+        for param_type_span in stmt.parameter_type_spans:
+            if param_type_span is not None:
+                self._add_token(param_type_span, TOKEN_CLASS)
         self._visit_stmts(stmt.body)
 
     def _visit_method_body(self, stmt: ast.DefineStmt):
         self._declare("this", TOKEN_VARIABLE)
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):
             self._declare(param, TOKEN_PARAMETER)
+        for param_type_span in stmt.parameter_type_spans:
+            if param_type_span is not None:
+                self._add_token(param_type_span, TOKEN_CLASS)
+        if stmt.return_type_span is not None:
+            self._add_token(stmt.return_type_span, TOKEN_CLASS)
         self._visit_stmts(stmt.body)
 
     def _scope(self, fn, *args):
@@ -190,6 +273,16 @@ class SemanticChecker:
                 self._visit_expr(value)
         elif isinstance(expr, ast.PropertyExpr):
             self._visit_expr(expr.object)
+            if isinstance(expr.object, ast.VariableExpr):
+                kind = self._lookup(expr.object.name)
+                if kind in (TOKEN_BUILTIN, TOKEN_FUNCTION, TOKEN_CLASS):
+                    self.diagnostics.append(
+                        Diagnostic(
+                            f"Cannot access property on {kind}.",
+                            expr.span,
+                            "error",
+                        )
+                    )
             self._add_token(expr.span, TOKEN_PROPERTY)
         elif isinstance(expr, ast.NewExpr):
             self._visit_expr(expr.class_expr)

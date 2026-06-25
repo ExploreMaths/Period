@@ -67,27 +67,38 @@ class Parser:
         self._error(message, self._peek().span)
         return None
 
-    def _parse_parameters(self) -> tuple[List[str], List[Optional[str]]]:
+    @staticmethod
+    def _extract_docstring(body: List[ast.Stmt]) -> tuple[Optional[str], List[ast.Stmt]]:
+        """If the first statement is a string literal, treat it as a docstring."""
+        if body and isinstance(body[0], ast.ExpressionStmt) and isinstance(body[0].expression, ast.StringLiteral):
+            return body[0].expression.value, body[1:]
+        return None, body
+
+    def _parse_parameters(self) -> tuple[List[str], List[Optional[str]], List[Optional[SourceSpan]]]:
         """Parse a parameter list of the form [type] name, [type] name, ..."""
         parameters: List[str] = []
         parameter_types: List[Optional[str]] = []
+        parameter_type_spans: List[Optional[SourceSpan]] = []
 
         while True:
             first = self._consume(TokenType.IDENTIFIER, "Expected a parameter name.")
             if first is None:
                 break
             param_type: Optional[str] = None
+            param_type_span: Optional[SourceSpan] = None
             param_name = first.value
             if self._check(TokenType.IDENTIFIER):
                 # Two identifiers in a row: first is the type, second is the name.
                 param_type = first.value
+                param_type_span = first.span
                 param_name = self._advance().value
             parameters.append(param_name)
             parameter_types.append(param_type)
+            parameter_type_spans.append(param_type_span)
             if not self._match(TokenType.COMMA):
                 break
 
-        return parameters, parameter_types
+        return parameters, parameter_types, parameter_type_spans
 
     def _error(self, message: str, span: SourceSpan):
         diag = Diagnostic(message, span, "error")
@@ -154,16 +165,32 @@ class Parser:
 
     def _let_statement(self) -> ast.Stmt:
         start = self._advance()  # let
-        name_tok = self._consume(TokenType.IDENTIFIER, "Expected a variable name after 'let'.")
-        if name_tok is None:
+        first_tok = self._consume(TokenType.IDENTIFIER, "Expected a variable name after 'let'.")
+        if first_tok is None:
             return None
+
+        type_annotation: Optional[str] = None
+        type_annotation_span: Optional[SourceSpan] = None
+        name_tok = first_tok
+        # Typed let: let <type> <name> be <value>.
+        if self._check(TokenType.IDENTIFIER):
+            type_annotation = first_tok.value
+            type_annotation_span = first_tok.span
+            name_tok = self._advance()
+
         self._consume(TokenType.BE, "Expected 'be' after variable name in a 'let' statement.")
         init = self._expression()
         end = self._consume(TokenType.DOT, "Expected '.' at the end of a 'let' statement.")
         if end is None:
             end = self._previous()
         span = self._span_from(start, end if end else self._previous())
-        return ast.LetStmt(span=span, name=name_tok.value, initializer=init)
+        return ast.LetStmt(
+            span=span,
+            name=name_tok.value,
+            initializer=init,
+            type_annotation=type_annotation,
+            type_annotation_span=type_annotation_span,
+        )
 
     def _set_statement(self) -> ast.Stmt:
         start = self._advance()  # set
@@ -217,18 +244,24 @@ class Parser:
             return None
         parameters: List[str] = []
         parameter_types: List[Optional[str]] = []
+        parameter_type_spans: List[Optional[SourceSpan]] = []
         if self._match(TokenType.WITH):
-            params, types = self._parse_parameters()
+            params, types, type_spans = self._parse_parameters()
             parameters.extend(params)
             parameter_types.extend(types)
+            parameter_type_spans.extend(type_spans)
         return_type: Optional[str] = None
+        return_type_span: Optional[SourceSpan] = None
         if self._match(TokenType.RETURNS):
             ret = self._consume(TokenType.IDENTIFIER, "Expected a return type after 'returns'.")
-            return_type = ret.value if ret else None
+            if ret is not None:
+                return_type = ret.value
+                return_type_span = ret.span
         self._consume(TokenType.COLON, "Expected ':' after the function signature.")
         body = self._block("define")
+        docstring, body = self._extract_docstring(body)
         span = self._span_from(start, self._previous())
-        return ast.DefineStmt(span=span, name=name_tok.value, name_span=name_tok.span, parameters=parameters, parameter_types=parameter_types, return_type=return_type, body=body)
+        return ast.DefineStmt(span=span, name=name_tok.value, name_span=name_tok.span, parameters=parameters, parameter_types=parameter_types, parameter_type_spans=parameter_type_spans, return_type=return_type, return_type_span=return_type_span, body=body, docstring=docstring)
 
     def _return_statement(self) -> ast.Stmt:
         start = self._advance()  # return
@@ -248,8 +281,9 @@ class Parser:
             return None
         self._consume(TokenType.COLON, "Expected ':' after the class name.")
         body = self._class_body()
+        docstring, body = self._extract_docstring(body)
         span = self._span_from(start, self._previous())
-        return ast.ClassStmt(span=span, name=name_tok.value, name_span=name_tok.span, body=body)
+        return ast.ClassStmt(span=span, name=name_tok.value, name_span=name_tok.span, body=body, docstring=docstring)
 
     def _class_body(self) -> List[ast.Stmt]:
         while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
@@ -271,6 +305,8 @@ class Parser:
                     members.append(self._init_member())
                 elif self._check(TokenType.DEFINE):
                     members.append(self._define_statement())
+                elif self._check(TokenType.STRING):
+                    members.append(self._expression_statement())
                 else:
                     self._error(
                         "Expected 'init' or 'define' inside a class body.",
@@ -288,14 +324,17 @@ class Parser:
         start = self._advance()  # init
         parameters: List[str] = []
         parameter_types: List[Optional[str]] = []
+        parameter_type_spans: List[Optional[SourceSpan]] = []
         if self._match(TokenType.WITH):
-            params, types = self._parse_parameters()
+            params, types, type_spans = self._parse_parameters()
             parameters.extend(params)
             parameter_types.extend(types)
+            parameter_type_spans.extend(type_spans)
         self._consume(TokenType.COLON, "Expected ':' after the init signature.")
         body = self._block("init")
+        docstring, body = self._extract_docstring(body)
         span = self._span_from(start, self._previous())
-        return ast.InitStmt(span=span, parameters=parameters, parameter_types=parameter_types, body=body)
+        return ast.InitStmt(span=span, parameters=parameters, parameter_types=parameter_types, parameter_type_spans=parameter_type_spans, body=body, docstring=docstring)
 
     def _expression_statement(self) -> ast.Stmt:
         expr = self._expression()

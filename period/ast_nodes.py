@@ -117,6 +117,9 @@ class ExpressionStmt(Stmt):
 class LetStmt(Stmt):
     name: str
     initializer: Expr
+    type_annotation: Optional[str] = None
+    type_annotation_span: Optional[SourceSpan] = None
+    is_default_initialization: bool = False
 
 
 @dataclass
@@ -159,15 +162,20 @@ class DefineStmt(Stmt):
     name_span: SourceSpan
     parameters: List[str]
     parameter_types: List[Optional[str]]
+    parameter_type_spans: List[Optional[SourceSpan]]
     return_type: Optional[str]
+    return_type_span: Optional[SourceSpan]
     body: List[Stmt]
+    docstring: Optional[str] = None
 
 
 @dataclass
 class InitStmt(Stmt):
     parameters: List[str]
     parameter_types: List[Optional[str]]
+    parameter_type_spans: List[Optional[SourceSpan]]
     body: List[Stmt]
+    docstring: Optional[str] = None
 
 
 @dataclass
@@ -175,6 +183,7 @@ class ClassStmt(Stmt):
     name: str
     name_span: SourceSpan
     body: List[Stmt]
+    docstring: Optional[str] = None
 
 
 # Program ---------------------------------------------------------------------
