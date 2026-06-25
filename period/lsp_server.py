@@ -128,6 +128,8 @@ class LSPServer:
             self._formatting(request_id, params)
         elif method == "textDocument/definition":
             self._definition(request_id, params)
+        elif method == "textDocument/semanticTokens/full":
+            self._semantic_tokens_full(request_id, params)
         else:
             if request_id is not None:
                 self._respond(request_id, None)
@@ -144,6 +146,20 @@ class LSPServer:
                 "completionProvider": {"triggerCharacters": ["."]},
                 "documentFormattingProvider": True,
                 "definitionProvider": True,
+                "semanticTokensProvider": {
+                    "legend": {
+                        "tokenTypes": [
+                            "function",
+                            "class",
+                            "variable",
+                            "parameter",
+                            "property",
+                            "method",
+                        ],
+                        "tokenModifiers": ["declaration", "readonly", "defaultLibrary"],
+                    },
+                    "full": {"delta": False},
+                },
             },
             "serverInfo": {"name": "period-lsp", "version": "0.0.1"},
         }
@@ -385,6 +401,76 @@ class LSPServer:
                 },
             },
         )
+
+
+    def _semantic_tokens_full(self, request_id: Any, params: dict):
+        uri = params["textDocument"]["uri"]
+        doc = self.documents.get(uri)
+        if doc is None or doc.ast is None:
+            self._respond(request_id, {"data": []})
+            return
+
+        checker = SemanticChecker()
+        tokens = checker.semantic_tokens(doc.ast)
+        self._respond(request_id, {"data": self._encode_semantic_tokens(tokens)})
+
+    def _encode_semantic_tokens(self, tokens) -> List[int]:
+        """Encode semantic tokens as LSP uint32 array.
+
+        Each token is 5 integers: deltaLine, deltaStartChar, length, tokenType, tokenModifiers.
+        Tokens must be sorted by line and column.
+        """
+        legend_types = [
+            "function",
+            "class",
+            "variable",
+            "parameter",
+            "property",
+            "method",
+        ]
+        legend_modifiers = ["declaration", "readonly", "defaultLibrary"]
+
+        kind_to_type = {
+            "function": legend_types.index("function"),
+            "class": legend_types.index("class"),
+            "variable": legend_types.index("variable"),
+            "parameter": legend_types.index("parameter"),
+            "property": legend_types.index("property"),
+            "method": legend_types.index("method"),
+            "builtin": legend_types.index("function"),
+        }
+
+        # Sort tokens by position.
+        sorted_tokens = sorted(tokens, key=lambda t: (t[0].line, t[0].col_start))
+
+        data: List[int] = []
+        prev_line = 0
+        prev_col = 0
+        for span, kind, is_declaration in sorted_tokens:
+            if span.line <= 0:
+                continue
+            line = span.line - 1  # LSP uses 0-based lines.
+            col_start = span.col_start - 1  # LSP uses 0-based columns.
+            length = span.col_end - span.col_start
+            if length <= 0:
+                continue
+
+            token_type = kind_to_type.get(kind, legend_types.index("variable"))
+            modifiers = 0
+            if is_declaration:
+                modifiers |= 1 << legend_modifiers.index("declaration")
+            if kind == "builtin":
+                modifiers |= 1 << legend_modifiers.index("readonly")
+                modifiers |= 1 << legend_modifiers.index("defaultLibrary")
+
+            delta_line = line - prev_line
+            delta_col = col_start - prev_col if delta_line == 0 else col_start
+
+            data.extend([delta_line, delta_col, length, token_type, modifiers])
+            prev_line = line
+            prev_col = col_start
+
+        return data
 
 
 def main():

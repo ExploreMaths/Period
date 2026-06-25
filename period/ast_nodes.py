@@ -156,6 +156,7 @@ class ReturnStmt(Stmt):
 @dataclass
 class DefineStmt(Stmt):
     name: str
+    name_span: SourceSpan
     parameters: List[str]
     parameter_types: List[Optional[str]]
     return_type: Optional[str]
@@ -172,6 +173,7 @@ class InitStmt(Stmt):
 @dataclass
 class ClassStmt(Stmt):
     name: str
+    name_span: SourceSpan
     body: List[Stmt]
 
 

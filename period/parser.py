@@ -228,7 +228,7 @@ class Parser:
         self._consume(TokenType.COLON, "Expected ':' after the function signature.")
         body = self._block("define")
         span = self._span_from(start, self._previous())
-        return ast.DefineStmt(span=span, name=name_tok.value, parameters=parameters, parameter_types=parameter_types, return_type=return_type, body=body)
+        return ast.DefineStmt(span=span, name=name_tok.value, name_span=name_tok.span, parameters=parameters, parameter_types=parameter_types, return_type=return_type, body=body)
 
     def _return_statement(self) -> ast.Stmt:
         start = self._advance()  # return
@@ -249,7 +249,7 @@ class Parser:
         self._consume(TokenType.COLON, "Expected ':' after the class name.")
         body = self._class_body()
         span = self._span_from(start, self._previous())
-        return ast.ClassStmt(span=span, name=name_tok.value, body=body)
+        return ast.ClassStmt(span=span, name=name_tok.value, name_span=name_tok.span, body=body)
 
     def _class_body(self) -> List[ast.Stmt]:
         while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
