@@ -111,11 +111,11 @@
         },
         {
           "name": "keyword.control.period",
-          "match": "\\b(if|then|otherwise|while|repeat|return|returns)\\b"
+          "match": "\\b(if|then|otherwise|while|repeat|return|returns|import)\\b"
         },
         {
           "name": "keyword.other.period",
-          "match": "\\b(let|be|set|to|with|this|new|tell|of|the|import)\\b"
+          "match": "\\b(let|be|set|to|with|this|new|tell|of|the)\\b"
         },
         {
           "name": "keyword.operator.logical.period keyword",
