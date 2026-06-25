@@ -68,7 +68,8 @@
     },
     "configurationDefaults": {
       "[period]": {
-        "editor.minimap.showSectionHeaders": false
+        "editor.minimap.showRegionSectionHeaders": false,
+        "editor.minimap.showMarkSectionHeaders": false
       }
     },
     "configuration": {
