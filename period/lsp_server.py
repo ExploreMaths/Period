@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from . import ast_nodes as ast
 from .lexer import Lexer, TokenType
 from .parser import Parser
+from .semantic import SemanticChecker
 
 
 class Document:
@@ -33,12 +34,19 @@ class Document:
         parser = Parser(tokens, self.text, self.uri)
         self.ast = parser.parse()
         self.diagnostics = [d.to_dict() for d in parser.diagnostics]
+
+        if self.ast is not None and not parser.diagnostics:
+            semantic = SemanticChecker()
+            for d in semantic.check(self.ast):
+                self.diagnostics.append(d.to_dict())
+
         self.definitions = {}
-        for stmt in self.ast.statements:
-            if isinstance(stmt, ast.LetStmt):
-                self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
-            elif isinstance(stmt, ast.DefineStmt):
-                self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
+        if self.ast is not None:
+            for stmt in self.ast.statements:
+                if isinstance(stmt, ast.LetStmt):
+                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
+                elif isinstance(stmt, ast.DefineStmt):
+                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
 
 
 class LSPServer:
