@@ -1,9 +1,9 @@
 """Lexer for the Period programming language."""
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
-from .errors import LexerError, SourceSpan
+from .errors import Diagnostic, SourceSpan
 
 
 class TokenType(Enum):
@@ -24,7 +24,6 @@ class TokenType(Enum):
     IF = auto()
     THEN = auto()
     OTHERWISE = auto()
-    END = auto()
     WHILE = auto()
     REPEAT = auto()
     DEFINE = auto()
@@ -34,6 +33,15 @@ class TokenType(Enum):
     OR = auto()
     NOT = auto()
     INPUT = auto()
+
+    # Class / object keywords
+    CLASS = auto()
+    INIT = auto()
+    THIS = auto()
+    NEW = auto()
+    TELL = auto()
+    OF = auto()
+    THE = auto()
 
     # Operators / punctuation
     PLUS = auto()
@@ -59,10 +67,15 @@ class TokenType(Enum):
     COLON = auto()
     DOT = auto()
 
+    # Indentation
+    INDENT = auto()
+    DEDENT = auto()
+
     # Special
     NEWLINE = auto()
     EOF = auto()
     COMMENT = auto()
+    ERROR = auto()
 
 
 KEYWORDS = {
@@ -74,7 +87,6 @@ KEYWORDS = {
     "if": TokenType.IF,
     "then": TokenType.THEN,
     "otherwise": TokenType.OTHERWISE,
-    "end": TokenType.END,
     "while": TokenType.WHILE,
     "repeat": TokenType.REPEAT,
     "define": TokenType.DEFINE,
@@ -87,6 +99,13 @@ KEYWORDS = {
     "false": TokenType.FALSE,
     "nothing": TokenType.NOTHING,
     "input": TokenType.INPUT,
+    "class": TokenType.CLASS,
+    "init": TokenType.INIT,
+    "this": TokenType.THIS,
+    "new": TokenType.NEW,
+    "tell": TokenType.TELL,
+    "of": TokenType.OF,
+    "the": TokenType.THE,
 }
 
 
@@ -108,6 +127,7 @@ class Lexer:
         self.source = source
         self.filename = filename
         self.tokens: List[Token] = []
+        self.diagnostics: List[Diagnostic] = []
         self.start = 0
         self.current = 0
         self.line = 1
@@ -122,6 +142,7 @@ class Lexer:
         self.tokens.append(
             Token(TokenType.EOF, None, SourceSpan(self.line, self._current_col(), self._current_col()), "")
         )
+        self._process_indentation()
         return self.tokens
 
     def _is_at_end(self) -> bool:
@@ -168,9 +189,6 @@ class Lexer:
             return  # ignore whitespace
 
         if char == "\n":
-            # Normalize newlines into explicit NEWLINE tokens only when meaningful.
-            # We emit a NEWLINE token so the parser can track statement boundaries
-            # even when a period is missing.
             self._add_token(TokenType.NEWLINE, None)
             self.line += 1
             return
@@ -180,7 +198,6 @@ class Lexer:
             return
 
         if char == ".":
-            # A period terminates statements and acts as a tiny visual rest.
             self._add_token(TokenType.DOT, None)
             return
 
@@ -304,6 +321,8 @@ class Lexer:
                 "Unterminated string literal.",
                 SourceSpan(start_line, start_col, start_col + 1),
             )
+            value = "".join(value_parts)
+            self.tokens.append(Token(TokenType.STRING, value, SourceSpan(start_line, start_col, self._current_col()), self.source[self.start : self.current]))
             return
 
         self._advance()  # closing quote
@@ -338,4 +357,79 @@ class Lexer:
     def _error(self, message: str, span: Optional[SourceSpan] = None):
         if span is None:
             span = self._span()
-        raise LexerError(message, span)
+        self.diagnostics.append(Diagnostic(message, span, "error"))
+        self._add_token(TokenType.ERROR, message)
+
+    # -------------------------------------------------------------------------
+    # Indentation handling
+    # -------------------------------------------------------------------------
+
+    def _process_indentation(self):
+        """Convert NEWLINE tokens into INDENT/DEDENT based on leading whitespace."""
+        processed: List[Token] = []
+        stack = [0]
+        i = 0
+        n = len(self.tokens)
+
+        def next_meaningful(start_idx: int) -> Optional[Token]:
+            j = start_idx
+            while j < n and self.tokens[j].type in (TokenType.NEWLINE, TokenType.COMMENT):
+                j += 1
+            if j < n and self.tokens[j].type != TokenType.EOF:
+                return self.tokens[j]
+            return None
+
+        # Initial indentation check.
+        first = next_meaningful(0)
+        if first is not None and first.span.col_start > 1:
+            indent = first.span.col_start - 1
+            self.diagnostics.append(
+                Diagnostic(
+                    "Unexpected indentation at start of file.",
+                    first.span,
+                    "error",
+                )
+            )
+            processed.append(Token(TokenType.INDENT, None, first.span, ""))
+            stack.append(indent)
+
+        while i < n:
+            tok = self.tokens[i]
+            if tok.type == TokenType.NEWLINE:
+                processed.append(tok)
+                nxt = next_meaningful(i + 1)
+                if nxt is not None:
+                    indent = nxt.span.col_start - 1
+                    if indent > stack[-1]:
+                        processed.append(Token(TokenType.INDENT, None, nxt.span, ""))
+                        stack.append(indent)
+                    elif indent < stack[-1]:
+                        while indent < stack[-1]:
+                            stack.pop()
+                            processed.append(Token(TokenType.DEDENT, None, nxt.span, ""))
+                        if indent != stack[-1]:
+                            self.diagnostics.append(
+                                Diagnostic(
+                                    "Inconsistent indentation.",
+                                    nxt.span,
+                                    "error",
+                                )
+                            )
+                i += 1
+                continue
+
+            processed.append(tok)
+            i += 1
+
+        # Close any remaining open blocks before the EOF token.
+        if processed and processed[-1].type == TokenType.EOF:
+            eof = processed.pop()
+        else:
+            eof = Token(TokenType.EOF, None, SourceSpan(self.line, 1, 1), "")
+
+        while stack[-1] != 0:
+            stack.pop()
+            processed.append(Token(TokenType.DEDENT, None, eof.span, ""))
+
+        processed.append(eof)
+        self.tokens = processed

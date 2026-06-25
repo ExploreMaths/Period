@@ -1,0 +1,12 @@
+-- Define and use a simple class.
+class Person.
+    init with name, age.
+        set this name to name.
+        set this age to age.
+
+    define greet with greeting.
+        show greeting + ", " + this name + "!".
+
+let ada be new Person with "Ada", 42.
+tell ada to greet with "Hello".
+show the age of ada.

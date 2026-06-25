@@ -24,10 +24,12 @@ class SemanticChecker:
         self.diagnostics = []
         self.scopes = [set(BUILTINS)]
 
-        # First pass: register all top-level function names so they can be
-        # referenced before their definition.
+        # First pass: register all top-level function and class names so they can
+        # be referenced before their definition.
         for stmt in program.statements:
             if isinstance(stmt, ast.DefineStmt):
+                self.scopes[0].add(stmt.name)
+            elif isinstance(stmt, ast.ClassStmt):
                 self.scopes[0].add(stmt.name)
 
         for stmt in program.statements:
@@ -79,12 +81,36 @@ class SemanticChecker:
                 self._visit_expr(stmt.value)
         elif isinstance(stmt, ast.DefineStmt):
             self._scope(self._visit_function_body, stmt)
+        elif isinstance(stmt, ast.ClassStmt):
+            self._visit_class_body(stmt)
+        elif isinstance(stmt, ast.InitStmt):
+            # Init outside a class body is a parse/runtime concern; nothing to check here.
+            pass
 
     def _visit_stmts(self, statements: List[ast.Stmt]):
         for stmt in statements:
             self._visit_stmt(stmt)
 
     def _visit_function_body(self, stmt: ast.DefineStmt):
+        for param in stmt.parameters:
+            self._declare(param)
+        self._visit_stmts(stmt.body)
+
+    def _visit_class_body(self, stmt: ast.ClassStmt):
+        for member in stmt.body:
+            if isinstance(member, ast.InitStmt):
+                self._scope(self._visit_init_body, member)
+            elif isinstance(member, ast.DefineStmt):
+                self._scope(self._visit_method_body, member)
+
+    def _visit_init_body(self, stmt: ast.InitStmt):
+        self._declare("this")
+        for param in stmt.parameters:
+            self._declare(param)
+        self._visit_stmts(stmt.body)
+
+    def _visit_method_body(self, stmt: ast.DefineStmt):
+        self._declare("this")
         for param in stmt.parameters:
             self._declare(param)
         self._visit_stmts(stmt.body)
@@ -100,6 +126,8 @@ class SemanticChecker:
         if isinstance(target, ast.VariableExpr):
             if not self._is_defined(target.name):
                 self._error(target.name, target.span)
+        elif isinstance(target, ast.PropertyExpr):
+            self._visit_expr(target.object)
         else:
             self._visit_expr(target)
 
@@ -126,3 +154,13 @@ class SemanticChecker:
             for key, value in expr.pairs:
                 self._visit_expr(key)
                 self._visit_expr(value)
+        elif isinstance(expr, ast.PropertyExpr):
+            self._visit_expr(expr.object)
+        elif isinstance(expr, ast.NewExpr):
+            self._visit_expr(expr.class_expr)
+            for arg in expr.arguments:
+                self._visit_expr(arg)
+        elif isinstance(expr, ast.TellExpr):
+            self._visit_expr(expr.object)
+            for arg in expr.arguments:
+                self._visit_expr(arg)

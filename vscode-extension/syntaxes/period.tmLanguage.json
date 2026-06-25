@@ -35,7 +35,7 @@
       "patterns": [
         {
           "name": "keyword.control.period",
-          "match": "\\b(let|be|set|to|if|then|otherwise|end|while|repeat|define|with|return)\\b"
+          "match": "\\b(let|be|set|to|if|then|otherwise|while|repeat|define|with|return|class|init|this|new|tell|of|the)\\b"
         },
         {
           "name": "keyword.operator.logical.period",

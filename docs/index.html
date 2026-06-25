@@ -96,10 +96,10 @@
     <div class="marquee" aria-hidden="true">
       <div class="marquee-track">
         <div class="marquee-set">
-          <span>let</span><span>be</span><span>show</span><span>if</span><span>then</span><span>otherwise</span><span>while</span><span>repeat</span><span>define</span><span>return</span>
+          <span>let</span><span>be</span><span>show</span><span>if</span><span>then</span><span>otherwise</span><span>while</span><span>repeat</span><span>define</span><span>return</span><span>class</span><span>init</span><span>this</span><span>new</span><span>tell</span>
         </div>
         <div class="marquee-set">
-          <span>let</span><span>be</span><span>show</span><span>if</span><span>then</span><span>otherwise</span><span>while</span><span>repeat</span><span>define</span><span>return</span>
+          <span>let</span><span>be</span><span>show</span><span>if</span><span>then</span><span>otherwise</span><span>while</span><span>repeat</span><span>define</span><span>return</span><span>class</span><span>init</span><span>this</span><span>new</span><span>tell</span>
         </div>
       </div>
     </div>
@@ -138,9 +138,7 @@
 <span class="keyword">define</span> factorial <span class="keyword">with</span> n<span class="period">.</span>
     <span class="keyword">if</span> n <= <span class="number">1</span> <span class="keyword">then</span><span class="period">.</span>
         <span class="keyword">return</span> <span class="number">1</span><span class="period">.</span>
-    <span class="keyword">end if</span><span class="period">.</span>
-    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span>
-<span class="keyword">end define</span><span class="period">.</span></code></pre>
+    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span></code></pre>
           <p>Define functions with plain English and call them with <code>with</code>.</p>
         </article>
 
@@ -167,6 +165,7 @@
           <button class="tab-btn active" role="tab" data-tab="hello" aria-selected="true">Hello</button>
           <button class="tab-btn" role="tab" data-tab="loop" aria-selected="false">Loop</button>
           <button class="tab-btn" role="tab" data-tab="function" aria-selected="false">Function</button>
+          <button class="tab-btn" role="tab" data-tab="class" aria-selected="false">Class</button>
           <div class="tab-indicator"></div>
         </div>
 
@@ -181,17 +180,25 @@
 <span class="keyword">let</span> i <span class="keyword">be</span> <span class="number">1</span><span class="period">.</span>
 <span class="keyword">while</span> i <= <span class="number">5</span> <span class="keyword">repeat</span><span class="period">.</span>
     <span class="builtin">show</span> i<span class="period">.</span>
-    <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span>
-<span class="keyword">end while</span><span class="period">.</span></code></pre>
+    <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span></code></pre>
           </div>
           <div class="tab-panel" role="tabpanel" data-tab="function">
             <pre><code><span class="comment">-- A recursive factorial.</span>
 <span class="keyword">define</span> factorial <span class="keyword">with</span> n<span class="period">.</span>
     <span class="keyword">if</span> n <= <span class="number">1</span> <span class="keyword">then</span><span class="period">.</span>
         <span class="keyword">return</span> <span class="number">1</span><span class="period">.</span>
-    <span class="keyword">end if</span><span class="period">.</span>
-    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span>
-<span class="keyword">end define</span><span class="period">.</span></code></pre>
+    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span></code></pre>
+          </div>
+          <div class="tab-panel" role="tabpanel" data-tab="class">
+            <pre><code><span class="comment">-- A tiny class.</span>
+<span class="keyword">class</span> Person<span class="period">.</span>
+    <span class="keyword">init</span> <span class="keyword">with</span> name<span class="period">.</span>
+        <span class="keyword">set</span> this name <span class="keyword">to</span> name<span class="period">.</span>
+    <span class="keyword">define</span> greet <span class="keyword">with</span> greeting<span class="period">.</span>
+        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this name + <span class="string">"!"</span><span class="period">.</span>
+
+<span class="keyword">let</span> ada <span class="keyword">be</span> new Person <span class="keyword">with</span> <span class="string">"Ada"</span><span class="period">.</span>
+tell ada <span class="keyword">to</span> greet <span class="keyword">with</span> <span class="string">"Hello"</span><span class="period">.</span></code></pre>
           </div>
         </div>
       </div>
@@ -431,43 +438,35 @@
       if (desktop) {
         const hTrack = document.querySelector(".horizontal-track");
         const hPanels = gsap.utils.toArray(".h-panel");
+
         if (hTrack && hPanels.length >= 2) {
           const panelCount = hPanels.length;
           let currentIndex = 0;
           let isNavigating = false;
           let accumulated = 0;
 
-          const scrollTween = gsap.to(hTrack, {
-            xPercent: -100 * (panelCount - 1),
-            ease: "none",
-            scrollTrigger: {
-              trigger: ".horizontal-section",
-              pin: true,
-              scrub: 0.8,
-              end: () => "+=" + hTrack.offsetWidth,
-              snap: {
-                snapTo: 1 / (panelCount - 1),
-                duration: { min: 0.15, max: 0.35 },
-                delay: 0,
-                ease: "power1.out"
-              },
-              onSnapComplete: (self) => {
-                currentIndex = Math.round(self.progress * (panelCount - 1));
-              },
-              onEnter: () => observer.enable(),
-              onLeave: () => observer.disable(),
-              onEnterBack: () => observer.enable(),
-              onLeaveBack: () => observer.disable()
-            }
-          });
+          const setTrackPadding = () => {
+            const panelW = hPanels[0].offsetWidth;
+            const viewportW = document.documentElement.clientWidth;
+            const margin = Math.max(0, (viewportW - panelW) / 2);
+            const headerH = document.querySelector("header")?.offsetHeight || 70;
+            hTrack.style.paddingLeft = margin + "px";
+            hTrack.style.paddingRight = margin + "px";
+            hTrack.style.paddingTop = headerH + "px";
+          };
+          setTrackPadding();
 
-          const st = scrollTween.scrollTrigger;
+          const xEnd = () => {
+            const margin = Math.max(0, (document.documentElement.clientWidth - hPanels[0].offsetWidth) / 2);
+            return -(hPanels[hPanels.length - 1].offsetLeft - margin);
+          };
 
-          const threshold = 160;
+          const threshold = 80;
+          let st;
 
           const goToPanel = (index) => {
             index = gsap.utils.clamp(0, panelCount - 1, index);
-            if (index === currentIndex || isNavigating) return;
+            if (index === currentIndex || isNavigating || !st) return;
             isNavigating = true;
             const targetScroll = st.start + (st.end - st.start) * (index / (panelCount - 1));
             gsap.to(window, {
@@ -505,7 +504,7 @@
           const observer = Observer.create({
             target: ".horizontal-section",
             type: "wheel,touch",
-            preventDefault: true,
+            preventDefault: false,
             onChangeY: (self) => {
               accumulated += self.deltaY;
               accumulated = gsap.utils.clamp(-threshold * 1.5, threshold * 1.5, accumulated);
@@ -514,6 +513,36 @@
             onStop: () => { accumulated = 0; }
           });
           observer.disable();
+
+          const scrollTween = gsap.to(hTrack, {
+            x: xEnd,
+            ease: "none",
+            scrollTrigger: {
+              trigger: ".horizontal-section",
+              start: "top top",
+              pin: true,
+              scrub: 0.8,
+              end: () => "+=" + (Math.abs(xEnd()) * 1.2),
+              onUpdate: (self) => {
+                currentIndex = Math.round(self.progress * (panelCount - 1));
+              },
+              onEnter: () => observer.enable(),
+              onLeave: () => observer.disable(),
+              onEnterBack: () => observer.enable(),
+              onLeaveBack: () => observer.disable()
+            }
+          });
+
+          st = scrollTween.scrollTrigger;
+
+          const refreshLayout = () => {
+            setTrackPadding();
+            ScrollTrigger.refresh();
+          };
+          if (document.fonts) {
+            document.fonts.ready.then(refreshLayout);
+          }
+          window.addEventListener("load", refreshLayout);
 
           hPanels.forEach((panel) => {
             gsap.from(panel.querySelectorAll("h2, p, pre"), {
@@ -530,7 +559,16 @@
             });
           });
 
-          cleanups.push(() => observer.kill());
+          const onResize = () => {
+            setTrackPadding();
+            ScrollTrigger.refresh();
+          };
+          window.addEventListener("resize", onResize);
+          cleanups.push(() => {
+            observer.kill();
+            window.removeEventListener("resize", onResize);
+            window.removeEventListener("load", refreshLayout);
+          });
         }
       }
 

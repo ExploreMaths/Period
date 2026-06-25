@@ -36,6 +36,29 @@ class PeriodBuiltIn:
         return f"<built-in {self.name}>"
 
 
+class PeriodClass:
+    """User-defined class value."""
+
+    def __init__(self, name: str, init: Optional[ast.InitStmt], methods: Dict[str, ast.DefineStmt]):
+        self.name = name
+        self.init = init
+        self.methods = methods
+
+    def __repr__(self) -> str:
+        return f"<class {self.name}>"
+
+
+class PeriodInstance:
+    """An instance of a user-defined class."""
+
+    def __init__(self, klass: PeriodClass):
+        self.klass = klass
+        self.fields: Dict[str, Any] = {}
+
+    def __repr__(self) -> str:
+        return f"<instance of {self.klass.name}>"
+
+
 class Environment:
     """Variable environment with support for nested scopes."""
 
@@ -128,6 +151,8 @@ class Interpreter:
             return "true" if value else "false"
         if isinstance(value, (list, dict)):
             return self._pretty(value)
+        if isinstance(value, PeriodInstance):
+            return self._pretty_instance(value)
         return str(value)
 
     def _to_number(self, value: Any, span: SourceSpan) -> float:
@@ -163,6 +188,10 @@ class Interpreter:
             return "function"
         if isinstance(value, PeriodBuiltIn):
             return "built-in"
+        if isinstance(value, PeriodClass):
+            return "class"
+        if isinstance(value, PeriodInstance):
+            return f"instance of {value.klass.name}"
         return "unknown"
 
     def _read_input(self, span: SourceSpan) -> str:
@@ -181,7 +210,13 @@ class Interpreter:
         if isinstance(value, dict):
             items = ", ".join(f"{self._pretty(k)}: {self._pretty(v)}" for k, v in value.items())
             return "{" + items + "}"
+        if isinstance(value, PeriodInstance):
+            return self._pretty_instance(value)
         return str(value)
+
+    def _pretty_instance(self, instance: PeriodInstance) -> str:
+        items = ", ".join(f"{k}: {self._pretty(v)}" for k, v in instance.fields.items())
+        return f"<{instance.klass.name} {items}>"
 
     # Public API --------------------------------------------------------------
 
@@ -239,12 +274,33 @@ class Interpreter:
             function = PeriodFunction(stmt, self.environment)
             self.environment.define(stmt.name, function)
             return
+        if isinstance(stmt, ast.ClassStmt):
+            init: Optional[ast.InitStmt] = None
+            methods: Dict[str, ast.DefineStmt] = {}
+            for member in stmt.body:
+                if isinstance(member, ast.InitStmt):
+                    init = member
+                elif isinstance(member, ast.DefineStmt):
+                    methods[member.name] = member
+                else:
+                    raise RuntimeError("Class body may only contain 'init' and method definitions.", member.span)
+            klass = PeriodClass(stmt.name, init, methods)
+            self.environment.define(stmt.name, klass)
+            return
+        if isinstance(stmt, ast.InitStmt):
+            raise RuntimeError("'init' may only appear inside a class body.", stmt.span)
         raise RuntimeError(f"Unknown statement type: {type(stmt).__name__}.", stmt.span)
 
     def _assign_target(self, target: ast.Expr, value: Any, span: SourceSpan):
         if isinstance(target, ast.VariableExpr):
             self.environment.set(target.name, value, span)
             return
+        if isinstance(target, ast.PropertyExpr):
+            obj = self._evaluate(target.object)
+            if isinstance(obj, PeriodInstance):
+                obj.fields[target.name] = value
+                return
+            raise RuntimeError(f"Cannot set property on {self._type_name(obj, span)}.", target.object.span)
         if isinstance(target, ast.IndexExpr):
             obj = self._evaluate(target.object)
             index = self._evaluate(target.index)
@@ -289,6 +345,12 @@ class Interpreter:
             return self._eval_call(expr)
         if isinstance(expr, ast.IndexExpr):
             return self._eval_index(expr)
+        if isinstance(expr, ast.PropertyExpr):
+            return self._eval_property(expr)
+        if isinstance(expr, ast.NewExpr):
+            return self._eval_new(expr)
+        if isinstance(expr, ast.TellExpr):
+            return self._eval_tell(expr)
         raise RuntimeError(f"Unknown expression type: {type(expr).__name__}.", expr.span)
 
     def _eval_unary(self, expr: ast.UnaryExpr) -> Any:
@@ -412,6 +474,66 @@ class Interpreter:
             except KeyError:
                 raise RuntimeError(f"Key {self._pretty(index)} not found in dictionary.", expr.index.span)
         raise RuntimeError(f"Cannot index into {self._type_name(obj, expr.span)}.", expr.object.span)
+
+    def _eval_property(self, expr: ast.PropertyExpr) -> Any:
+        obj = self._evaluate(expr.object)
+        if isinstance(obj, PeriodInstance):
+            if expr.name in obj.fields:
+                return obj.fields[expr.name]
+            if expr.name in obj.klass.methods:
+                method = obj.klass.methods[expr.name]
+                return PeriodFunction(method, self.environment)
+            raise RuntimeError(f"Instance of {obj.klass.name} has no property '{expr.name}'.", expr.span)
+        raise RuntimeError(f"Cannot access property on {self._type_name(obj, expr.span)}.", expr.object.span)
+
+    def _eval_new(self, expr: ast.NewExpr) -> Any:
+        klass = self._evaluate(expr.class_expr)
+        if not isinstance(klass, PeriodClass):
+            raise RuntimeError(f"Cannot create new instance of {self._type_name(klass, expr.class_expr.span)}.", expr.class_expr.span)
+
+        instance = PeriodInstance(klass)
+        if klass.init is not None:
+            init = klass.init
+            arguments = [self._evaluate(arg) for arg in expr.arguments]
+            if len(init.parameters) != len(arguments):
+                raise RuntimeError(
+                    f"Init of '{klass.name}' expects {len(init.parameters)} argument(s) but got {len(arguments)}.",
+                    expr.span,
+                )
+            env = Environment(self.environment)
+            env.define("this", instance)
+            for param, arg in zip(init.parameters, arguments):
+                env.define(param, arg)
+            try:
+                self.execute_block(init.body, env)
+            except ReturnValue:
+                pass
+        return instance
+
+    def _eval_tell(self, expr: ast.TellExpr) -> Any:
+        obj = self._evaluate(expr.object)
+        if not isinstance(obj, PeriodInstance):
+            raise RuntimeError(f"Cannot send a message to {self._type_name(obj, expr.span)}.", expr.object.span)
+
+        method = obj.klass.methods.get(expr.method)
+        if method is None:
+            raise RuntimeError(f"Class {obj.klass.name} has no method '{expr.method}'.", expr.span)
+
+        arguments = [self._evaluate(arg) for arg in expr.arguments]
+        if len(method.parameters) != len(arguments):
+            raise RuntimeError(
+                f"Method '{expr.method}' expects {len(method.parameters)} argument(s) but got {len(arguments)}.",
+                expr.span,
+            )
+        env = Environment(self.environment)
+        env.define("this", obj)
+        for param, arg in zip(method.parameters, arguments):
+            env.define(param, arg)
+        try:
+            self.execute_block(method.body, env)
+        except ReturnValue as ret:
+            return ret.value
+        return None
 
     # Numeric helpers ---------------------------------------------------------
 

@@ -60,6 +60,10 @@ class Parser:
     def _consume(self, token_type: TokenType, message: str) -> Optional[Token]:
         if self._check(token_type):
             return self._advance()
+        if self._check(TokenType.ERROR):
+            # Lexer has already reported this token; don't pile on a duplicate.
+            self._advance()
+            return None
         self._error(message, self._peek().span)
         return None
 
@@ -82,8 +86,10 @@ class Parser:
                 TokenType.WHILE,
                 TokenType.DEFINE,
                 TokenType.RETURN,
-                TokenType.END,
+                TokenType.CLASS,
+                TokenType.INIT,
                 TokenType.OTHERWISE,
+                TokenType.DEDENT,
             }:
                 return
             self._advance()
@@ -96,8 +102,8 @@ class Parser:
     # Statements --------------------------------------------------------------
 
     def _statement(self) -> Optional[ast.Stmt]:
-        # Skip stray newlines/comments.
-        while self._match(TokenType.NEWLINE, TokenType.COMMENT):
+        # Skip stray newlines, comments, indents, dedents, and already-reported error tokens.
+        while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.INDENT, TokenType.DEDENT, TokenType.ERROR):
             pass
         if self._is_at_end():
             return None
@@ -117,6 +123,8 @@ class Parser:
                 return self._define_statement()
             if self._check(TokenType.RETURN):
                 return self._return_statement()
+            if self._check(TokenType.CLASS):
+                return self._class_statement()
             return self._expression_statement()
         except ParseError:
             self._recover()
@@ -160,20 +168,14 @@ class Parser:
         condition = self._expression()
         self._consume(TokenType.THEN, "Expected 'then' after the condition of an 'if' statement.")
         self._consume(TokenType.DOT, "Expected '.' after 'then'.")
-        then_branch = self._block(stop={TokenType.OTHERWISE, TokenType.END})
+        then_branch = self._block("if")
 
         else_branch: List[ast.Stmt] = []
         if self._match(TokenType.OTHERWISE):
             self._consume(TokenType.DOT, "Expected '.' after 'otherwise'.")
-            else_branch = self._block(stop={TokenType.END})
+            else_branch = self._block("otherwise")
 
-        end = self._consume(TokenType.END, "Expected 'end if' to close the block.")
-        if end is not None:
-            self._consume(TokenType.IF, "Expected 'if' after 'end' to close the block.")
-            end = self._consume(TokenType.DOT, "Expected '.' after 'end if'.")
-        if end is None:
-            end = self._previous()
-        span = self._span_from(start, end if end else self._previous())
+        span = self._span_from(start, self._previous())
         return ast.IfStmt(span=span, condition=condition, then_branch=then_branch, else_branch=else_branch)
 
     def _while_statement(self) -> ast.Stmt:
@@ -181,14 +183,8 @@ class Parser:
         condition = self._expression()
         self._consume(TokenType.REPEAT, "Expected 'repeat' after the condition of a 'while' statement.")
         self._consume(TokenType.DOT, "Expected '.' after 'repeat'.")
-        body = self._block(stop={TokenType.END})
-        end = self._consume(TokenType.END, "Expected 'end while' to close the loop.")
-        if end is not None:
-            self._consume(TokenType.WHILE, "Expected 'while' after 'end' to close the loop.")
-            end = self._consume(TokenType.DOT, "Expected '.' after 'end while'.")
-        if end is None:
-            end = self._previous()
-        span = self._span_from(start, end if end else self._previous())
+        body = self._block("while")
+        span = self._span_from(start, self._previous())
         return ast.WhileStmt(span=span, condition=condition, body=body)
 
     def _define_statement(self) -> ast.Stmt:
@@ -206,14 +202,8 @@ class Parser:
                     if param:
                         parameters.append(param.value)
         self._consume(TokenType.DOT, "Expected '.' after the function signature.")
-        body = self._block(stop={TokenType.END})
-        end = self._consume(TokenType.END, "Expected 'end define' to close the function.")
-        if end is not None:
-            self._consume(TokenType.DEFINE, "Expected 'define' after 'end' to close the function.")
-            end = self._consume(TokenType.DOT, "Expected '.' after 'end define'.")
-        if end is None:
-            end = self._previous()
-        span = self._span_from(start, end if end else self._previous())
+        body = self._block("define")
+        span = self._span_from(start, self._previous())
         return ast.DefineStmt(span=span, name=name_tok.value, parameters=parameters, body=body)
 
     def _return_statement(self) -> ast.Stmt:
@@ -227,6 +217,65 @@ class Parser:
         span = self._span_from(start, end)
         return ast.ReturnStmt(span=span, value=value)
 
+    def _class_statement(self) -> ast.Stmt:
+        start = self._advance()  # class
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected a class name after 'class'.")
+        if name_tok is None:
+            return None
+        self._consume(TokenType.DOT, "Expected '.' after the class name.")
+        body = self._class_body()
+        span = self._span_from(start, self._previous())
+        return ast.ClassStmt(span=span, name=name_tok.value, body=body)
+
+    def _class_body(self) -> List[ast.Stmt]:
+        while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
+            pass
+        if not self._match(TokenType.INDENT):
+            self._error("Expected an indented class body.", self._peek().span)
+            return []
+
+        members: List[ast.Stmt] = []
+        while not self._is_at_end() and not self._check(TokenType.DEDENT):
+            while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.DEDENT, TokenType.ERROR):
+                if self._check(TokenType.DEDENT):
+                    break
+            if self._is_at_end() or self._check(TokenType.DEDENT):
+                break
+
+            try:
+                if self._check(TokenType.INIT):
+                    members.append(self._init_member())
+                elif self._check(TokenType.DEFINE):
+                    members.append(self._define_statement())
+                else:
+                    self._error(
+                        "Expected 'init' or 'define' inside a class body.",
+                        self._peek().span,
+                    )
+            except ParseError:
+                self._recover()
+
+        while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
+            pass
+        self._consume(TokenType.DEDENT, "Expected the class body to end.")
+        return members
+
+    def _init_member(self) -> ast.Stmt:
+        start = self._advance()  # init
+        parameters: List[str] = []
+        if self._match(TokenType.WITH):
+            param = self._consume(TokenType.IDENTIFIER, "Expected a parameter name after 'with'.")
+            if param:
+                parameters.append(param.value)
+                while self._match(TokenType.COMMA):
+                    param = self._consume(TokenType.IDENTIFIER, "Expected a parameter name after ','.")
+                    if param:
+                        parameters.append(param.value)
+        self._consume(TokenType.DOT, "Expected '.' after the init signature.")
+        body = self._block("init")
+        span = self._span_from(start, self._previous())
+        return ast.InitStmt(span=span, parameters=parameters, body=body)
+
     def _expression_statement(self) -> ast.Stmt:
         expr = self._expression()
         end = self._consume(TokenType.DOT, "Expected '.' at the end of the statement.")
@@ -235,16 +284,28 @@ class Parser:
         span = self._span_from(expr.span, end)
         return ast.ExpressionStmt(span=span, expression=expr)
 
-    def _block(self, stop: set) -> List[ast.Stmt]:
+    def _block(self, context: str) -> List[ast.Stmt]:
+        while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
+            pass
+        if not self._match(TokenType.INDENT):
+            self._error(f"Expected an indented block after {context}.", self._peek().span)
+            return []
+
         statements: List[ast.Stmt] = []
-        while not self._is_at_end() and self._peek().type not in stop:
-            while self._match(TokenType.NEWLINE, TokenType.COMMENT):
-                pass
-            if self._is_at_end() or self._peek().type in stop:
+        while not self._is_at_end() and not self._check(TokenType.DEDENT):
+            while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.DEDENT, TokenType.ERROR):
+                if self._check(TokenType.DEDENT):
+                    break
+            if self._is_at_end() or self._check(TokenType.DEDENT):
                 break
             stmt = self._statement()
             if stmt is not None:
                 statements.append(stmt)
+
+        while self._match(TokenType.NEWLINE, TokenType.COMMENT, TokenType.ERROR):
+            pass
+        if not self._match(TokenType.DEDENT):
+            self._error(f"Expected the {context} block to end.", self._peek().span)
         return statements
 
     # Expressions -------------------------------------------------------------
@@ -324,15 +385,22 @@ class Parser:
 
     def _call(self) -> ast.Expr:
         expr = self._primary()
-        while self._match(TokenType.WITH):
-            args: List[ast.Expr] = []
-            if not self._check(TokenType.DOT) and not self._is_at_end():
-                args.append(self._expression())
-                while self._match(TokenType.COMMA):
+        while True:
+            if self._check(TokenType.IDENTIFIER):
+                name_tok = self._advance()
+                span = self._span_from(expr.span, name_tok)
+                expr = ast.PropertyExpr(span=span, object=expr, name=name_tok.value)
+                continue
+            if self._match(TokenType.WITH):
+                args: List[ast.Expr] = []
+                if not self._check(TokenType.DOT) and not self._is_at_end():
                     args.append(self._expression())
-            # Function calls must also end with a statement period, handled by caller.
-            span = self._span_from(expr.span, self._previous())
-            expr = ast.CallExpr(span=span, callee=expr, arguments=args)
+                    while self._match(TokenType.COMMA):
+                        args.append(self._expression())
+                span = self._span_from(expr.span, self._previous())
+                expr = ast.CallExpr(span=span, callee=expr, arguments=args)
+                continue
+            break
         # Index access follows a call or primary.
         while self._match(TokenType.LBRACKET):
             index = self._expression()
@@ -350,6 +418,14 @@ class Parser:
             return ast.NothingLiteral(span=self._previous().span)
         if self._match(TokenType.INPUT):
             return ast.InputExpr(span=self._previous().span)
+        if self._match(TokenType.THIS):
+            return ast.VariableExpr(span=self._previous().span, name="this")
+        if self._match(TokenType.NEW):
+            return self._new_expression()
+        if self._match(TokenType.TELL):
+            return self._tell_expression()
+        if self._match(TokenType.THE):
+            return self._the_expression()
         if self._match(TokenType.NUMBER):
             tok = self._previous()
             return ast.NumberLiteral(span=tok.span, value=tok.value)
@@ -371,6 +447,47 @@ class Parser:
         self._error(
             f"Unexpected token '{self._peek().lexeme}'. Expected an expression.",
             self._peek().span,
+        )
+
+    def _new_expression(self) -> ast.Expr:
+        start = self._previous()
+        class_expr = self._primary()
+        arguments: List[ast.Expr] = []
+        if self._match(TokenType.WITH):
+            if not self._check(TokenType.DOT) and not self._is_at_end():
+                arguments.append(self._expression())
+                while self._match(TokenType.COMMA):
+                    arguments.append(self._expression())
+        span = self._span_from(start, self._previous())
+        return ast.NewExpr(span=span, class_expr=class_expr, arguments=arguments)
+
+    def _tell_expression(self) -> ast.Expr:
+        start = self._previous()
+        object_expr = self._expression()
+        self._consume(TokenType.TO, "Expected 'to' after the object in a 'tell' expression.")
+        method_tok = self._consume(TokenType.IDENTIFIER, "Expected a method name after 'to'.")
+        arguments: List[ast.Expr] = []
+        if self._match(TokenType.WITH):
+            if not self._check(TokenType.DOT) and not self._is_at_end():
+                arguments.append(self._expression())
+                while self._match(TokenType.COMMA):
+                    arguments.append(self._expression())
+        end = self._previous()
+        if method_tok is not None:
+            end = method_tok
+        span = self._span_from(start, end)
+        return ast.TellExpr(span=span, object=object_expr, method=method_tok.value if method_tok else "", arguments=arguments)
+
+    def _the_expression(self) -> ast.Expr:
+        start = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected a property name after 'the'.")
+        self._consume(TokenType.OF, "Expected 'of' after the property name.")
+        object_expr = self._expression()
+        span = self._span_from(start, object_expr.span)
+        return ast.PropertyExpr(
+            span=span,
+            object=object_expr,
+            name=name_tok.value if name_tok else "",
         )
 
     def _list_literal(self) -> ast.Expr:

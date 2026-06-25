@@ -34,6 +34,7 @@
         <li><a href="#conditionals">Conditionals</a></li>
         <li><a href="#loops">Loops</a></li>
         <li><a href="#functions">Functions</a></li>
+        <li><a href="#classes">Classes</a></li>
         <li><a href="#builtins">Built-ins</a></li>
         <li><a href="#repl">REPL</a></li>
         <li><a href="#vscode">VS Code</a></li>
@@ -143,9 +144,8 @@
 <span class="keyword">if</span> score >= <span class="number">60</span> <span class="keyword">then</span><span class="period">.</span>
     <span class="builtin">show</span> <span class="string">"pass"</span><span class="period">.</span>
 <span class="keyword">otherwise</span><span class="period">.</span>
-    <span class="builtin">show</span> <span class="string">"fail"</span><span class="period">.</span>
-<span class="keyword">end if</span><span class="period">.</span></code></pre>
-      <p>You can nest conditionals inside any block.</p>
+    <span class="builtin">show</span> <span class="string">"fail"</span><span class="period">.</span></code></pre>
+      <p>You can nest conditionals inside any block. Blocks end when the indentation returns to the previous level.</p>
     </section>
 
     <section id="loops">
@@ -154,8 +154,7 @@
       <pre><code><span class="keyword">let</span> i <span class="keyword">be</span> <span class="number">0</span><span class="period">.</span>
 <span class="keyword">while</span> i < <span class="number">10</span> <span class="keyword">repeat</span><span class="period">.</span>
     <span class="builtin">show</span> i<span class="period">.</span>
-    <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span>
-<span class="keyword">end while</span><span class="period">.</span></code></pre>
+    <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span></code></pre>
     </section>
 
     <section id="functions">
@@ -163,17 +162,31 @@
       <p>Define functions with <code>define</code> and call them with <code>with</code>. Use <code>return</code> to send a value back. Functions that do not explicitly return yield <code>nothing</code>.</p>
       <pre><code><span class="keyword">define</span> greet <span class="keyword">with</span> name<span class="period">.</span>
     <span class="builtin">show</span> <span class="string">"Hello, "</span> + name + <span class="string">"!"</span><span class="period">.</span>
-<span class="keyword">end define</span><span class="period">.</span>
 
 greet <span class="keyword">with</span> <span class="string">"World"</span><span class="period">.</span>
 
 <span class="keyword">define</span> factorial <span class="keyword">with</span> n<span class="period">.</span>
     <span class="keyword">if</span> n <= <span class="number">1</span> <span class="keyword">then</span><span class="period">.</span>
         <span class="keyword">return</span> <span class="number">1</span><span class="period">.</span>
-    <span class="keyword">end if</span><span class="period">.</span>
-    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span>
-<span class="keyword">end define</span><span class="period">.</span></code></pre>
+    <span class="keyword">return</span> n * factorial <span class="keyword">with</span> n - <span class="number">1</span><span class="period">.</span></code></pre>
       <p>Parameters are passed by value. Functions close over the environment in which they are defined.</p>
+    </section>
+
+    <section id="classes">
+      <h2>Classes</h2>
+      <p>Define a class with <code>class</code>, an optional <code>init</code> constructor, and <code>define</code> methods. Inside methods, <code>this</code> refers to the current instance.</p>
+      <pre><code><span class="keyword">class</span> Person<span class="period">.</span>
+    <span class="keyword">init</span> <span class="keyword">with</span> name, age<span class="period">.</span>
+        <span class="keyword">set</span> this name <span class="keyword">to</span> name<span class="period">.</span>
+        <span class="keyword">set</span> this age <span class="keyword">to</span> age<span class="period">.</span>
+
+    <span class="keyword">define</span> greet <span class="keyword">with</span> greeting<span class="period">.</span>
+        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this name + <span class="string">"!"</span><span class="period">.</span>
+
+<span class="keyword">let</span> ada <span class="keyword">be</span> new Person <span class="keyword">with</span> <span class="string">"Ada"</span>, <span class="number">42</span><span class="period">.</span>
+tell ada <span class="keyword">to</span> greet <span class="keyword">with</span> <span class="string">"Hello"</span><span class="period">.</span>
+<span class="builtin">show</span> the age <span class="keyword">of</span> ada<span class="period">.</span></code></pre>
+      <p>Create instances with <code>new ClassName with args</code>, call methods with <code>tell object to method with args</code>, and read properties with <code>the property of object</code>.</p>
     </section>
 
     <section id="builtins">
@@ -194,7 +207,7 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
       <pre><code><span class="builtin">show</span> number <span class="keyword">with</span> <span class="string">"3.14"</span><span class="period">.</span>  <span class="comment">-- 3.14</span></code></pre>
 
       <h3><code>type with value</code></h3>
-      <p>Returns the type name as a string: <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, or <code>built-in</code>.</p>
+      <p>Returns the type name as a string: <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, <code>built-in</code>, <code>class</code>, or <code>instance of ClassName</code>.</p>
       <pre><code><span class="builtin">show</span> type <span class="keyword">with</span> [<span class="number">1</span>, <span class="number">2</span>]<span class="period">.</span>  <span class="comment">-- "list"</span></code></pre>
 
       <h3><code>input</code></h3>
@@ -251,12 +264,16 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
 statement      := "let" IDENTIFIER "be" expression "."
                 | "set" expression "to" expression "."
                 | "show" expression "."
-                | "if" expression "then" "." block ("otherwise" "." block)? "end" "if" "."
-                | "while" expression "repeat" "." block "end" "while" "."
-                | "define" IDENTIFIER ("with" params)? "." block "end" "define" "."
+                | "if" expression "then" "." block ("otherwise" "." block)?
+                | "while" expression "repeat" "." block
+                | "define" IDENTIFIER ("with" params)? "." block
+                | "class" IDENTIFIER "." class-body
                 | "return" expression? "."
                 | expression "."
-block          := statement*
+block          := INDENT statement+ DEDENT
+class-body     := INDENT (init | method)+ DEDENT
+init           := "init" ("with" params)? "." block
+method         := "define" IDENTIFIER ("with" params)? "." block
 expression     := or_expr
 or_expr        := and_expr ("or" and_expr)*
 and_expr       := not_expr ("and" not_expr)*
@@ -267,16 +284,20 @@ multiplicative := power (("*"|"/"|"%") power)*
 power          := unary ("**" power)?
 unary          := ("-"|"not") unary | call
 call           := primary ("with" arguments)? ("[" expression "]")*
-primary        := NUMBER | STRING | "true" | "false" | "nothing" | "input"
-                | IDENTIFIER | "(" expression ")" | "[" arguments? "]" | "{" pairs? "}"</code></pre>
+primary        := NUMBER | STRING | "true" | "false" | "nothing" | "input" | "this"
+                | IDENTIFIER | "(" expression ")" | "[" arguments? "]" | "{" pairs? "}"
+                | "new" primary ("with" arguments)?
+                | "tell" expression "to" IDENTIFIER ("with" arguments)?
+                | "the" IDENTIFIER "of" expression
+property       := primary IDENTIFIER</code></pre>
     </section>
 
     <section id="tips">
       <h2>Tips & Best Practices</h2>
       <ul>
         <li><strong>End every statement with a period.</strong> Missing periods are the most common parse error.</li>
-        <li><strong>Indent consistently.</strong> Indentation is not required by the parser, but two or four spaces per block level improves readability.</li>
-        <li><strong>Prefer functions over deep nesting.</strong> Functions help keep programs article-like.</li>
+        <li><strong>Use indentation for blocks.</strong> After <code>if ... then.</code>, <code>while ... repeat.</code>, <code>define ... .</code>, <code>class ... .</code>, or <code>init ... .</code>, indent the body by one level (four spaces is recommended).</li>
+        <li><strong>Prefer functions and methods over deep nesting.</strong> They help keep programs article-like.</li>
         <li><strong>Use comments as paragraphs.</strong> A short comment before each section makes the code read like a document.</li>
         <li><strong>Check error locations.</strong> Diagnostics point to the exact character range, so read them carefully.</li>
       </ul>

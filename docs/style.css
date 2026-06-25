@@ -18,6 +18,12 @@ html {
   scroll-behavior: smooth;
   overscroll-behavior: none;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -813,19 +819,22 @@ pre code {
   background: var(--surface);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
 }
 
 .horizontal-track {
   display: flex;
   height: 100%;
+  gap: 0.5rem;
   will-change: transform;
 }
 
 .h-panel {
-  width: 100vw;
+  width: 85vw;
   height: 100%;
   flex-shrink: 0;
-  padding: 2rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -847,7 +856,7 @@ pre code {
   max-width: 720px;
   width: 100%;
   text-align: left;
-  margin: 1.5rem 0 1rem;
+  margin: 1.5rem auto 1rem;
 }
 
 .h-panel p {

@@ -27,18 +27,17 @@ def format_diagnostics(source: str, diagnostics, filename: str = "<stdin>") -> s
 
 
 def run_source(source: str, filename: str = "<stdin>", print_output: bool = True) -> int:
-    try:
-        lexer = Lexer(source, filename)
-        tokens = lexer.scan()
-    except Exception as e:
-        print(f"{filename}: fatal lexer error: {e}", file=sys.stderr)
-        return 1
+    lexer = Lexer(source, filename)
+    tokens = lexer.scan()
+
+    diagnostics = list(lexer.diagnostics)
 
     parser = Parser(tokens, source, filename)
     program = parser.parse()
+    diagnostics.extend(parser.diagnostics)
 
-    if parser.diagnostics:
-        print(format_diagnostics(source, parser.diagnostics, filename), file=sys.stderr)
+    if diagnostics:
+        print(format_diagnostics(source, diagnostics, filename), file=sys.stderr)
         return 1
 
     interpreter = Interpreter()
@@ -77,16 +76,13 @@ def run_repl():
         # Heuristic: a complete REPL entry must end with a period (ignoring whitespace).
         if text.rstrip().endswith("."):
             lexer = Lexer(text, "<repl>")
-            try:
-                tokens = lexer.scan()
-            except Exception as e:
-                print(f"lexer error: {e}")
-                buffer.clear()
-                continue
+            tokens = lexer.scan()
+            diagnostics = list(lexer.diagnostics)
             parser = Parser(tokens, text, "<repl>")
             program = parser.parse()
-            if parser.diagnostics:
-                print(format_diagnostics(text, parser.diagnostics, "<repl>"))
+            diagnostics.extend(parser.diagnostics)
+            if diagnostics:
+                print(format_diagnostics(text, diagnostics, "<repl>"))
                 buffer.clear()
                 continue
             try:
@@ -115,7 +111,7 @@ def main():
     argparser.add_argument(
         "--version",
         action="version",
-        version="Period 1.0.2",
+        version="Period 1.1.0",
     )
     args = argparser.parse_args()
 

@@ -82,6 +82,25 @@ class DictExpr(Expr):
     pairs: List[tuple]  # (Expr, Expr)
 
 
+@dataclass
+class PropertyExpr(Expr):
+    object: Expr
+    name: str
+
+
+@dataclass
+class NewExpr(Expr):
+    class_expr: Expr
+    arguments: List[Expr]
+
+
+@dataclass
+class TellExpr(Expr):
+    object: Expr
+    method: str
+    arguments: List[Expr]
+
+
 # Statements ------------------------------------------------------------------
 
 @dataclass
@@ -138,6 +157,18 @@ class ReturnStmt(Stmt):
 class DefineStmt(Stmt):
     name: str
     parameters: List[str]
+    body: List[Stmt]
+
+
+@dataclass
+class InitStmt(Stmt):
+    parameters: List[str]
+    body: List[Stmt]
+
+
+@dataclass
+class ClassStmt(Stmt):
+    name: str
     body: List[Stmt]
 
 

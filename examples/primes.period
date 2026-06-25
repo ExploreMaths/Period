@@ -8,12 +8,8 @@ while count < 20 repeat.
     while divisor * divisor <= candidate repeat.
         if candidate % divisor == 0 then.
             set is_prime to false.
-        end if.
         set divisor to divisor + 1.
-    end while.
     if is_prime then.
         show candidate.
         set count to count + 1.
-    end if.
     set candidate to candidate + 1.
-end while.

@@ -2,9 +2,10 @@
   "name": "period-language",
   "displayName": "Period Language",
   "description": "Language support for Period: an elegant programming language that ends every statement with a period.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "period",
   "license": "MIT",
+  "icon": "period.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/ExploreMaths/Period.git"

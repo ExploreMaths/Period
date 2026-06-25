@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="period-lang",
-    version="0.0.1",
+    version="1.1.0",
     description="Period - an elegant English programming language ending every statement with a period.",
     author="Period Language",
     license="MIT",

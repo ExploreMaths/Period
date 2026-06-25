@@ -25,20 +25,20 @@ class Document:
         self._parse()
 
     def _parse(self):
-        try:
-            tokens = Lexer(self.text, self.uri).scan()
-        except Exception as e:
-            self.ast = ast.Program(span=None, statements=[])
-            self.diagnostics = []
-            return
+        lexer = Lexer(self.text, self.uri)
+        tokens = lexer.scan()
+        diagnostics = list(lexer.diagnostics)
+
         parser = Parser(tokens, self.text, self.uri)
         self.ast = parser.parse()
-        self.diagnostics = [d.to_dict() for d in parser.diagnostics]
+        diagnostics.extend(parser.diagnostics)
 
-        if self.ast is not None and not parser.diagnostics:
+        if self.ast is not None and not diagnostics:
             semantic = SemanticChecker()
             for d in semantic.check(self.ast):
-                self.diagnostics.append(d.to_dict())
+                diagnostics.append(d)
+
+        self.diagnostics = [d.to_dict() for d in diagnostics]
 
         self.definitions = {}
         if self.ast is not None:
@@ -46,6 +46,8 @@ class Document:
                 if isinstance(stmt, ast.LetStmt):
                     self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
                 elif isinstance(stmt, ast.DefineStmt):
+                    self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
+                elif isinstance(stmt, ast.ClassStmt):
                     self.definitions[stmt.name] = (stmt.span.line, stmt.span.col_start)
 
 
@@ -224,12 +226,19 @@ class LSPServer:
     def _hover_text(self, word: str) -> Optional[str]:
         docs = {
             "let": "`let <name> be <value>.`\n\nDeclare a new variable.",
-            "set": "`set <target> to <value>.`\n\nAssign a new value to an existing variable or index.",
+            "set": "`set <target> to <value>.`\n\nAssign a new value to an existing variable or property.",
             "show": "`show <expression>.`\n\nPrint the value of the expression.",
-            "if": "`if <condition> then. ... end if.`\n\nConditional statement.",
-            "while": "`while <condition> repeat. ... end while.`\n\nLoop while the condition is true.",
-            "define": "`define <name> [with <args>]. ... end define.`\n\nDefine a function.",
-            "return": "`return [value].`\n\nReturn a value from a function.",
+            "if": "`if <condition> then.`\n`    <statements>`\n`[otherwise.`\n`    <statements>]`\n\nConditional statement using indentation.",
+            "while": "`while <condition> repeat.`\n`    <statements>`\n\nLoop while the condition is true.",
+            "define": "`define <name> [with <args>].`\n`    <statements>`\n\nDefine a function or method using indentation.",
+            "return": "`return [value].`\n\nReturn a value from a function or method.",
+            "class": "`class <Name>.`\n`    init [with <args>].`\n`        <statements>`\n`    define <method> [with <args>].`\n`        <statements>`\n\nDefine a class.",
+            "init": "`init [with <args>].`\n`    <statements>`\n\nConstructor inside a class.",
+            "this": "Refers to the current instance inside a class method or init.",
+            "new": "`new <Class> [with <args>].`\n\nCreate a new instance of a class.",
+            "tell": "`tell <object> to <method> [with <args>].`\n\nCall a method on an instance.",
+            "the": "`the <property> of <object>.`\n\nRead a property of an instance.",
+            "of": "Used with `the` to read an instance property.",
             "true": "Boolean true value.",
             "false": "Boolean false value.",
             "nothing": "The absence of a value.",
@@ -252,11 +261,10 @@ class LSPServer:
             ("if", "Start a conditional"),
             ("then", "Used after if condition"),
             ("otherwise", "Else branch"),
-            ("end", "End a block"),
             ("while", "Start a loop"),
             ("repeat", "Used after while condition"),
-            ("define", "Define a function"),
-            ("with", "Used in function calls/signatures"),
+            ("define", "Define a function or method"),
+            ("with", "Used in calls/signatures"),
             ("return", "Return from function"),
             ("and", "Logical and"),
             ("or", "Logical or"),
@@ -265,6 +273,13 @@ class LSPServer:
             ("false", "Boolean false"),
             ("nothing", "Null value"),
             ("input", "Read input"),
+            ("class", "Define a class"),
+            ("init", "Class constructor"),
+            ("this", "Current instance"),
+            ("new", "Create an instance"),
+            ("tell", "Call a method"),
+            ("of", "Property access"),
+            ("the", "Property access"),
             ("length", "Built-in: length"),
             ("string", "Built-in: string"),
             ("number", "Built-in: number"),
@@ -319,22 +334,32 @@ class LSPServer:
         )
 
     def _format_source(self, text: str) -> str:
+        lexer = Lexer(text, "<format>")
+        tokens = lexer.scan()
+
+        line_indent: Dict[int, int] = {}
+        level = 0
+        for tok in tokens:
+            if tok.type == TokenType.INDENT:
+                level += 1
+            elif tok.type == TokenType.DEDENT:
+                level -= 1
+            elif tok.type in (TokenType.NEWLINE, TokenType.EOF):
+                pass
+            else:
+                line = tok.span.line
+                if line not in line_indent:
+                    line_indent[line] = level
+
         lines = text.splitlines()
-        out_lines = []
-        indent = 0
-        for raw in lines:
+        out_lines: List[str] = []
+        for idx, raw in enumerate(lines, start=1):
             stripped = raw.strip()
             if stripped == "":
                 out_lines.append("")
                 continue
-            # Decrease indent for closing block markers.
-            lower = stripped.lower()
-            if lower.startswith("end ") or lower == "end" or lower.startswith("otherwise"):
-                indent = max(0, indent - 1)
-            out_lines.append("    " * indent + stripped)
-            # Increase indent for opening block markers.
-            if lower.startswith("if ") or lower.startswith("while ") or lower.startswith("define "):
-                indent += 1
+            target = line_indent.get(idx, 0)
+            out_lines.append("    " * target + stripped)
         return "\n".join(out_lines)
 
     def _definition(self, request_id: Any, params: dict):
