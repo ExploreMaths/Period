@@ -1058,18 +1058,8 @@ footer {
 }
 
 /* Code block copy button */
-.code-block-wrapper {
+pre {
   position: relative;
-  margin: 1rem 0;
-}
-
-.code-block-wrapper pre {
-  margin: 0;
-}
-
-.tab-panel .code-block-wrapper,
-.h-panel .code-block-wrapper {
-  margin: 0;
 }
 
 .copy-code-button {
@@ -1090,7 +1080,7 @@ footer {
   transition: opacity 0.2s ease, background 0.2s ease;
 }
 
-.code-block-wrapper:hover .copy-code-button {
+pre:hover .copy-code-button {
   opacity: 1;
 }
 

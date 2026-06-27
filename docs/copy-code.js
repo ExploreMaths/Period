@@ -7,18 +7,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const code = pre.querySelector('code');
     if (!code) return;
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'code-block-wrapper';
-    pre.parentNode.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
-
     const button = document.createElement('button');
     button.className = 'copy-code-button';
     button.type = 'button';
     button.title = 'Copy';
     button.setAttribute('aria-label', 'Copy code');
     button.innerHTML = `<span class="copy-icon">${COPY_ICON}</span>`;
-    wrapper.appendChild(button);
+    pre.appendChild(button);
 
     button.addEventListener('click', async () => {
       try {
