@@ -84,11 +84,19 @@ nav a.active {
   top: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 1rem 1.5rem;
   pointer-events: none;
   z-index: 100;
+}
+
+.bubble-menu.home-page {
+  justify-content: space-between;
+}
+
+.bubble-menu:not(.home-page) .logo-bubble {
+  display: none;
 }
 
 .bubble-menu .bubble {
@@ -1087,9 +1095,6 @@ footer {
   }
   nav a {
     margin: 0 0.6rem;
-  }
-  body {
-    padding-top: 76px;
   }
   main {
     padding: 1rem;

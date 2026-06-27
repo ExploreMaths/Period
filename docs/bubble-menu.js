@@ -17,13 +17,14 @@ import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
   }));
 
   const currentPath = location.pathname.split("/").pop() || "index.html";
+  const isHome = currentPath === "index.html" || currentPath === "";
   const isDocs = currentPath === "docs.html";
 
   const logoImg = header.querySelector(".logo img");
   const logoText = header.querySelector(".logo span");
 
   const menu = document.createElement("nav");
-  menu.className = "bubble-menu" + (isDocs ? " has-sidebar" : "");
+  menu.className = "bubble-menu" + (isHome ? " home-page" : "") + (isDocs ? " has-sidebar" : "");
   menu.setAttribute("aria-label", "Main navigation");
   menu.innerHTML = `
     <div class="bubble logo-bubble" aria-label="Logo">
