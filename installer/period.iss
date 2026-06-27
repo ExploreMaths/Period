@@ -40,7 +40,8 @@ Name: "{autoprograms}\Period REPL"; Filename: "{cmd}"; Parameters: "/k ""{app}\p
 
 [Run]
 Filename: "{cmd}"; Parameters: "/c ""{app}\period.exe"" --version"; Description: "Verify installation"; Flags: nowait runhidden
-Filename: "{cmd}"; Parameters: "/c code --install-extension ""{tmp}\period-language.vsix"""; Description: "Install VS Code extension"; Flags: nowait runhidden
+Filename: "{cmd}"; Parameters: "/c code --uninstall-extension ""period.period-language"""; Description: "Remove old VS Code extension"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c code --install-extension ""{tmp}\period-language.vsix"""; Description: "Install VS Code extension"; Flags: runhidden
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath('{app}')
