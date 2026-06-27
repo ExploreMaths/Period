@@ -225,6 +225,44 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
     document.addEventListener('DOMContentLoaded', () => {
       const ctx = document.getElementById('perfChart');
       if (!ctx) return;
+
+      const relativeLabels = {
+        id: 'relativeLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx, scales: { x, y } } = chart;
+          const data = chart.data.datasets[0].data;
+          const baseIndex = 1; // C
+          const base = data[baseIndex];
+          const meta = chart.getDatasetMeta(0);
+
+          ctx.save();
+          ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#78716c';
+
+          meta.data.forEach((bar, i) => {
+            const ratio = data[i] / base;
+            const label = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
+            ctx.fillText(label, bar.x, bar.y - 8);
+          });
+
+          // Reference line at the C baseline.
+          const yPixel = y.getPixelForValue(base);
+          ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
+          ctx.setLineDash([5, 5]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x.left, yPixel);
+          ctx.lineTo(x.right, yPixel);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(217, 119, 6, 0.9)';
+          ctx.textAlign = 'right';
+          ctx.fillText('C baseline', x.right - 8, yPixel - 6);
+          ctx.restore();
+        }
+      };
+
       new Chart(ctx, {
         type: 'bar',
         data: {
@@ -276,7 +314,8 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
               grid: { display: false }
             }
           }
-        }
+        },
+        plugins: [relativeLabels]
       });
     });
   </script>
