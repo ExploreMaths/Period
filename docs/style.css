@@ -1068,7 +1068,6 @@ footer {
     border-right: 1px solid var(--border);
     border-bottom: none;
     padding: 1.25rem;
-    padding-top: 4rem;
     z-index: 200;
     background: var(--surface);
     transform: translateX(-100%);
