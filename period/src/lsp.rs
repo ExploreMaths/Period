@@ -15,7 +15,7 @@ use lsp_types::{
 };
 
 use crate::ast::*;
-use crate::lexer::{Lexer, TokenKind};
+use crate::lexer::{Lexer, Token, TokenKind};
 use crate::parser::Parser;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
@@ -170,19 +170,13 @@ fn hover(
         None => return Ok(None),
     };
 
-    let token = {
-        let mut lexer = Lexer::new(&text);
-        let mut tokens = Vec::new();
-        loop {
-            let t = lexer.next_token();
-            let eof = matches!(t.kind, TokenKind::Eof);
-            tokens.push(t);
-            if eof { break; }
-        }
-        match find_token(&tokens, pos) {
-            Some(t) => t,
-            None => return Ok(None),
-        }
+    let tokens = match lex_tokens(&text) {
+        Ok(t) => t,
+        Err(_) => return Ok(None),
+    };
+    let token = match find_token(&tokens, pos) {
+        Some(t) => t,
+        None => return Ok(None),
     };
 
     if let Some(doc) = keyword_doc(&token.kind) {
@@ -299,7 +293,7 @@ fn completion(
     Ok(Some(CompletionResponse::Array(items)))
 }
 
-fn try_parse(source: &str) -> Result<Program, Diagnostic> {
+fn lex_tokens(source: &str) -> Result<Vec<Token>, String> {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
@@ -309,6 +303,28 @@ fn try_parse(source: &str) -> Result<Program, Diagnostic> {
             tokens.push(t);
             if eof { break; }
         }
+        tokens
+    })) {
+        Ok(t) => Ok(t),
+        Err(e) => {
+            let msg = if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "lex error".to_string()
+            };
+            Err(msg)
+        }
+    }
+}
+
+fn try_parse(source: &str) -> Result<Program, Diagnostic> {
+    let tokens = match lex_tokens(source) {
+        Ok(t) => t,
+        Err(msg) => return Err(parse_error_to_diagnostic(&msg)),
+    };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         Parser::new(tokens).parse_program()
     })) {
         Ok(p) => Ok(p),
