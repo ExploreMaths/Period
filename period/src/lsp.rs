@@ -208,7 +208,7 @@ fn hover(
         if i > 0 {
             md.push_str("\n\n---\n\n");
         }
-        md.push_str(&format!("**{}**", sym.detail));
+        md.push_str(&format!("```period\n{}\n```", sym.detail));
         if let Some(doc) = &sym.docstring {
             md.push_str(&format!("\n\n{}", doc));
         }
