@@ -25,7 +25,7 @@
       "patterns": [
         {
           "name": "meta.import.period",
-          "begin": "\\b(import|from)\\b",
+          "begin": "\\b([Ii]mport|[Ff]rom)\\b",
           "beginCaptures": {
             "1": { "name": "keyword.control.period" }
           },
