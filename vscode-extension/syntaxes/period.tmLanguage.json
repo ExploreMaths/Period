@@ -160,7 +160,7 @@
         {
           "name": "string.quoted.double.docstring.period",
           "begin": "^\\s*\"",
-          "end": "\"\\s*(?=\\.)",
+          "end": "\"",
           "patterns": [
             {
               "name": "constant.character.escape.period",
