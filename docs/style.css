@@ -261,27 +261,22 @@ nav a.active {
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: background 0.3s ease, color 0.3s ease;
+  transform: rotate(var(--item-rot));
+  transition: transform 0.2s ease, background 0.3s ease, color 0.3s ease;
   will-change: transform;
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
 }
 
-@media (min-width: 900px) {
-  .bubble-menu-items .pill-link {
-    transform: rotate(var(--item-rot));
-  }
+.bubble-menu-items .pill-link:hover {
+  transform: rotate(var(--item-rot)) scale(1.06);
+  background: var(--hover-bg);
+  color: var(--hover-color);
+}
 
-  .bubble-menu-items .pill-link:hover {
-    transform: rotate(var(--item-rot)) scale(1.06);
-    background: var(--hover-bg);
-    color: var(--hover-color);
-  }
-
-  .bubble-menu-items .pill-link:active {
-    transform: rotate(var(--item-rot)) scale(0.94);
-  }
+.bubble-menu-items .pill-link:active {
+  transform: rotate(var(--item-rot)) scale(0.94);
 }
 
 .bubble-menu-items .pill-link.active {
@@ -300,37 +295,6 @@ nav a.active {
   .bubble-menu-items {
     align-items: flex-start;
     padding-top: 120px;
-  }
-
-  .bubble-menu-items .pill-list {
-    row-gap: 16px;
-  }
-
-  .bubble-menu-items .pill-list {
-    justify-content: center;
-  }
-
-  .bubble-menu-items .pill-list .pill-col {
-    flex: 0 0 auto;
-    width: min(80%, 320px);
-    margin-left: 0 !important;
-  }
-
-  .bubble-menu-items .pill-link {
-    font-size: clamp(1.2rem, 3vw, 3rem);
-    padding: clamp(0.75rem, 2vw, 1.25rem) clamp(2rem, 6vw, 4rem);
-    min-height: 64px;
-    transform: rotate(var(--item-rot));
-  }
-
-  .bubble-menu-items .pill-link:hover {
-    transform: rotate(var(--item-rot)) scale(1.06);
-    background: var(--hover-bg);
-    color: var(--hover-color);
-  }
-
-  .bubble-menu-items .pill-link:active {
-    transform: rotate(var(--item-rot)) scale(0.94);
   }
 }
 
