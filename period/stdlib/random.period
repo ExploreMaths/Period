@@ -1,4 +1,0 @@
--- Random numbers.
-
-define random:
-    return __random__.

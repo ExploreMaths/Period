@@ -785,17 +785,6 @@ fn install_builtins(env: &Environment) {
     env.define("type", Value::BuiltIn { name: "type".to_string(), min_arity: 1, max_arity: 1, func: builtin_type });
     env.define("input", Value::BuiltIn { name: "input".to_string(), min_arity: 0, max_arity: 0, func: builtin_input });
     env.define("range", Value::BuiltIn { name: "range".to_string(), min_arity: 1, max_arity: 3, func: builtin_range });
-    install_module_builtins(env);
-}
-
-fn install_module_builtins(env: &Environment) {
-    // Expose built-in module functions under internal names so stdlib .period
-    // wrappers can delegate to them without polluting the public namespace.
-    for module in &[make_math_module(), make_random_module(), make_string_module(), make_time_module()] {
-        for (name, value) in module.borrow().values.borrow().iter() {
-            env.define(&format!("__{}__", name), value.clone());
-        }
-    }
 }
 
 fn builtin_length(args: &[Value]) -> Result<Value, String> {

@@ -791,8 +791,19 @@ fn find_stdlib_module(module: &str) -> Option<PathBuf> {
     None
 }
 
+fn find_stdlib_interface(module: &str) -> Option<PathBuf> {
+    let file = format!("{}.periodi", module);
+    for loc in stdlib_locations() {
+        let path = loc.join(&file);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
 fn stdlib_module_exports(module: &str) -> Option<Vec<SymbolInfo>> {
-    let path = find_stdlib_module(module)?;
+    let path = find_stdlib_module(module).or_else(|| find_stdlib_interface(module))?;
     let source = fs::read_to_string(&path).ok()?;
     let program = try_parse(&source).ok()?;
 

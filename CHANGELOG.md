@@ -16,7 +16,8 @@
 - Fixed false-positive "undefined variable" diagnostics for variables defined earlier in the same block (e.g. inside `while`/`if` bodies).
 - Improved hover: variable/function signature is shown as a syntax-highlighted `period` code block on the first line, variables defined inside blocks (e.g. inside `while`) also show hover, and keywords like `show` now have hover docs.
 - Fixed hover token-length matching for multi-character keywords (`show`, `returns`, etc.).
-- Restored `period/stdlib/` as a directory of `.period` source modules that the runtime loads on `import`. Built-in Rust modules (`math`, `string`, `random`, `time`) are now also exposed as stdlib `.period` wrappers, while their native implementations remain available as a fallback. Added `list` and `text` example modules.
+- Restored `period/stdlib/` as a directory of loadable modules. `list` and `text` are implemented as `.period` source files; `math`, `random`, `string`, and `time` are native modules with `.periodi` stub files for documentation and IDE support.
+- Added support for `.periodi` interface files: they are parsed by the LSP for completions/hover but ignored by the runtime, similar to Python `.pyi` stubs.
 - Fixed syntax gaps found in docs.html audit:
   - Keywords and reserved words must be lowercase; any capitalization (e.g. `Let` or `LET`) is a lexer error.
   - `true`/`false` are now boolean values and `nothing` is the nothing value, not numbers.

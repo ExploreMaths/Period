@@ -1,0 +1,5 @@
+-- Random numbers.
+
+define random returns number:
+    "Return a random number between 0 and 1."
+    return 0.

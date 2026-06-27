@@ -1,4 +1,0 @@
--- Time utilities.
-
-define now:
-    return __now__.
