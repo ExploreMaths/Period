@@ -13,6 +13,7 @@
 - Fixed LSP server startup when the VS Code: client passes extra stdio flags.
 - Fixed lexer panic on Windows CRLF line endings.
 - Numeric fast-path now falls back to the interpreter when `rustc` is not available.
+- Fixed false-positive "undefined variable" diagnostics for variables defined earlier in the same block (e.g. inside `while`/`if` bodies).
 - The installer now uninstalls the old VS Code extension before installing the new one, preventing version-downgrade issues.
 
 ### Full commit

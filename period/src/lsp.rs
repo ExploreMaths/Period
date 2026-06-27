@@ -627,25 +627,26 @@ fn module_from_line(line: &str) -> Option<String> {
 
 fn check_program(program: &Program) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    let mut global: Vec<String> = Vec::new();
     let mut imports: Vec<String> = Vec::new();
 
-    // Top-level definitions.
+    // Pre-collect top-level names so functions/classes/imports can be used before
+    // their definition site (needed for recursion and cross-references).
+    let mut global: Vec<String> = builtin_globals().iter().map(|s| s.to_string()).collect();
     for stmt in &program.statements {
         match stmt {
-            Stmt::Let { name, .. } => global.push(name.clone()),
             Stmt::Define { name, .. } => global.push(name.clone()),
             Stmt::Class { name, .. } => global.push(name.clone()),
-            Stmt::Import(paths) => imports.extend(paths.iter().cloned()),
+            Stmt::Import(paths) => {
+                imports.extend(paths.iter().cloned());
+                for path in paths {
+                    global.extend(module_exports_names(path));
+                }
+            }
             _ => {}
         }
     }
 
-    let builtins: Vec<String> = builtin_globals().iter().map(|s| s.to_string()).collect();
-
-    for stmt in &program.statements {
-        check_stmt(stmt, &global, &imports, &builtins, &mut diags);
-    }
+    check_block(&program.statements, &global, &imports, &mut diags);
     diags
 }
 
@@ -653,45 +654,57 @@ fn builtin_globals() -> Vec<&'static str> {
     vec!["length", "string", "number", "type", "input", "range"]
 }
 
-fn check_stmt(stmt: &Stmt, global: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+fn check_block(stmts: &[Stmt], scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
+    let mut local = scope.to_vec();
+    for stmt in stmts {
+        check_stmt(stmt, &mut local, imports, diags);
+    }
+}
+
+fn check_stmt(stmt: &Stmt, scope: &mut Vec<String>, imports: &[String], diags: &mut Vec<Diagnostic>) {
     match stmt {
-        Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => check_expr(expr, global, imports, builtins, diags),
-        Stmt::Let { value, .. } => check_expr(value, global, imports, builtins, diags),
+        Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => check_expr(expr, scope, imports, diags),
+        Stmt::Let { name, value } => {
+            check_expr(value, scope, imports, diags);
+            scope.push(name.clone());
+        }
         Stmt::Set { target, value } => {
-            check_assign_target(target, global, imports, builtins, diags);
-            check_expr(value, global, imports, builtins, diags);
+            check_assign_target(target, scope, imports, diags);
+            check_expr(value, scope, imports, diags);
         }
         Stmt::If { cond, then_branch, else_branch } => {
-            check_expr(cond, global, imports, builtins, diags);
-            for s in then_branch { check_stmt(s, global, imports, builtins, diags); }
-            for s in else_branch { check_stmt(s, global, imports, builtins, diags); }
+            check_expr(cond, scope, imports, diags);
+            check_block(then_branch, scope, imports, diags);
+            check_block(else_branch, scope, imports, diags);
         }
         Stmt::While { cond, body } => {
-            check_expr(cond, global, imports, builtins, diags);
-            for s in body { check_stmt(s, global, imports, builtins, diags); }
+            check_expr(cond, scope, imports, diags);
+            check_block(body, scope, imports, diags);
         }
-        Stmt::For { iterable, body, .. } => {
-            check_expr(iterable, global, imports, builtins, diags);
-            for s in body { check_stmt(s, global, imports, builtins, diags); }
+        Stmt::For { var, iterable, body } => {
+            check_expr(iterable, scope, imports, diags);
+            let mut for_scope = scope.clone();
+            for_scope.push(var.clone());
+            check_block(body, &for_scope, imports, diags);
         }
         Stmt::Define { params, body, .. } => {
-            let mut local = global.to_vec();
-            for (p, _) in params { local.push(p.clone()); }
-            for s in body { check_stmt(s, &local, imports, builtins, diags); }
+            let mut func_scope = scope.clone();
+            for (p, _) in params { func_scope.push(p.clone()); }
+            check_block(body, &func_scope, imports, diags);
         }
         Stmt::Class { init, methods, .. } => {
             if let Some(init) = init {
-                let mut local = global.to_vec();
-                for (p, _) in &init.params { local.push(p.clone()); }
-                local.push("this".to_string());
-                for s in &init.body { check_stmt(s, &local, imports, builtins, diags); }
+                let mut init_scope = scope.clone();
+                for (p, _) in &init.params { init_scope.push(p.clone()); }
+                init_scope.push("this".to_string());
+                check_block(&init.body, &init_scope, imports, diags);
             }
             for m in methods {
                 if let Stmt::Define { params, body, .. } = m {
-                    let mut local = global.to_vec();
-                    for (p, _) in params { local.push(p.clone()); }
-                    local.push("this".to_string());
-                    for s in body { check_stmt(s, &local, imports, builtins, diags); }
+                    let mut method_scope = scope.clone();
+                    for (p, _) in params { method_scope.push(p.clone()); }
+                    method_scope.push("this".to_string());
+                    check_block(body, &method_scope, imports, diags);
                 }
             }
         }
@@ -699,35 +712,35 @@ fn check_stmt(stmt: &Stmt, global: &[String], imports: &[String], builtins: &[St
     }
 }
 
-fn check_assign_target(target: &AssignTarget, global: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+fn check_assign_target(target: &AssignTarget, scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
     match target {
         AssignTarget::Variable(_) => {}
         AssignTarget::Index { object, index } => {
-            check_expr(object, global, imports, builtins, diags);
-            check_expr(index, global, imports, builtins, diags);
+            check_expr(object, scope, imports, diags);
+            check_expr(index, scope, imports, diags);
         }
         AssignTarget::Property { object, .. } => {
-            check_expr(object, global, imports, builtins, diags);
+            check_expr(object, scope, imports, diags);
         }
     }
 }
 
-fn check_expr(expr: &Expr, scope: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+fn check_expr(expr: &Expr, scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
     match expr {
         Expr::Variable { name, span } => {
-            if !is_defined(name, scope, builtins) {
+            if !is_defined(name, scope) {
                 diags.push(make_diagnostic(span, name, "undefined variable"));
             }
         }
         Expr::Call { callee, args } => {
             if let Expr::Variable { name, span } = callee.as_ref() {
-                if !is_defined(name, scope, builtins) {
+                if !is_defined(name, scope) {
                     diags.push(make_diagnostic(span, name, "undefined function"));
                 }
             } else {
-                check_expr(callee, scope, imports, builtins, diags);
+                check_expr(callee, scope, imports, diags);
             }
-            for a in args { check_expr(a, scope, imports, builtins, diags); }
+            for a in args { check_expr(a, scope, imports, diags); }
         }
         Expr::Qualified { name, module } => {
             if imports.contains(module) {
@@ -738,43 +751,43 @@ fn check_expr(expr: &Expr, scope: &[String], imports: &[String], builtins: &[Str
         }
         Expr::New { class, args } => {
             if let Expr::Variable { name, span } = class.as_ref() {
-                if !scope.contains(&name.clone()) {
+                if !is_defined(name, scope) {
                     diags.push(make_diagnostic(span, name, "undefined class"));
                 }
             } else {
-                check_expr(class, scope, imports, builtins, diags);
+                check_expr(class, scope, imports, diags);
             }
-            for a in args { check_expr(a, scope, imports, builtins, diags); }
+            for a in args { check_expr(a, scope, imports, diags); }
         }
         Expr::Binary { left, right, .. } => {
-            check_expr(left, scope, imports, builtins, diags);
-            check_expr(right, scope, imports, builtins, diags);
+            check_expr(left, scope, imports, diags);
+            check_expr(right, scope, imports, diags);
         }
-        Expr::Unary { operand, .. } => check_expr(operand, scope, imports, builtins, diags),
+        Expr::Unary { operand, .. } => check_expr(operand, scope, imports, diags),
         Expr::Index { object, index } => {
-            check_expr(object, scope, imports, builtins, diags);
-            check_expr(index, scope, imports, builtins, diags);
+            check_expr(object, scope, imports, diags);
+            check_expr(index, scope, imports, diags);
         }
-        Expr::Property { object, .. } => check_expr(object, scope, imports, builtins, diags),
+        Expr::Property { object, .. } => check_expr(object, scope, imports, diags),
         Expr::Tell { object, args, .. } => {
-            check_expr(object, scope, imports, builtins, diags);
-            for a in args { check_expr(a, scope, imports, builtins, diags); }
+            check_expr(object, scope, imports, diags);
+            for a in args { check_expr(a, scope, imports, diags); }
         }
         Expr::List(elems) => {
-            for e in elems { check_expr(e, scope, imports, builtins, diags); }
+            for e in elems { check_expr(e, scope, imports, diags); }
         }
         Expr::Dict(pairs) => {
             for (k, v) in pairs {
-                check_expr(k, scope, imports, builtins, diags);
-                check_expr(v, scope, imports, builtins, diags);
+                check_expr(k, scope, imports, diags);
+                check_expr(v, scope, imports, diags);
             }
         }
         _ => {}
     }
 }
 
-fn is_defined(name: &str, scope: &[String], builtins: &[String]) -> bool {
-    scope.contains(&name.to_string()) || builtins.contains(&name.to_string())
+fn is_defined(name: &str, scope: &[String]) -> bool {
+    scope.contains(&name.to_string())
 }
 
 fn module_exports_names(module: &str) -> Vec<String> {
