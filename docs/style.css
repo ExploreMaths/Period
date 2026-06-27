@@ -536,7 +536,7 @@ pre code {
   background: var(--surface);
   border-right: 1px solid var(--border);
   border-radius: 0;
-  padding: 4rem 1.25rem 1.25rem;
+  padding: 0 1.25rem 1.25rem;
   overflow-y: auto;
   z-index: 50;
 }
