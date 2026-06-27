@@ -215,7 +215,12 @@ fn hover(
         if i > 0 {
             md.push_str("\n\n---\n\n");
         }
-        md.push_str(&format!("```period\n{}\n```", sym.detail));
+        let code = if sym.kind == CompletionItemKind::MODULE {
+            format!("import {}.", sym.name)
+        } else {
+            sym.detail.clone()
+        };
+        md.push_str(&format!("```period\n{}\n```", code));
         if let Some(doc) = &sym.docstring {
             md.push_str(&format!("\n\n{}", doc));
         }
