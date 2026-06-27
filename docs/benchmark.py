@@ -17,6 +17,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 PERIOD_EXE = REPO / "period" / "target" / "debug" / "period.exe"
+TCC_EXE = REPO / ".tools" / "tcc" / "tcc" / "tcc.exe"
 
 Program = tuple[list[str], str, str]
 
@@ -51,13 +52,25 @@ PROGRAMS: dict[str, Program] = {
         'echo "Hello, World!"',
         ".sh",
     ),
+    "C": (
+        [str(TCC_EXE)],
+        '#include <stdio.h>\nint main(void) { puts("Hello, World!"); return 0; }',
+        ".c",
+    ),
 }
 
 
-def run_benchmark(name: str, command_prefix: list[str], source: str, ext: str, runs: int = 10) -> float | None:
-    # Sanity check: every program in the prefix must exist on PATH.
-    if shutil.which(command_prefix[0]) is None:
-        print(f"{command_prefix[0]} not available, skipping {name}")
+def run_benchmark(
+    name: str,
+    command_prefix: list[str],
+    source: str,
+    ext: str,
+    runs: int = 10,
+) -> float | None:
+    # Sanity check: the first executable in the prefix must exist on PATH or as a file.
+    first = command_prefix[0]
+    if not (shutil.which(first) or Path(first).exists()):
+        print(f"{first} not available, skipping {name}")
         return None
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
@@ -65,7 +78,24 @@ def run_benchmark(name: str, command_prefix: list[str], source: str, ext: str, r
         f.flush()
         src_path = Path(f.name)
 
-    cmd = command_prefix + [str(src_path)]
+    # C needs to be compiled once; the timer then measures only the binary runtime.
+    if ext == ".c":
+        exe_path = src_path.with_suffix(".exe")
+        compile_cmd = command_prefix + [str(src_path), "-o", str(exe_path)]
+        compile_result = subprocess.run(
+            compile_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if compile_result.returncode != 0:
+            print(f"Failed to compile {name}:\n{compile_result.stderr}")
+            src_path.unlink(missing_ok=True)
+            return None
+        cmd = [str(exe_path)]
+    else:
+        cmd = command_prefix + [str(src_path)]
+
     # Warm-up run.
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -76,6 +106,9 @@ def run_benchmark(name: str, command_prefix: list[str], source: str, ext: str, r
         times.append(time.perf_counter() - start)
 
     src_path.unlink(missing_ok=True)
+    if ext == ".c":
+        exe_path.unlink(missing_ok=True)
+
     # Drop the slowest outlier and average the rest.
     times.sort()
     return sum(times[:-1]) / len(times[:-1]) * 1000
