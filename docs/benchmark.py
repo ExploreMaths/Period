@@ -1,4 +1,4 @@
-"""Benchmark simple "Hello, World!" startup-to-output time across Period, Python and Node.js.
+"""Benchmark simple "Hello, World!" startup-to-output time across several languages.
 
 Run with:
     python docs/benchmark.py
@@ -9,6 +9,7 @@ performance chart.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -17,32 +18,54 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PERIOD_EXE = REPO / "period" / "target" / "debug" / "period.exe"
 
-PROGRAMS = {
+Program = tuple[list[str], str, str]
+
+PROGRAMS: dict[str, Program] = {
     "Period": (
-        PERIOD_EXE,
+        [str(PERIOD_EXE)],
         'show "Hello, World!".',
         ".period",
     ),
     "Python": (
-        "python",
+        ["python"],
         'print("Hello, World!")',
         ".py",
     ),
     "Node.js": (
-        "node",
+        ["node"],
         'console.log("Hello, World!");',
         ".js",
+    ),
+    "Perl": (
+        ["perl"],
+        'print "Hello, World!\\n";',
+        ".pl",
+    ),
+    "PowerShell": (
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File"],
+        "Write-Host 'Hello, World!'",
+        ".ps1",
+    ),
+    "Bash": (
+        ["bash"],
+        'echo "Hello, World!"',
+        ".sh",
     ),
 }
 
 
-def run_benchmark(name: str, executable: str | Path, source: str, ext: str, runs: int = 15) -> float:
+def run_benchmark(name: str, command_prefix: list[str], source: str, ext: str, runs: int = 10) -> float | None:
+    # Sanity check: every program in the prefix must exist on PATH.
+    if shutil.which(command_prefix[0]) is None:
+        print(f"{command_prefix[0]} not available, skipping {name}")
+        return None
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
         f.write(source)
         f.flush()
         src_path = Path(f.name)
 
-    cmd = [str(executable), str(src_path)]
+    cmd = command_prefix + [str(src_path)]
     # Warm-up run.
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -64,12 +87,10 @@ def main() -> None:
         return
 
     results: dict[str, float] = {}
-    for name, (exe, source, ext) in PROGRAMS.items():
-        if isinstance(exe, str):
-            if subprocess.run([exe, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-                print(f"{exe} not available, skipping {name}")
-                continue
-        results[name] = run_benchmark(name, exe, source, ext)
+    for name, (prefix, source, ext) in PROGRAMS.items():
+        value = run_benchmark(name, prefix, source, ext)
+        if value is not None:
+            results[name] = value
 
     print(json.dumps(results, indent=2))
 
