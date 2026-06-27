@@ -8,6 +8,7 @@
     { "include": "#statement-terminator" },
     { "include": "#class-declaration" },
     { "include": "#new-expression" },
+    { "include": "#module-reference" },
     { "include": "#keyword" },
     { "include": "#method-call" },
     { "include": "#property-access" },
@@ -20,6 +21,24 @@
     { "include": "#identifier" }
   ],
   "repository": {
+    "module-reference": {
+      "patterns": [
+        {
+          "name": "meta.import.period",
+          "begin": "\\b(import|from)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.period" }
+          },
+          "end": "\\.|(?=\\bwith\\b)",
+          "patterns": [
+            { "include": "#comment" },
+            { "name": "keyword.control.period", "match": "\\b(and)\\b" },
+            { "name": "punctuation.separator.comma.period", "match": "," },
+            { "name": "support.class.period", "match": "\\.?[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*" }
+          ]
+        }
+      ]
+    },
     "class-declaration": {
       "patterns": [
         {
