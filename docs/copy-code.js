@@ -1,3 +1,7 @@
+const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+
+const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('pre').forEach((pre) => {
     const code = pre.querySelector('code');
@@ -13,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     button.type = 'button';
     button.title = 'Copy';
     button.setAttribute('aria-label', 'Copy code');
-    button.innerHTML = '<span class="copy-icon">📋</span>';
+    button.innerHTML = `<span class="copy-icon">${COPY_ICON}</span>`;
     wrapper.appendChild(button);
 
     button.addEventListener('click', async () => {
@@ -31,9 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(textarea);
       }
 
-      button.innerHTML = '<span class="copy-icon copy-success">✓</span>';
+      button.innerHTML = `<span class="copy-icon copy-success">${CHECK_ICON}</span>`;
       setTimeout(() => {
-        button.innerHTML = '<span class="copy-icon">📋</span>';
+        button.innerHTML = `<span class="copy-icon">${COPY_ICON}</span>`;
       }, 1500);
     });
   });
