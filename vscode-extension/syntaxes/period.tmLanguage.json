@@ -154,6 +154,11 @@
         {
           "name": "support.function.builtin.period",
           "match": "\\b(length|string|number|type|range)\\b(?=\\s+with)"
+        },
+        {
+          "comment": "Common functions exported by built-in modules (math, string, random, time) and standard-library modules (list, text).",
+          "name": "support.function.period",
+          "match": "\\b(sin|cos|tan|sqrt|abs|floor|ceil|upper|lower|random|now|sum|max|min|join)\\b"
         }
       ]
     },

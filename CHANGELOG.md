@@ -24,7 +24,7 @@
   - `import` with a plain name resolves to built-in or standard-library modules only; local files must be imported with a relative path (`.helper`, `..helper`) or from a `lib/` folder.
   - Updated the grammar reference and module list in `docs/docs.html` to match the Rust implementation.
 - Fixed an LSP server crash when lexing files containing invalid keyword casing; such errors are now reported as diagnostics instead of crashing the server.
-- Updated VS Code: syntax highlighting so module names in `import` / `from` statements are colored green.
+- Updated VS Code: syntax highlighting so module names in `import` / `from` statements are colored green, and common functions exported by built-in/standard-library modules (e.g. `sin`, `upper`, `sum`) are colored yellow.
 - The installer now uninstalls the old VS Code extension before installing the new one, preventing version-downgrade issues.
 
 ### Full commit
