@@ -16,6 +16,7 @@
 - Fixed false-positive "undefined variable" diagnostics for variables defined earlier in the same block (e.g. inside `while`/`if` bodies).
 - Improved hover: variable/function signature is shown as a syntax-highlighted `period` code block on the first line, variables defined inside blocks (e.g. inside `while`) also show hover, and keywords like `show` now have hover docs.
 - Fixed hover token-length matching for multi-character keywords (`show`, `returns`, etc.).
+- Restored `period/stdlib/` as a directory of `.period` source modules that the runtime loads on `import`. Built-in Rust modules (`math`, `string`, `random`, `time`) remain as fallback. Added `list` and `text` example modules.
 - The installer now uninstalls the old VS Code extension before installing the new one, preventing version-downgrade issues.
 
 ### Full commit

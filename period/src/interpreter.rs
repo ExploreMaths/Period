@@ -1,9 +1,14 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::env;
+use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::ast::*;
+use crate::lexer::{Lexer, TokenKind};
+use crate::parser::Parser;
 
 #[derive(Clone)]
 pub enum Value {
@@ -35,6 +40,10 @@ pub enum Value {
         max_arity: usize,
         func: fn(&[Value]) -> Result<Value, String>,
     },
+    Module {
+        name: String,
+        env: Rc<RefCell<Environment>>,
+    },
 }
 
 impl std::fmt::Debug for Value {
@@ -51,6 +60,7 @@ impl std::fmt::Debug for Value {
             Value::Class { name, .. } => write!(f, "<class {}>", name),
             Value::Instance { class, .. } => write!(f, "<instance of {:?}>", class),
             Value::BuiltIn { name, .. } => write!(f, "<built-in {}>", name),
+            Value::Module { name, .. } => write!(f, "<module {}>", name),
         }
     }
 }
@@ -102,6 +112,7 @@ impl Value {
             Value::Class { .. } => "class",
             Value::Instance { .. } => "instance",
             Value::BuiltIn { .. } => "built-in",
+            Value::Module { .. } => "module",
         }
     }
 
@@ -126,6 +137,7 @@ impl Value {
             Value::Class { name, .. } => format!("<class {}>", name),
             Value::Instance { class, .. } => format!("<instance of {:?}>", class),
             Value::BuiltIn { name, .. } => format!("<built-in {}>", name),
+            Value::Module { name, .. } => format!("<module {}>", name),
         }
     }
 }
@@ -194,6 +206,7 @@ pub struct Interpreter {
     env: Rc<RefCell<Environment>>,
     pub output: Vec<String>,
     modules: RefCell<HashMap<String, Rc<RefCell<Environment>>>>,
+    silent: bool,
 }
 
 impl Interpreter {
@@ -201,7 +214,7 @@ impl Interpreter {
         let globals = Environment::new();
         install_builtins(&*globals.borrow());
         let env = globals.clone();
-        Self { globals, env, output: Vec::new(), modules: RefCell::new(HashMap::new()) }
+        Self { globals, env, output: Vec::new(), modules: RefCell::new(HashMap::new()), silent: false }
     }
 
     pub fn interpret(&mut self, program: &Program) -> Result<(), Control> {
@@ -225,7 +238,9 @@ impl Interpreter {
                 let v = self.evaluate(expr)?;
                 let text = v.to_string();
                 self.output.push(text.clone());
-                println!("{}", text);
+                if !self.silent {
+                    println!("{}", text);
+                }
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 if Self::is_truthy(&self.evaluate(cond)?) {
@@ -393,6 +408,9 @@ impl Interpreter {
                             }
                         }
                         Err(Control::Error(format!("Instance has no property '{}'", name)))
+                    }
+                    Value::Module { env, .. } => {
+                        env.borrow().get(name).ok_or_else(|| Control::Error(format!("Module has no property '{}'", name)))
                     }
                     _ => Err(Control::Error(format!("Cannot access property on {}", obj.type_name()))),
                 }
@@ -609,20 +627,93 @@ impl Interpreter {
     }
 
     fn import_module(&mut self, path: &str) -> Result<(), Control> {
-        // Built-in modules only for now; file modules can be added later.
-        let env = match path {
-            "math" => make_math_module(),
-            "random" => make_random_module(),
-            "string" => make_string_module(),
-            "time" => make_time_module(),
-            _ => return Err(Control::Error(format!("Module '{}' not found", path))),
+        if self.modules.borrow().contains_key(path) {
+            return Ok(());
+        }
+
+        let env = if let Some(file) = find_module_file(path) {
+            self.load_period_module(path, &file)?
+        } else {
+            match path {
+                "math" => make_math_module(),
+                "random" => make_random_module(),
+                "string" => make_string_module(),
+                "time" => make_time_module(),
+                _ => return Err(Control::Error(format!("Module '{}' not found", path))),
+            }
         };
+
         self.modules.borrow_mut().insert(path.to_string(), env.clone());
+        self.env.borrow().define(path, Value::Module { name: path.to_string(), env: env.clone() });
         for (name, value) in env.borrow().values.borrow().iter() {
             self.env.borrow().define(name, value.clone());
         }
         Ok(())
     }
+
+    fn load_period_module(&mut self, name: &str, path: &std::path::Path) -> Result<Rc<RefCell<Environment>>, Control> {
+        let source = fs::read_to_string(path)
+            .map_err(|e| Control::Error(format!("Cannot read module '{}': {}", name, e)))?;
+        let program = parse_module(&source)
+            .map_err(|e| Control::Error(format!("Module '{}': {}", name, e)))?;
+
+        let builtins = Environment::new();
+        install_builtins(&*builtins.borrow());
+        let module_env = Environment::with_parent(builtins);
+
+        let old_env = self.env.clone();
+        let old_silent = self.silent;
+        self.env = module_env.clone();
+        self.silent = true;
+        let result = self.interpret(&program);
+        self.env = old_env;
+        self.silent = old_silent;
+
+        result?;
+        Ok(module_env)
+    }
+}
+
+fn stdlib_locations() -> Vec<PathBuf> {
+    let mut locs = Vec::new();
+    if let Ok(v) = env::var("PERIOD_STDLIB") {
+        locs.push(PathBuf::from(v));
+    }
+    if let Ok(exe) = env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            locs.push(parent.join("stdlib"));
+        }
+    }
+    if let Ok(cwd) = env::current_dir() {
+        locs.push(cwd.join("stdlib"));
+    }
+    locs
+}
+
+fn find_module_file(module: &str) -> Option<PathBuf> {
+    let file = format!("{}.period", module);
+    for loc in stdlib_locations() {
+        let path = loc.join(&file);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn parse_module(source: &str) -> Result<Program, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut lexer = Lexer::new(source);
+        let mut tokens = Vec::new();
+        loop {
+            let t = lexer.next_token();
+            let eof = matches!(t.kind, TokenKind::Eof);
+            tokens.push(t);
+            if eof { break; }
+        }
+        Parser::new(tokens).parse_program()
+    }))
+    .map_err(|_| "parse error".to_string())
 }
 
 fn install_builtins(env: &Environment) {

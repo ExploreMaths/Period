@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
@@ -725,8 +728,132 @@ fn function_return_type(name: &str) -> String {
     .to_string()
 }
 
+fn stdlib_locations() -> Vec<PathBuf> {
+    let mut locs = Vec::new();
+    if let Ok(v) = env::var("PERIOD_STDLIB") {
+        locs.push(PathBuf::from(v));
+    }
+    if let Ok(exe) = env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            locs.push(parent.join("stdlib"));
+        }
+    }
+    if let Ok(cwd) = env::current_dir() {
+        locs.push(cwd.join("stdlib"));
+    }
+    locs
+}
+
+fn find_stdlib_module(module: &str) -> Option<PathBuf> {
+    let file = format!("{}.period", module);
+    for loc in stdlib_locations() {
+        let path = loc.join(&file);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn stdlib_module_exports(module: &str) -> Option<Vec<SymbolInfo>> {
+    let path = find_stdlib_module(module)?;
+    let source = fs::read_to_string(&path).ok()?;
+    let program = try_parse(&source).ok()?;
+
+    let mut func_returns: HashMap<String, String> = HashMap::new();
+    for stmt in &program.statements {
+        if let Stmt::Define { name, return_type, .. } = stmt {
+            if let Some(ret) = return_type {
+                func_returns.insert(name.clone(), ret.clone());
+            }
+        }
+    }
+
+    let mut exports = Vec::new();
+    for stmt in &program.statements {
+        match stmt {
+            Stmt::Let { name, value } => {
+                let typ = infer_expr_with_funcs(value, &func_returns);
+                exports.push(SymbolInfo {
+                    name: name.clone(),
+                    detail: format!("{}: {}", name, typ),
+                    docstring: None,
+                    kind: CompletionItemKind::VARIABLE,
+                });
+            }
+            Stmt::Define { name, params, return_type, docstring, .. } => {
+                let param_str = params
+                    .iter()
+                    .map(|(n, t)| match t {
+                        Some(ty) => format!("{}: {}", n, ty),
+                        None => n.clone(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let ret = return_type.clone().unwrap_or_else(|| "unknown".to_string());
+                exports.push(SymbolInfo {
+                    name: name.clone(),
+                    detail: format!("{}::define {}({}) -> {}", module, name, param_str, ret),
+                    docstring: docstring.clone(),
+                    kind: CompletionItemKind::FUNCTION,
+                });
+            }
+            Stmt::Class { name, init, methods, docstring } => {
+                exports.push(SymbolInfo {
+                    name: name.clone(),
+                    detail: format!("{}::class {}", module, name),
+                    docstring: docstring.clone(),
+                    kind: CompletionItemKind::CLASS,
+                });
+                if let Some(init) = init {
+                    let param_str = init
+                        .params
+                        .iter()
+                        .map(|(n, t)| match t {
+                            Some(ty) => format!("{}: {}", n, ty),
+                            None => n.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    exports.push(SymbolInfo {
+                        name: format!("{}.__init__", name),
+                        detail: format!("{}::init {}({})", module, name, param_str),
+                        docstring: init.docstring.clone(),
+                        kind: CompletionItemKind::CONSTRUCTOR,
+                    });
+                }
+                for m in methods {
+                    if let Stmt::Define { name: mname, params, return_type, docstring, .. } = m {
+                        let param_str = params
+                            .iter()
+                            .map(|(n, t)| match t {
+                                Some(ty) => format!("{}: {}", n, ty),
+                                None => n.clone(),
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        let ret = return_type.clone().unwrap_or_else(|| "unknown".to_string());
+                        exports.push(SymbolInfo {
+                            name: mname.clone(),
+                            detail: format!("{}::define {}({}) -> {}", module, mname, param_str, ret),
+                            docstring: docstring.clone(),
+                            kind: CompletionItemKind::METHOD,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(exports)
+}
+
 fn module_exports(module: &str) -> Vec<SymbolInfo> {
-    match module {
+    if let Some(exports) = stdlib_module_exports(module) {
+        return exports;
+    }
+
+    let exports = match module {
         "math" => vec![
             builtin_fn("sin", "number", "number", "Return the sine of a value."),
             builtin_fn("cos", "number", "number", "Return the cosine of a value."),
@@ -747,13 +874,14 @@ fn module_exports(module: &str) -> Vec<SymbolInfo> {
             builtin_fn("now", "", "number", "Return the current Unix timestamp."),
         ],
         _ => Vec::new(),
-    }
-    .into_iter()
-    .map(|mut s| {
-        s.detail = format!("{}::{}", module, s.detail);
-        s
-    })
-    .collect()
+    };
+    exports
+        .into_iter()
+        .map(|mut s| {
+            s.detail = format!("{}::{}", module, s.detail);
+            s
+        })
+        .collect()
 }
 
 fn all_builtins() -> Vec<SymbolInfo> {
@@ -809,6 +937,7 @@ fn check_program(program: &Program) -> Vec<Diagnostic> {
             Stmt::Import(paths) => {
                 imports.extend(paths.iter().cloned());
                 for path in paths {
+                    global.push(path.clone());
                     global.extend(module_exports_names(path));
                 }
             }
