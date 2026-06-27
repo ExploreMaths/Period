@@ -1060,6 +1060,16 @@ footer {
 /* Code block copy button */
 .code-block-wrapper {
   position: relative;
+  margin: 1rem 0;
+}
+
+.code-block-wrapper pre {
+  margin: 0;
+}
+
+.tab-panel .code-block-wrapper,
+.h-panel .code-block-wrapper {
+  margin: 0;
 }
 
 .copy-code-button {
