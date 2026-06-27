@@ -35,6 +35,7 @@ def run_source(
     filename: str = "<stdin>",
     print_output: bool = True,
     use_native: bool = False,
+    use_jit: bool = False,
     use_vm: bool = False,
 ) -> int:
     lexer = Lexer(source, filename)
@@ -63,6 +64,15 @@ def run_source(
                 print(stdout, end="")
             return 0
 
+    if use_jit:
+        from period.jit_backend import run as run_jit
+        ok, output, stderr = run_jit(program)
+        if ok:
+            return 0
+        print(f"jit backend failed: {stderr}", file=sys.stderr)
+        print("falling back to --fast.", file=sys.stderr)
+        use_vm = True
+
     if use_vm:
         ok, output, stderr = run_py(program)
         if ok:
@@ -87,9 +97,9 @@ def run_source(
     return 0
 
 
-def run_file(path: Path, use_native: bool = False, use_vm: bool = False) -> int:
+def run_file(path: Path, use_native: bool = False, use_jit: bool = False, use_vm: bool = False) -> int:
     source = path.read_text(encoding="utf-8")
-    return run_source(source, str(path), use_native=use_native, use_vm=use_vm)
+    return run_source(source, str(path), use_native=use_native, use_jit=use_jit, use_vm=use_vm)
 
 
 def run_repl():
@@ -156,9 +166,14 @@ def main():
         help="Compile the program to C and run the native executable (numeric subset only).",
     )
     argparser.add_argument(
+        "--jit",
+        action="store_true",
+        help="JIT-compile the program with Numba and run the machine code (numeric subset only).",
+    )
+    argparser.add_argument(
         "--fast",
         action="store_true",
-        help="Run the program on the internal bytecode VM (numeric subset only).",
+        help="Run the program on the Python fast path / bytecode VM (numeric subset only).",
     )
     args = argparser.parse_args()
 
@@ -172,7 +187,7 @@ def main():
         if not path.exists():
             print(f"error: file not found: {path}", file=sys.stderr)
             return 1
-        return run_file(path, use_native=args.native, use_vm=args.fast)
+        return run_file(path, use_native=args.native, use_jit=args.jit, use_vm=args.fast)
 
     run_repl()
     return 0
