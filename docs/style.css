@@ -762,6 +762,28 @@ pre code {
   font-size: 0.95rem;
 }
 
+#performance {
+  text-align: center;
+}
+
+#performance .chart-wrapper {
+  position: relative;
+  max-width: 640px;
+  height: 340px;
+  margin: 2rem auto 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+#performance .chart-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
 .marquee {
   width: 100vw;
   margin-left: calc((100vw - 100%) / -2);

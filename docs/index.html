@@ -75,6 +75,16 @@
       </div>
     </section>
 
+    <section id="performance">
+      <span class="section-label">Performance</span>
+      <h2>Fast from the first line.</h2>
+      <p>Average "Hello, World!" runtime. Lower is better.</p>
+      <div class="chart-wrapper">
+        <canvas id="perfChart"></canvas>
+      </div>
+      <p class="chart-note">Benchmarked with a single <code>show "Hello, World!"</code> / <code>print</code> / <code>console.log</code> run, including interpreter startup.</p>
+    </section>
+
     <section id="hello-period">
       <span class="section-label">Showcase</span>
       <h2>Hello, Period</h2>
@@ -210,6 +220,58 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
     <p>&copy; 2026 Period Language. Released under the MIT License.</p>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const ctx = document.getElementById('perfChart');
+      if (!ctx) return;
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Period', 'Python', 'Node.js'],
+          datasets: [{
+            label: 'Milliseconds',
+            data: [24.8, 38.8, 85.1],
+            backgroundColor: [
+              'rgba(217, 119, 6, 0.9)',
+              'rgba(120, 113, 108, 0.6)',
+              'rgba(120, 113, 108, 0.6)'
+            ],
+            borderColor: [
+              'rgba(217, 119, 6, 1)',
+              'rgba(120, 113, 108, 1)',
+              'rgba(120, 113, 108, 1)'
+            ],
+            borderWidth: 1,
+            borderRadius: 6,
+            barPercentage: 0.55
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (item) => `${item.raw} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Milliseconds (lower is better)' },
+              grid: { color: 'rgba(0,0,0,0.06)' }
+            },
+            x: {
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    });
+  </script>
   <script type="module">
     import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
     import { ScrollTrigger } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/ScrollTrigger.js";
@@ -352,6 +414,12 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
         duration: 0.6,
         stagger: 0.1,
         scrollTrigger: { trigger: "#stats", start: "top 82%" }
+      });
+
+      gsap.from("#performance .section-label, #performance h2, #performance > p, #performance .chart-wrapper", {
+        ...reveal,
+        stagger: 0.1,
+        scrollTrigger: { trigger: "#performance", start: "top 80%" }
       });
 
       gsap.from("#hello-period .section-label, #hello-period h2, #hello-period > p, #hello-period pre", {
