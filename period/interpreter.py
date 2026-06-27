@@ -29,12 +29,17 @@ class PeriodFunction:
 
 
 class PeriodBuiltIn:
-    """Built-in callable value."""
+    """Built-in callable value. Arity may be an int or a (min, max) tuple."""
 
-    def __init__(self, name: str, arity: int, fn):
+    def __init__(self, name: str, arity, fn):
         self.name = name
         self.arity = arity
         self.fn = fn
+
+    def _arity_matches(self, arg_count: int) -> bool:
+        if isinstance(self.arity, tuple):
+            return self.arity[0] <= arg_count <= self.arity[1]
+        return self.arity == arg_count
 
     def __repr__(self) -> str:
         return f"<built-in {self.name}>"
@@ -153,6 +158,14 @@ class Interpreter:
                 lambda args, span: self._read_input(span),
             ),
         )
+        self.globals.define(
+            "range",
+            PeriodBuiltIn(
+                "range",
+                (1, 3),
+                lambda args, span: self._builtin_range(args, span),
+            ),
+        )
         # Non-callable type names are also available as values (e.g. boolean, any, never).
         for type_name in TYPE_NAMES:
             if type_name not in BUILTINS:
@@ -164,6 +177,20 @@ class Interpreter:
         if isinstance(value, (str, list, dict)):
             return len(value)
         raise RuntimeError(f"Cannot get length of {self._type_name(value, span)}.", span)
+
+    def _builtin_range(self, args: List[Any], span: SourceSpan) -> List[int]:
+        for arg in args:
+            if not isinstance(arg, int) or isinstance(arg, bool):
+                raise RuntimeError("range arguments must be integers.", span)
+        if len(args) == 1:
+            start, stop, step = 0, args[0], 1
+        elif len(args) == 2:
+            start, stop, step = args[0], args[1], 1
+        else:
+            start, stop, step = args[0], args[1], args[2]
+        if step == 0:
+            raise RuntimeError("range step cannot be zero.", span)
+        return list(range(start, stop, step))
 
     def _to_string(self, value: Any, span: SourceSpan) -> str:
         if value is None:
@@ -335,6 +362,24 @@ class Interpreter:
         if isinstance(stmt, ast.WhileStmt):
             while self._is_truthy(self._evaluate(stmt.condition)):
                 self.execute_block(stmt.body, Environment(self.environment))
+            return
+        if isinstance(stmt, ast.ForStmt):
+            iterable = self._evaluate(stmt.iterable)
+            if isinstance(iterable, dict):
+                items = list(iterable.keys())
+            elif isinstance(iterable, str):
+                items = list(iterable)
+            elif isinstance(iterable, list):
+                items = iterable
+            else:
+                raise RuntimeError(
+                    f"Cannot iterate over {self._type_name(iterable, stmt.iterable.span)}.",
+                    stmt.iterable.span,
+                )
+            for value in items:
+                env = Environment(self.environment)
+                env.define(stmt.variable, value)
+                self.execute_block(stmt.body, env)
             return
         if isinstance(stmt, ast.ReturnStmt):
             value = None
@@ -589,9 +634,13 @@ class Interpreter:
         arguments = [self._evaluate(arg) for arg in expr.arguments]
 
         if isinstance(callee, PeriodBuiltIn):
-            if callee.arity != len(arguments):
+            if not callee._arity_matches(len(arguments)):
+                if isinstance(callee.arity, tuple):
+                    expected = f"{callee.arity[0]} to {callee.arity[1]}"
+                else:
+                    expected = str(callee.arity)
                 raise RuntimeError(
-                    f"Built-in '{callee.name}' expects {callee.arity} argument(s) but got {len(arguments)}.",
+                    f"Built-in '{callee.name}' expects {expected} argument(s) but got {len(arguments)}.",
                     expr.span,
                 )
             return callee.fn(arguments, expr.span)

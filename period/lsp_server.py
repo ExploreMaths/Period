@@ -1083,7 +1083,9 @@ class LSPServer:
             ("then", "Used after if condition"),
             ("otherwise", "Else branch"),
             ("while", "Start a loop"),
-            ("repeat", "Used after while condition"),
+            ("for", "Start a for-each loop"),
+            ("in", "Used in for loops"),
+            ("repeat", "Used after loop condition"),
             ("define", "Define a function or method"),
             ("with", "Used in calls/signatures"),
             ("return", "Return from function"),
@@ -1106,6 +1108,7 @@ class LSPServer:
             ("string", "Built-in: string"),
             ("number", "Built-in: number"),
             ("type", "Built-in: type"),
+            ("range", "Built-in: range"),
         ]
         for kw, detail in keywords:
             items.append(

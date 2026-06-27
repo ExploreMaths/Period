@@ -11,6 +11,7 @@ BUILTINS: Set[str] = {
     "type",
     "input",
     "show",
+    "range",
 }
 
 # Recognized Period type names. They are treated as predefined identifiers and
@@ -211,6 +212,10 @@ class SemanticChecker:
         elif isinstance(stmt, ast.WhileStmt):
             self._visit_expr(stmt.condition)
             self._scope(self._visit_stmts, stmt.body)
+        elif isinstance(stmt, ast.ForStmt):
+            self._visit_expr(stmt.iterable)
+            self._add_token(stmt.variable_span, TOKEN_VARIABLE, is_declaration=True)
+            self._scope(self._visit_for_body, stmt)
         elif isinstance(stmt, ast.ReturnStmt):
             if stmt.value is not None:
                 self._visit_expr(stmt.value)
@@ -320,6 +325,10 @@ class SemanticChecker:
     def _visit_stmts(self, statements: List[ast.Stmt]):
         for stmt in statements:
             self._visit_stmt(stmt)
+
+    def _visit_for_body(self, stmt: ast.ForStmt):
+        self._declare_local(stmt.variable, TOKEN_VARIABLE)
+        self._visit_stmts(stmt.body)
 
     def _visit_function_body(self, stmt: ast.DefineStmt):
         for param, param_type in zip(stmt.parameters, stmt.parameter_types):

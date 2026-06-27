@@ -25,6 +25,8 @@ class TokenType(Enum):
     THEN = auto()
     OTHERWISE = auto()
     WHILE = auto()
+    FOR = auto()
+    IN = auto()
     REPEAT = auto()
     DEFINE = auto()
     WITH = auto()
@@ -93,6 +95,8 @@ KEYWORDS = {
     "then": TokenType.THEN,
     "otherwise": TokenType.OTHERWISE,
     "while": TokenType.WHILE,
+    "for": TokenType.FOR,
+    "in": TokenType.IN,
     "repeat": TokenType.REPEAT,
     "define": TokenType.DEFINE,
     "with": TokenType.WITH,

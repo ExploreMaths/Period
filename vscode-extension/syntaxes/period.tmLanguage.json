@@ -107,7 +107,7 @@
       "patterns": [
         {
           "name": "keyword.control.period",
-          "match": "\\b(define|class|init|if|then|otherwise|while|repeat|return|returns|import|let|be|set|to|with|this|new|tell|of|the|from|and|or|not)\\b"
+          "match": "\\b(define|class|init|if|then|otherwise|while|for|in|repeat|return|returns|import|let|be|set|to|with|this|new|tell|of|the|from|and|or|not)\\b"
         },
         {
           "name": "support.type.builtin.period",
@@ -119,7 +119,7 @@
         },
         {
           "name": "support.function.builtin.period",
-          "match": "\\b(length|string|number|type)\\b(?=\\s+with)"
+          "match": "\\b(length|string|number|type|range)\\b(?=\\s+with)"
         }
       ]
     },

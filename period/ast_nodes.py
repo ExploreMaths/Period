@@ -162,6 +162,14 @@ class WhileStmt(Stmt):
 
 
 @dataclass
+class ForStmt(Stmt):
+    variable: str
+    variable_span: SourceSpan
+    iterable: Expr
+    body: List[Stmt]
+
+
+@dataclass
 class ReturnStmt(Stmt):
     value: Optional[Expr]
 

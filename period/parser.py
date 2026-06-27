@@ -117,6 +117,7 @@ class Parser:
                 TokenType.SHOW,
                 TokenType.IF,
                 TokenType.WHILE,
+                TokenType.FOR,
                 TokenType.DEFINE,
                 TokenType.RETURN,
                 TokenType.CLASS,
@@ -153,6 +154,8 @@ class Parser:
                 return self._if_statement()
             if self._check(TokenType.WHILE):
                 return self._while_statement()
+            if self._check(TokenType.FOR):
+                return self._for_statement()
             if self._check(TokenType.DEFINE):
                 return self._define_statement()
             if self._check(TokenType.RETURN):
@@ -240,6 +243,29 @@ class Parser:
         body = self._block("while")
         span = self._span_from(start, self._previous())
         return ast.WhileStmt(span=span, condition=condition, body=body)
+
+    def _for_statement(self) -> ast.Stmt:
+        start = self._advance()  # for
+        variable = self._consume(TokenType.IDENTIFIER, "Expected a variable name after 'for'.")
+        if variable is None:
+            variable_span = start.span
+            variable_name = ""
+        else:
+            variable_span = variable.span
+            variable_name = variable.value
+        self._consume(TokenType.IN, "Expected 'in' after the loop variable.")
+        iterable = self._expression()
+        self._consume(TokenType.REPEAT, "Expected 'repeat' after the iterable of a 'for' statement.")
+        self._consume(TokenType.COLON, "Expected ':' after 'repeat'.")
+        body = self._block("for")
+        span = self._span_from(start, self._previous())
+        return ast.ForStmt(
+            span=span,
+            variable=variable_name,
+            variable_span=variable_span,
+            iterable=iterable,
+            body=body,
+        )
 
     def _define_statement(self) -> ast.Stmt:
         start = self._advance()  # define

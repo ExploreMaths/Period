@@ -139,11 +139,20 @@
 
     <section id="loops">
       <h2>Loops</h2>
-      <p>Use <code>while</code> with <code>repeat:</code> to loop while a condition is true. There is no <code>for</code> loop; use a counter variable with <code>while</code>.</p>
+      <p>Use <code>while</code> with <code>repeat:</code> to loop while a condition is true.</p>
       <pre><code><span class="keyword">let</span> i <span class="keyword">be</span> <span class="number">0</span><span class="period">.</span>
 <span class="keyword">while</span> i < <span class="number">10</span> <span class="keyword">repeat</span><span class="period">:</span>
     <span class="builtin">show</span> i<span class="period">.</span>
     <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span></code></pre>
+      <p>Use <code>for ... in ... repeat:</code> to iterate over a list, string, dictionary keys, or a <code>range</code>. The <code>range</code> built-in accepts one, two, or three integer arguments: <code>range with &lt;stop&gt;</code>, <code>range with &lt;start&gt;, &lt;stop&gt;</code>, or <code>range with &lt;start&gt;, &lt;stop&gt;, &lt;step&gt;</code>.</p>
+      <pre><code><span class="keyword">for</span> i <span class="keyword">in</span> range <span class="keyword">with</span> <span class="number">5</span> <span class="keyword">repeat</span><span class="period">:</span>
+    <span class="builtin">show</span> i<span class="period">.</span>
+
+<span class="keyword">for</span> ch <span class="keyword">in</span> <span class="string">"hello"</span> <span class="keyword">repeat</span><span class="period">:</span>
+    <span class="builtin">show</span> ch<span class="period">.</span>
+
+<span class="keyword">for</span> n <span class="keyword">in</span> [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>] <span class="keyword">repeat</span><span class="period">:</span>
+    <span class="builtin">show</span> n<span class="period">.</span></code></pre>
     </section>
 
     <section id="functions">
@@ -297,6 +306,7 @@ statement      := "let" &lt;identifier&gt; "be" &lt;expression&gt; "."
                 | "show" &lt;expression&gt; "."
                 | "if" &lt;expression&gt; "then" "." &lt;block&gt; ("otherwise" "." &lt;block&gt;)?
                 | "while" &lt;expression&gt; "repeat" "." &lt;block&gt;
+                | "for" &lt;identifier&gt; "in" &lt;expression&gt; "repeat" "." &lt;block&gt;
                 | "define" &lt;identifier&gt; ("with" &lt;params&gt;)? "." &lt;block&gt;
                 | "class" &lt;identifier&gt; "." &lt;class-body&gt;
                 | "return" &lt;expression&gt;? "."
@@ -329,7 +339,7 @@ property       := &lt;primary&gt; &lt;identifier&gt;</code></pre>
       <h2>Tips & Best Practices</h2>
       <ul>
         <li><strong>End every statement with a period.</strong> Missing periods are the most common parse error.</li>
-        <li><strong>Use indentation for blocks.</strong> After <code>if ... then:</code>, <code>while ... repeat:</code>, <code>define ... :</code>, <code>class ... :</code>, or <code>init ... :</code>, indent the body by one level (four spaces is recommended).</li>
+        <li><strong>Use indentation for blocks.</strong> After <code>if ... then:</code>, <code>while ... repeat:</code>, <code>for ... in ... repeat:</code>, <code>define ... :</code>, <code>class ... :</code>, or <code>init ... :</code>, indent the body by one level (four spaces is recommended).</li>
         <li><strong>Prefer functions and methods over deep nesting.</strong> They help keep programs article-like.</li>
         <li><strong>Use comments as paragraphs.</strong> A short comment before each section makes the code read like a document.</li>
         <li><strong>Check error locations.</strong> Diagnostics point to the exact character range, so read them carefully.</li>
