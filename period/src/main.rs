@@ -13,11 +13,11 @@ use std::process::{self, Command};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && (args[1] == "--version" || args[1] == "-v") {
+    if args.iter().any(|a| a == "--version" || a == "-v") {
         println!("period {}", env!("CARGO_PKG_VERSION"));
         process::exit(0);
     }
-    if args.len() == 2 && args[1] == "--lsp" {
+    if args.iter().any(|a| a == "--lsp") {
         if let Err(e) = lsp::run() {
             eprintln!("lsp error: {}", e);
             process::exit(1);

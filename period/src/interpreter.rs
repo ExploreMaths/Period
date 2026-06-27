@@ -335,7 +335,7 @@ impl Interpreter {
             Expr::String(s) => Ok(Value::String(s.clone())),
             Expr::Bool(b) => Ok(Value::Bool(*b)),
             Expr::Nothing => Ok(Value::Nothing),
-            Expr::Variable(name) => {
+            Expr::Variable { name, .. } => {
                 self.env.borrow().get(name).ok_or_else(|| Control::Error(format!("Undefined variable '{}'", name)))
             }
             Expr::Binary { op, left, right } => {

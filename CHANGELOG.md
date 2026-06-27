@@ -9,6 +9,8 @@
 - Auto-completion for local symbols, built-ins, and module exports.
 - Simple type inference based on function return-type annotations and literal kinds.
 - Docstrings are now preserved and shown in hover popups.
+- Diagnostics for parse/lex errors and undefined names.
+- Fixed LSP server startup when the VS Code: client passes extra stdio flags.
 - The installer now uninstalls the old VS Code extension before installing the new one, preventing version-downgrade issues.
 
 ### Full commit

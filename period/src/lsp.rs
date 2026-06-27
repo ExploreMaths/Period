@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
-    CompletionResponse, Hover, HoverContents, HoverOptions, HoverParams,
-    HoverProviderCapability, InitializeParams, MarkupContent, MarkupKind,
-    ServerCapabilities, TextDocumentContentChangeEvent, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url,
+    CompletionResponse, Diagnostic, DiagnosticSeverity, Hover, HoverContents, HoverOptions,
+    HoverParams, HoverProviderCapability, MarkupContent, MarkupKind,
+    Position, PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentContentChangeEvent,
+    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
 
 use crate::ast::*;
@@ -31,8 +31,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     })?;
 
-    let initialization_params = connection.initialize(server_capabilities)?;
-    let _params: InitializeParams = serde_json::from_value(initialization_params)?;
+    let _initialization_params = connection.initialize(server_capabilities)?;
 
     let documents: Arc<Mutex<HashMap<Url, String>>> = Arc::new(Mutex::new(HashMap::new()));
 
@@ -45,7 +44,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                 handle_request(req, &connection, &documents)?;
             }
             Message::Notification(not) => {
-                handle_notification(not, &documents);
+                if let Some(uri) = handle_notification(not, &documents) {
+                    publish_diagnostics(&connection, &documents, uri)?;
+                }
             }
             _ => {}
         }
@@ -87,27 +88,33 @@ fn handle_request(
     Ok(())
 }
 
-fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, String>>>) {
+fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, String>>>) -> Option<Url> {
     match not.method.as_str() {
         "textDocument/didOpen" => {
             if let Ok(params) = serde_json::from_value::<DidOpenTextDocumentParams>(not.params) {
+                let uri = params.text_document.uri.clone();
                 documents.lock().unwrap().insert(params.text_document.uri, params.text_document.text);
+                return Some(uri);
             }
         }
         "textDocument/didChange" => {
             if let Ok(params) = serde_json::from_value::<DidChangeTextDocumentParams>(not.params) {
+                let uri = params.text_document.uri.clone();
                 if let Some(change) = params.content_changes.into_iter().next() {
                     documents.lock().unwrap().insert(params.text_document.uri, change.text);
                 }
+                return Some(uri);
             }
         }
         "textDocument/didClose" => {
             if let Ok(params) = serde_json::from_value::<DidCloseTextDocumentParams>(not.params) {
                 documents.lock().unwrap().remove(&params.text_document.uri);
+                return Some(params.text_document.uri);
             }
         }
         _ => {}
     }
+    None
 }
 
 // Helper structs to deserialize notifications not re-exported by lsp-types conveniently.
@@ -181,7 +188,7 @@ fn hover(
     };
     eprintln!("hover name={} at {}:{}", name, pos.line, pos.character);
 
-    let program = match try_parse(&text) {
+    let program = match try_parse(&text).ok() {
         Some(p) => p,
         None => return Ok(None),
     };
@@ -226,7 +233,7 @@ fn completion(
         None => return Ok(None),
     };
 
-    let program = match try_parse(&text) {
+    let program = match try_parse(&text).ok() {
         Some(p) => p,
         None => return Ok(None),
     };
@@ -254,8 +261,8 @@ fn completion(
     Ok(Some(CompletionResponse::Array(items)))
 }
 
-fn try_parse(source: &str) -> Option<Program> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+fn try_parse(source: &str) -> Result<Program, Diagnostic> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
         loop {
@@ -265,8 +272,82 @@ fn try_parse(source: &str) -> Option<Program> {
             if eof { break; }
         }
         Parser::new(tokens).parse_program()
-    }))
-    .ok()
+    })) {
+        Ok(p) => Ok(p),
+        Err(e) => {
+            let msg = if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "parse error".to_string()
+            };
+            Err(parse_error_to_diagnostic(&msg))
+        }
+    }
+}
+
+fn parse_error_to_diagnostic(msg: &str) -> Diagnostic {
+    // Expected formats: "lexer error at L:C: ..." or "parse error at L:C: ..."
+    let prefix = if msg.starts_with("lexer error at ") {
+        Some("lexer error at ".len())
+    } else if msg.starts_with("parse error at ") {
+        Some("parse error at ".len())
+    } else {
+        None
+    };
+    let (line, col, message) = if let Some(start) = prefix {
+        let rest = &msg[start..];
+        let mut parts = rest.splitn(2, ": ");
+        let loc = parts.next().unwrap_or("1:1");
+        let mut loc_parts = loc.splitn(2, ':');
+        let line: u32 = loc_parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
+        let col: u32 = loc_parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
+        (line, col, parts.next().unwrap_or(msg).to_string())
+    } else {
+        (1, 1, msg.to_string())
+    };
+    Diagnostic {
+        range: Range {
+            start: Position { line: line.saturating_sub(1), character: col.saturating_sub(1) },
+            end: Position { line: line.saturating_sub(1), character: col },
+        },
+        severity: Some(DiagnosticSeverity::ERROR),
+        code: None,
+        code_description: None,
+        source: Some("period".to_string()),
+        message,
+        related_information: None,
+        tags: None,
+        data: None,
+    }
+}
+
+fn publish_diagnostics(
+    connection: &Connection,
+    documents: &Arc<Mutex<HashMap<Url, String>>>,
+    uri: Url,
+) -> Result<(), Box<dyn Error>> {
+    let text = match documents.lock().unwrap().get(&uri) {
+        Some(t) => t.clone(),
+        None => return Ok(()),
+    };
+
+    let mut diagnostics = Vec::new();
+    match try_parse(&text) {
+        Ok(program) => diagnostics.extend(check_program(&program)),
+        Err(d) => diagnostics.push(d),
+    }
+
+    connection.sender.send(Message::Notification(Notification::new(
+        "textDocument/publishDiagnostics".to_string(),
+        serde_json::to_value(PublishDiagnosticsParams {
+            uri,
+            diagnostics,
+            version: None,
+        })?,
+    )))?;
+    Ok(())
 }
 
 fn token_len(kind: &TokenKind) -> u32 {
@@ -431,7 +512,7 @@ fn infer_expr_with_funcs(expr: &Expr, func_returns: &HashMap<String, String>) ->
         Expr::List(_) => "list".to_string(),
         Expr::Dict(_) => "dictionary".to_string(),
         Expr::New { class, .. } => {
-            if let Expr::Variable(name) = class.as_ref() {
+            if let Expr::Variable { name, .. } = class.as_ref() {
                 format!("instance of {}", name)
             } else {
                 "instance".to_string()
@@ -443,7 +524,7 @@ fn infer_expr_with_funcs(expr: &Expr, func_returns: &HashMap<String, String>) ->
             UnaryOp::Not => "boolean".to_string(),
         },
         Expr::Call { callee, .. } => {
-            if let Expr::Variable(name) = callee.as_ref() {
+            if let Expr::Variable { name, .. } = callee.as_ref() {
                 if let Some(ret) = func_returns.get(name) {
                     ret.clone()
                 } else {
@@ -542,4 +623,181 @@ fn module_from_line(line: &str) -> Option<String> {
         return Some(module.to_string());
     }
     None
+}
+
+fn check_program(program: &Program) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    let mut global: Vec<String> = Vec::new();
+    let mut imports: Vec<String> = Vec::new();
+
+    // Top-level definitions.
+    for stmt in &program.statements {
+        match stmt {
+            Stmt::Let { name, .. } => global.push(name.clone()),
+            Stmt::Define { name, .. } => global.push(name.clone()),
+            Stmt::Class { name, .. } => global.push(name.clone()),
+            Stmt::Import(paths) => imports.extend(paths.iter().cloned()),
+            _ => {}
+        }
+    }
+
+    let builtins: Vec<String> = builtin_globals().iter().map(|s| s.to_string()).collect();
+
+    for stmt in &program.statements {
+        check_stmt(stmt, &global, &imports, &builtins, &mut diags);
+    }
+    diags
+}
+
+fn builtin_globals() -> Vec<&'static str> {
+    vec!["length", "string", "number", "type", "input", "range"]
+}
+
+fn check_stmt(stmt: &Stmt, global: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+    match stmt {
+        Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => check_expr(expr, global, imports, builtins, diags),
+        Stmt::Let { value, .. } => check_expr(value, global, imports, builtins, diags),
+        Stmt::Set { target, value } => {
+            check_assign_target(target, global, imports, builtins, diags);
+            check_expr(value, global, imports, builtins, diags);
+        }
+        Stmt::If { cond, then_branch, else_branch } => {
+            check_expr(cond, global, imports, builtins, diags);
+            for s in then_branch { check_stmt(s, global, imports, builtins, diags); }
+            for s in else_branch { check_stmt(s, global, imports, builtins, diags); }
+        }
+        Stmt::While { cond, body } => {
+            check_expr(cond, global, imports, builtins, diags);
+            for s in body { check_stmt(s, global, imports, builtins, diags); }
+        }
+        Stmt::For { iterable, body, .. } => {
+            check_expr(iterable, global, imports, builtins, diags);
+            for s in body { check_stmt(s, global, imports, builtins, diags); }
+        }
+        Stmt::Define { params, body, .. } => {
+            let mut local = global.to_vec();
+            for (p, _) in params { local.push(p.clone()); }
+            for s in body { check_stmt(s, &local, imports, builtins, diags); }
+        }
+        Stmt::Class { init, methods, .. } => {
+            if let Some(init) = init {
+                let mut local = global.to_vec();
+                for (p, _) in &init.params { local.push(p.clone()); }
+                local.push("this".to_string());
+                for s in &init.body { check_stmt(s, &local, imports, builtins, diags); }
+            }
+            for m in methods {
+                if let Stmt::Define { params, body, .. } = m {
+                    let mut local = global.to_vec();
+                    for (p, _) in params { local.push(p.clone()); }
+                    local.push("this".to_string());
+                    for s in body { check_stmt(s, &local, imports, builtins, diags); }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn check_assign_target(target: &AssignTarget, global: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+    match target {
+        AssignTarget::Variable(_) => {}
+        AssignTarget::Index { object, index } => {
+            check_expr(object, global, imports, builtins, diags);
+            check_expr(index, global, imports, builtins, diags);
+        }
+        AssignTarget::Property { object, .. } => {
+            check_expr(object, global, imports, builtins, diags);
+        }
+    }
+}
+
+fn check_expr(expr: &Expr, scope: &[String], imports: &[String], builtins: &[String], diags: &mut Vec<Diagnostic>) {
+    match expr {
+        Expr::Variable { name, span } => {
+            if !is_defined(name, scope, builtins) {
+                diags.push(make_diagnostic(span, name, "undefined variable"));
+            }
+        }
+        Expr::Call { callee, args } => {
+            if let Expr::Variable { name, span } = callee.as_ref() {
+                if !is_defined(name, scope, builtins) {
+                    diags.push(make_diagnostic(span, name, "undefined function"));
+                }
+            } else {
+                check_expr(callee, scope, imports, builtins, diags);
+            }
+            for a in args { check_expr(a, scope, imports, builtins, diags); }
+        }
+        Expr::Qualified { name, module } => {
+            if imports.contains(module) {
+                if !module_exports_names(module).contains(&name.clone()) {
+                    // module export missing; no span available in this variant
+                }
+            }
+        }
+        Expr::New { class, args } => {
+            if let Expr::Variable { name, span } = class.as_ref() {
+                if !scope.contains(&name.clone()) {
+                    diags.push(make_diagnostic(span, name, "undefined class"));
+                }
+            } else {
+                check_expr(class, scope, imports, builtins, diags);
+            }
+            for a in args { check_expr(a, scope, imports, builtins, diags); }
+        }
+        Expr::Binary { left, right, .. } => {
+            check_expr(left, scope, imports, builtins, diags);
+            check_expr(right, scope, imports, builtins, diags);
+        }
+        Expr::Unary { operand, .. } => check_expr(operand, scope, imports, builtins, diags),
+        Expr::Index { object, index } => {
+            check_expr(object, scope, imports, builtins, diags);
+            check_expr(index, scope, imports, builtins, diags);
+        }
+        Expr::Property { object, .. } => check_expr(object, scope, imports, builtins, diags),
+        Expr::Tell { object, args, .. } => {
+            check_expr(object, scope, imports, builtins, diags);
+            for a in args { check_expr(a, scope, imports, builtins, diags); }
+        }
+        Expr::List(elems) => {
+            for e in elems { check_expr(e, scope, imports, builtins, diags); }
+        }
+        Expr::Dict(pairs) => {
+            for (k, v) in pairs {
+                check_expr(k, scope, imports, builtins, diags);
+                check_expr(v, scope, imports, builtins, diags);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_defined(name: &str, scope: &[String], builtins: &[String]) -> bool {
+    scope.contains(&name.to_string()) || builtins.contains(&name.to_string())
+}
+
+fn module_exports_names(module: &str) -> Vec<String> {
+    module_exports(module).into_iter().map(|s| s.name).collect()
+}
+
+fn make_diagnostic(span: &Span, name: &str, kind: &str) -> Diagnostic {
+    let line = span.line.saturating_sub(1) as u32;
+    let len = name.len() as u32;
+    let end_col = span.col.saturating_sub(1) as u32;
+    let start_col = end_col.saturating_sub(len);
+    Diagnostic {
+        range: Range {
+            start: Position { line, character: start_col },
+            end: Position { line, character: end_col },
+        },
+        severity: Some(DiagnosticSeverity::ERROR),
+        code: None,
+        code_description: None,
+        source: Some("period".to_string()),
+        message: format!("{} '{}' (did you forget 'from <module>'?)", kind, name),
+        related_information: None,
+        tags: None,
+        data: None,
+    }
 }

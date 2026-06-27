@@ -162,7 +162,7 @@ impl RustGen {
     fn gen_iterable(&mut self, expr: &Expr) -> Result<String, Unsupported> {
         match expr {
             Expr::Call { callee, args } => {
-                if let Expr::Variable(name) = callee.as_ref() {
+                if let Expr::Variable { name, .. } = callee.as_ref() {
                     if name == "range" {
                         let args_str: Result<Vec<_>, _> = args.iter().map(|a| self.gen_expr(a)).collect();
                         return Ok(format!("0i64..{}", args_str?.join("..")));
@@ -178,7 +178,7 @@ impl RustGen {
         match expr {
             Expr::Number(n) => Ok(format!("{}i64", *n as i64)),
             Expr::Bool(b) => Ok(if *b { "1i64" } else { "0i64" }.to_string()),
-            Expr::Variable(name) => Ok(name.clone()),
+            Expr::Variable { name, .. } => Ok(name.clone()),
             Expr::Binary { op, left, right } => {
                 let l = self.gen_expr(left)?;
                 let r = self.gen_expr(right)?;

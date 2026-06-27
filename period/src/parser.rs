@@ -87,7 +87,7 @@ impl Parser {
     fn parse_assign_target(&mut self) -> AssignTarget {
         let expr = self.parse_expression();
         match expr {
-            Expr::Variable(name) => AssignTarget::Variable(name),
+            Expr::Variable { name, .. } => AssignTarget::Variable(name),
             Expr::Index { object, index } => AssignTarget::Index { object, index },
             Expr::Property { object, name } => AssignTarget::Property { object, name },
             _ => self.error("invalid assignment target"),
@@ -404,7 +404,7 @@ impl Parser {
                 // qualified reference: name from module
                 self.advance();
                 let module = self.parse_module_path();
-                if let Expr::Variable(name) = expr {
+                if let Expr::Variable { name, .. } = expr {
                     expr = Expr::Qualified { name, module };
                 } else {
                     self.error("qualified reference must start with a name");
@@ -429,7 +429,11 @@ impl Parser {
         match self.peek(0).kind.clone() {
             TokenKind::Number(n) => { self.advance(); Expr::Number(n) }
             TokenKind::String(s) => { self.advance(); Expr::String(s) }
-            TokenKind::Ident(name) => { self.advance(); Expr::Variable(name) }
+            TokenKind::Ident(name) => {
+                let span = self.peek(0).span.clone();
+                self.advance();
+                Expr::Variable { name, span }
+            }
             TokenKind::LParen => {
                 self.advance();
                 let expr = self.parse_expression();
