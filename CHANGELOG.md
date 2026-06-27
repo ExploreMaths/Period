@@ -26,6 +26,8 @@
   - Updated the grammar reference and module list in `docs/docs.html` to match the Rust implementation.
 - Fixed an LSP server crash when lexing files containing invalid keyword casing; such errors are now reported as diagnostics instead of crashing the server.
 - Updated VS Code: syntax highlighting so module names in `import` / `from` statements are colored green, and common functions exported by built-in/standard-library modules (e.g. `sin`, `upper`, `sum`) are colored yellow.
+- The Windows installer now registers `.periodi` files as "Period Interface File" with the Period icon and open command.
+- The VS Code: extension now associates `.periodi` files with the Period language and contributes a "Period Icons" file icon theme for `.period` / `.periodi` files.
 - Zero-argument user-defined functions are now auto-called when used as values, matching zero-argument built-ins.
 - The installer now uninstalls the old VS Code extension before installing the new one, preventing version-downgrade issues.
 

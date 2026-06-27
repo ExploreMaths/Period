@@ -34,7 +34,8 @@
           "period"
         ],
         "extensions": [
-          ".period"
+          ".period",
+          ".periodi"
         ],
         "configuration": "./language-configuration.json",
         "icon": {
@@ -48,6 +49,13 @@
         "language": "period",
         "scopeName": "source.period",
         "path": "./syntaxes/period.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "period-icons",
+        "label": "Period Icons",
+        "path": "./fileicons/period-icon-theme.json"
       }
     ],
     "commands": [

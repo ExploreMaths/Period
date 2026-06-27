@@ -1,0 +1,11 @@
+{
+  "iconDefinitions": {
+    "period": {
+      "iconPath": "./period.svg"
+    }
+  },
+  "fileExtensions": {
+    "period": "period",
+    "periodi": "period"
+  }
+}

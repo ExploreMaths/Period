@@ -49,6 +49,10 @@ Root: HKLM; Subkey: "Software\Classes\.period"; ValueType: string; ValueName: ""
 Root: HKLM; Subkey: "Software\Classes\PeriodFile"; ValueType: string; ValueName: ""; ValueData: "Period Source File"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\PeriodFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\period.ico"
 Root: HKLM; Subkey: "Software\Classes\PeriodFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\period.exe"" ""%1"""
+Root: HKLM; Subkey: "Software\Classes\.periodi"; ValueType: string; ValueName: ""; ValueData: "PeriodInterfaceFile"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\PeriodInterfaceFile"; ValueType: string; ValueName: ""; ValueData: "Period Interface File"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\PeriodInterfaceFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\period.ico"
+Root: HKLM; Subkey: "Software\Classes\PeriodInterfaceFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\period.exe"" ""%1"""
 
 [Code]
 function NeedsAddPath(Param: string): boolean;
