@@ -384,25 +384,5 @@ property       := &lt;primary&gt; &lt;identifier&gt;</code></pre>
   </script>
   <script type="module" src="copy-code.js"></script>
   <script type="module" src="bubble-menu.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const toggle = document.querySelector('.sidebar-toggle');
-      const overlay = document.querySelector('.sidebar-overlay');
-      function closeSidebar() {
-        document.body.classList.remove('sidebar-open');
-      }
-      if (toggle) {
-        toggle.addEventListener('click', () => {
-          document.body.classList.toggle('sidebar-open');
-        });
-      }
-      if (overlay) {
-        overlay.addEventListener('click', closeSidebar);
-      }
-      document.querySelectorAll('.sidebar a').forEach((link) => {
-        link.addEventListener('click', closeSidebar);
-      });
-    });
-  </script>
 </body>
 </html>

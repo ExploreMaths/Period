@@ -1,5 +1,9 @@
 import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
 
+const SIDEBAR_OPEN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`;
+
+const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
 (function () {
   const header = document.querySelector("header");
   if (!header) return;
@@ -71,28 +75,51 @@ import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
   document.body.prepend(menu);
   document.body.appendChild(overlay);
 
+  let sidebarOpen = false;
+  let sidebarToggle = null;
+
   if (isDocs) {
-    const sidebarToggle = document.createElement("button");
+    sidebarToggle = document.createElement("button");
     sidebarToggle.type = "button";
     sidebarToggle.className = "bubble sidebar-toggle-bubble";
     sidebarToggle.setAttribute("aria-label", "Toggle documentation sidebar");
     sidebarToggle.setAttribute("aria-pressed", "false");
     sidebarToggle.setAttribute("aria-expanded", "false");
-    sidebarToggle.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line x1="8" y1="6" x2="21" y2="6"></line>
-        <line x1="8" y1="12" x2="21" y2="12"></line>
-        <line x1="8" y1="18" x2="21" y2="18"></line>
-        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-      </svg>
-    `;
+    sidebarToggle.innerHTML = `<span class="sidebar-toggle-icon">${SIDEBAR_OPEN_ICON}</span>`;
     menu.querySelector(".bubble-actions").appendChild(sidebarToggle);
+
+    const updateSidebarToggle = () => {
+      sidebarToggle.setAttribute("aria-pressed", sidebarOpen ? "true" : "false");
+      sidebarToggle.setAttribute("aria-expanded", sidebarOpen ? "true" : "false");
+      sidebarToggle.setAttribute(
+        "aria-label",
+        sidebarOpen ? "Close documentation sidebar" : "Toggle documentation sidebar"
+      );
+      sidebarToggle.innerHTML = `<span class="sidebar-toggle-icon">${sidebarOpen ? SIDEBAR_CLOSE_ICON : SIDEBAR_OPEN_ICON}</span>`;
+    };
+
+    const closeSidebar = () => {
+      if (!sidebarOpen) return;
+      sidebarOpen = false;
+      document.body.classList.remove("sidebar-open");
+      updateSidebarToggle();
+    };
+
     sidebarToggle.addEventListener("click", () => {
-      const open = document.body.classList.toggle("sidebar-open");
-      sidebarToggle.setAttribute("aria-pressed", open ? "true" : "false");
-      sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      sidebarOpen = !sidebarOpen;
+      document.body.classList.toggle("sidebar-open", sidebarOpen);
+      updateSidebarToggle();
+    });
+
+    const sidebarOverlay = document.querySelector(".sidebar-overlay");
+    if (sidebarOverlay) {
+      sidebarOverlay.addEventListener("click", closeSidebar);
+    }
+    document.querySelectorAll(".sidebar a").forEach((link) => {
+      link.addEventListener("click", closeSidebar);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && sidebarOpen) closeSidebar();
     });
   }
 
