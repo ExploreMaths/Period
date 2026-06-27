@@ -12,6 +12,11 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
   const links = nav ? Array.from(nav.querySelectorAll("a")) : [];
   if (!links.length) return;
 
+  // The bubble menu is only used on mobile; desktop keeps the original header.
+  if (window.innerWidth > 640) {
+    return;
+  }
+
   const menuItems = links.map((link) => ({
     label: link.textContent.trim(),
     href: link.getAttribute("href"),
