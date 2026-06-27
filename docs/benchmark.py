@@ -1,11 +1,10 @@
-"""Benchmark a longer-running computation across Period, Python and Node.js.
+"""Benchmark simple "Hello, World!" startup-to-output time across Period, Python and Node.js.
 
 Run with:
     python docs/benchmark.py
 
 Outputs a JSON object that can be pasted into docs/index.html for the
-performance chart.  The benchmark sums the integers from 1 to N so that
-startup overhead is dwarfed by actual execution time.
+performance chart.
 """
 from __future__ import annotations
 
@@ -17,43 +16,27 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 PERIOD_EXE = REPO / "period" / "target" / "debug" / "period.exe"
-N = 1_000_000
 
 PROGRAMS = {
     "Period": (
         PERIOD_EXE,
-        f"""let sum be 0.
-let i be 1.
-while i <= {N} repeat:
-    set sum to sum + i.
-    set i to i + 1.
-show sum.
-""",
+        'show "Hello, World!".',
         ".period",
     ),
     "Python": (
         "python",
-        f"""s = 0
-for i in range(1, {N + 1}):
-    s += i
-print(s)
-""",
+        'print("Hello, World!")',
         ".py",
     ),
     "Node.js": (
         "node",
-        f"""let s = 0;
-for (let i = 1; i <= {N}; i++) {{
-    s += i;
-}}
-console.log(s);
-""",
+        'console.log("Hello, World!");',
         ".js",
     ),
 }
 
 
-def run_benchmark(name: str, executable: str | Path, source: str, ext: str, runs: int = 5) -> float:
+def run_benchmark(name: str, executable: str | Path, source: str, ext: str, runs: int = 15) -> float:
     with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
         f.write(source)
         f.flush()
