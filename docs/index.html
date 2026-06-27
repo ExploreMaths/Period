@@ -231,19 +231,26 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
         afterDatasetsDraw(chart) {
           const { ctx, scales: { x, y } } = chart;
           const data = chart.data.datasets[0].data;
-          const baseIndex = 1; // C
+          const baseIndex = 0; // C, sorted first
           const base = data[baseIndex];
           const meta = chart.getDatasetMeta(0);
 
-          ctx.save();
-          ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#78716c';
+          function drawText(text, tx, ty, color) {
+            ctx.textAlign = 'center';
+            ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'white';
+            ctx.strokeText(text, tx, ty);
+            ctx.fillStyle = color;
+            ctx.fillText(text, tx, ty);
+          }
 
+          ctx.save();
           meta.data.forEach((bar, i) => {
             const ratio = data[i] / base;
             const label = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
-            ctx.fillText(label, bar.x, bar.y - 8);
+            drawText(label, bar.x, bar.y - 8, '#78716c');
           });
 
           // Reference line at the C baseline.
@@ -256,9 +263,8 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
           ctx.lineTo(x.right, yPixel);
           ctx.stroke();
 
-          ctx.fillStyle = 'rgba(217, 119, 6, 0.9)';
           ctx.textAlign = 'right';
-          ctx.fillText('C baseline', x.right - 8, yPixel - 6);
+          drawText('C baseline', x.right - 8, yPixel - 6, 'rgba(217, 119, 6, 0.9)');
           ctx.restore();
         }
       };
@@ -266,23 +272,23 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['Period', 'C', 'Python', 'Perl', 'Node.js', 'Bash', 'PowerShell'],
+          labels: ['C', 'Perl', 'Period', 'Python', 'Node.js', 'Bash', 'PowerShell'],
           datasets: [{
             label: 'Milliseconds',
-            data: [25.3, 13.9, 35.5, 23.1, 79.1, 217.7, 275.2],
+            data: [13.9, 23.1, 25.3, 35.5, 79.1, 217.7, 275.2],
             backgroundColor: [
+              'rgba(120, 113, 108, 0.6)',
+              'rgba(120, 113, 108, 0.6)',
               'rgba(217, 119, 6, 0.9)',
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(120, 113, 108, 0.6)',
               'rgba(120, 113, 108, 0.6)',
               'rgba(120, 113, 108, 0.6)',
               'rgba(120, 113, 108, 0.6)',
               'rgba(120, 113, 108, 0.6)'
             ],
             borderColor: [
+              'rgba(120, 113, 108, 1)',
+              'rgba(120, 113, 108, 1)',
               'rgba(217, 119, 6, 1)',
-              'rgba(120, 113, 108, 1)',
-              'rgba(120, 113, 108, 1)',
               'rgba(120, 113, 108, 1)',
               'rgba(120, 113, 108, 1)',
               'rgba(120, 113, 108, 1)',
