@@ -248,13 +248,13 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::For => "```period\nfor <var> in <iterable> repeat:\n    ...\n```\n\nIterate over a list or range.",
         TokenKind::In => "Part of a `for` loop: `for <var> in <iterable>`.",
         TokenKind::Define => "```period\ndefine add with a, b returns number:\n    ...\n```\n\nDefine a function.",
-        TokenKind::With => "Used in function definitions and imports: `define add with a, b.` / `from math with sin.`",
+        TokenKind::With => "Used in function definitions and calls: `define add with a, b.` / `add with 1, 2.`",
         TokenKind::Returns => "Used in function signatures: `define add with a, b returns number:`.",
         TokenKind::Return => "```period\nreturn x.\n```\n\nReturn a value from a function.",
         TokenKind::Class => "```period\nclass Person:\n    ...\n```\n\nDefine a class.",
         TokenKind::New => "```period\nnew Person.\n```\n\nCreate a new instance of a class.",
         TokenKind::Import => "```period\nimport math.\n```\n\nImport a built-in or standard-library module. Use a leading dot (e.g. `.helper`) for local files.",
-        TokenKind::From => "```period\nfrom math with sin.\n```\n\nImport a specific name from a module.",
+        TokenKind::From => "```period\nsin from math.\n```\n\nUse or import a specific name from a module.",
         TokenKind::Tell => "```period\ntell person to greet with name.\n```\n\nSend a message to an object.",
         _ => return None,
     })
@@ -277,7 +277,7 @@ fn completion(
     let mut symbols = index_program(&program);
     symbols.extend(all_builtins());
 
-    // If the line contains "from <module> with" or "from <module>", filter to that module's exports.
+    // If the line contains "<name> from <module>", filter to that module's exports.
     let line_text = text.lines().nth(params.text_document_position.position.line as usize).unwrap_or("");
     let module_hint = module_from_line(line_text);
     if let Some(module) = module_hint {
