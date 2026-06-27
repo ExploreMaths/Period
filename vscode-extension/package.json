@@ -2,7 +2,7 @@
   "name": "period-language",
   "displayName": "Period Language",
   "description": "Language support for Period: an elegant programming language that ends every statement with a period.",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "publisher": "period",
   "license": "MIT",
   "icon": "period.png",
@@ -84,7 +84,8 @@
     }
   },
   "scripts": {
-    "package": "vsce package"
+    "set-version": "node set-version.js",
+    "package": "npm run set-version && vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

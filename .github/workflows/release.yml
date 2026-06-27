@@ -22,14 +22,11 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "file_version=$VERSION.0" >> "$GITHUB_OUTPUT"
 
-      - name: Apply version to installer script and VS Code extension
+      - name: Apply version to installer script
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
           (Get-Content installer\period.iss) -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$ver`"" | Set-Content installer\period.iss
-          $pkg = Get-Content vscode-extension\package.json -Raw | ConvertFrom-Json
-          $pkg.version = $ver
-          $pkg | ConvertTo-Json -Depth 10 | Set-Content vscode-extension\package.json
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,6 +46,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Set VS Code extension version from tag
+        working-directory: vscode-extension
+        run: npm run set-version
 
       - name: Install vsce and package extension
         working-directory: vscode-extension
