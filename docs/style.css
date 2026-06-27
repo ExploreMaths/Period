@@ -315,16 +315,17 @@ nav a.active {
     font-size: clamp(1.2rem, 3vw, 3rem);
     padding: clamp(1rem, 2vw, 2rem) 0;
     min-height: 80px;
+    transform: rotate(var(--item-rot));
   }
 
   .bubble-menu-items .pill-link:hover {
-    transform: scale(1.06);
+    transform: rotate(var(--item-rot)) scale(1.06);
     background: var(--hover-bg);
     color: var(--hover-color);
   }
 
   .bubble-menu-items .pill-link:active {
-    transform: scale(0.94);
+    transform: rotate(var(--item-rot)) scale(0.94);
   }
 }
 
