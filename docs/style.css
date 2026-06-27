@@ -127,15 +127,30 @@ nav a.active {
   height: 28px;
 }
 
-.bubble-menu .menu-btn {
+.bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bubble-menu .menu-btn,
+.bubble-menu .sidebar-toggle-bubble {
   border: none;
   background: var(--surface);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: var(--text);
   padding: 0;
+}
+
+.bubble-menu .menu-btn {
+  flex-direction: column;
+}
+
+.bubble-menu .sidebar-toggle-bubble svg {
+  display: block;
 }
 
 .bubble-menu .menu-line {
@@ -1063,10 +1078,12 @@ footer {
     gap: 1rem;
     padding: 1rem;
   }
-  .logo span {
+  .logo span,
+  .bubble-logo-text {
     display: none;
   }
-  .home .logo span {
+  .home .logo span,
+  .home .bubble-logo-text {
     display: inline;
   }
   nav a {

@@ -17,12 +17,13 @@ import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
   }));
 
   const currentPath = location.pathname.split("/").pop() || "index.html";
+  const isDocs = currentPath === "docs.html";
 
   const logoImg = header.querySelector(".logo img");
   const logoText = header.querySelector(".logo span");
 
   const menu = document.createElement("nav");
-  menu.className = "bubble-menu";
+  menu.className = "bubble-menu" + (isDocs ? " has-sidebar" : "");
   menu.setAttribute("aria-label", "Main navigation");
   menu.innerHTML = `
     <div class="bubble logo-bubble" aria-label="Logo">
@@ -31,10 +32,12 @@ import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
         ${logoText ? `<span class="bubble-logo-text">${logoText.textContent}</span>` : ""}
       </span>
     </div>
-    <button type="button" class="bubble toggle-bubble menu-btn" aria-label="Toggle menu" aria-pressed="false" aria-expanded="false">
-      <span class="menu-line"></span>
-      <span class="menu-line short"></span>
-    </button>
+    <div class="bubble-actions">
+      <button type="button" class="bubble toggle-bubble menu-btn" aria-label="Toggle menu" aria-pressed="false" aria-expanded="false">
+        <span class="menu-line"></span>
+        <span class="menu-line short"></span>
+      </button>
+    </div>
   `;
 
   const overlay = document.createElement("div");
@@ -66,6 +69,31 @@ import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
   header.style.display = "none";
   document.body.prepend(menu);
   document.body.appendChild(overlay);
+
+  if (isDocs) {
+    const sidebarToggle = document.createElement("button");
+    sidebarToggle.type = "button";
+    sidebarToggle.className = "bubble sidebar-toggle-bubble";
+    sidebarToggle.setAttribute("aria-label", "Toggle documentation sidebar");
+    sidebarToggle.setAttribute("aria-pressed", "false");
+    sidebarToggle.setAttribute("aria-expanded", "false");
+    sidebarToggle.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="8" y1="6" x2="21" y2="6"></line>
+        <line x1="8" y1="12" x2="21" y2="12"></line>
+        <line x1="8" y1="18" x2="21" y2="18"></line>
+        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+      </svg>
+    `;
+    menu.querySelector(".bubble-actions").appendChild(sidebarToggle);
+    sidebarToggle.addEventListener("click", () => {
+      const open = document.body.classList.toggle("sidebar-open");
+      sidebarToggle.setAttribute("aria-pressed", open ? "true" : "false");
+      sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
 
   const toggle = menu.querySelector(".menu-btn");
   const bubbles = Array.from(overlay.querySelectorAll(".pill-link"));
