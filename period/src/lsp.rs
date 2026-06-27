@@ -192,7 +192,7 @@ fn hover(
         Some(p) => p,
         None => return Ok(None),
     };
-    let symbols = index_program(&program);
+    let symbols = index_program_all(&program);
     let builtins = all_builtins();
 
     let mut matches: Vec<&SymbolInfo> = symbols.iter().filter(|s| s.name == name).collect();
@@ -208,7 +208,7 @@ fn hover(
         if i > 0 {
             md.push_str("\n\n---\n\n");
         }
-        md.push_str(&format!("**{}**\n\n{}", sym.name, sym.detail));
+        md.push_str(&format!("**{}**", sym.detail));
         if let Some(doc) = &sym.docstring {
             md.push_str(&format!("\n\n{}", doc));
         }
@@ -500,6 +500,115 @@ fn class_methods(stmt: &Stmt) -> &[Stmt] {
     match stmt {
         Stmt::Class { methods, .. } => methods,
         _ => &[],
+    }
+}
+
+fn index_program_all(program: &Program) -> Vec<SymbolInfo> {
+    let mut symbols = Vec::new();
+    let mut func_returns: HashMap<String, String> = HashMap::new();
+
+    // First pass: collect function return types for inference.
+    for stmt in &program.statements {
+        if let Stmt::Define { name, return_type, .. } = stmt {
+            if let Some(ret) = return_type {
+                func_returns.insert(name.clone(), ret.clone());
+            }
+        }
+        for method in class_methods(stmt) {
+            if let Stmt::Define { name, return_type, .. } = method {
+                if let Some(ret) = return_type {
+                    func_returns.insert(name.clone(), ret.clone());
+                }
+            }
+        }
+    }
+
+    for stmt in &program.statements {
+        collect_symbols(stmt, &func_returns, &mut symbols);
+    }
+    symbols
+}
+
+fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols: &mut Vec<SymbolInfo>) {
+    match stmt {
+        Stmt::Let { name, value } => {
+            let typ = infer_expr_with_funcs(value, func_returns);
+            symbols.push(SymbolInfo {
+                name: name.clone(),
+                detail: format!("{}: {}", name, typ),
+                docstring: None,
+                kind: CompletionItemKind::VARIABLE,
+            });
+        }
+        Stmt::Define { name, params, return_type, docstring, body } => {
+            let param_str = params
+                .iter()
+                .map(|(n, t)| match t {
+                    Some(ty) => format!("{}: {}", n, ty),
+                    None => n.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let ret = return_type.clone().unwrap_or_else(|| "unknown".to_string());
+            symbols.push(SymbolInfo {
+                name: name.clone(),
+                detail: format!("define {}({}) -> {}", name, param_str, ret),
+                docstring: docstring.clone(),
+                kind: CompletionItemKind::FUNCTION,
+            });
+            for s in body { collect_symbols(s, func_returns, symbols); }
+        }
+        Stmt::Class { name, init, methods, docstring } => {
+            symbols.push(SymbolInfo {
+                name: name.clone(),
+                detail: format!("class {}", name),
+                docstring: docstring.clone(),
+                kind: CompletionItemKind::CLASS,
+            });
+            if let Some(init) = init {
+                let param_str = init
+                    .params
+                    .iter()
+                    .map(|(n, t)| match t {
+                        Some(ty) => format!("{}: {}", n, ty),
+                        None => n.clone(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                symbols.push(SymbolInfo {
+                    name: format!("{}.__init__", name),
+                    detail: format!("init {}({})", name, param_str),
+                    docstring: init.docstring.clone(),
+                    kind: CompletionItemKind::CONSTRUCTOR,
+                });
+                for s in &init.body { collect_symbols(s, func_returns, symbols); }
+            }
+            for m in methods { collect_symbols(m, func_returns, symbols); }
+        }
+        Stmt::Import(paths) => {
+            for path in paths {
+                let mut exports = module_exports(path);
+                let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                symbols.push(SymbolInfo {
+                    name: path.clone(),
+                    detail: format!("module {}", path),
+                    docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                    kind: CompletionItemKind::MODULE,
+                });
+                symbols.append(&mut exports);
+            }
+        }
+        Stmt::If { then_branch, else_branch, .. } => {
+            for s in then_branch { collect_symbols(s, func_returns, symbols); }
+            for s in else_branch { collect_symbols(s, func_returns, symbols); }
+        }
+        Stmt::While { body, .. } => {
+            for s in body { collect_symbols(s, func_returns, symbols); }
+        }
+        Stmt::For { body, .. } => {
+            for s in body { collect_symbols(s, func_returns, symbols); }
+        }
+        _ => {}
     }
 }
 
