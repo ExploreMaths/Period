@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-PERIOD_EXE = REPO / "period" / "target" / "debug" / "period.exe"
+PERIOD_EXE = REPO / "dist" / "period.exe"
 TCC_EXE = REPO / ".tools" / "tcc" / "tcc" / "tcc.exe"
 
 Program = tuple[list[str], str, str]

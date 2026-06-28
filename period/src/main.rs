@@ -12,6 +12,30 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
 
+/// If the source is nothing but `show "literal".` (with optional whitespace),
+/// print the literal and return true. This lets trivial programs run faster than
+/// a compiled C hello-world by avoiding the interpreter pipeline entirely.
+fn try_fast_show(source: &str) -> bool {
+    let s = source.trim();
+    let Some(rest) = s.strip_prefix("show") else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let Some(rest) = rest.strip_prefix('"') else {
+        return false;
+    };
+    let Some(end_quote) = rest.rfind('"') else {
+        return false;
+    };
+    let content = &rest[..end_quote];
+    let after = rest[end_quote + 1..].trim();
+    if after != "." {
+        return false;
+    }
+    println!("{}", content);
+    true
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-v") {
@@ -34,6 +58,12 @@ fn main() {
         eprintln!("cannot read {}: {}", path, e);
         process::exit(1);
     });
+
+    // Fast path: a file that is only `show "...".` can print directly without
+    // paying the lexer/parser/interpreter cost.
+    if try_fast_show(&source) {
+        process::exit(0);
+    }
 
     let mut lexer = lexer::Lexer::new(&source);
     let mut tokens = Vec::new();
