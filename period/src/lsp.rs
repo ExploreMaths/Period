@@ -604,15 +604,17 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
             Stmt::Import(paths) => {
                 for (path, _) in paths {
                     imports.push(path.clone());
-                    let mut exports = module_exports(path);
-                    let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
-                    symbols.push(SymbolInfo {
-                        name: path.clone(),
-                        detail: format!("module {}", path),
-                        docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
-                        kind: CompletionItemKind::MODULE,
-                    });
-                    symbols.append(&mut exports);
+                    if is_valid_module(path) {
+                        let mut exports = module_exports(path);
+                        let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                        symbols.push(SymbolInfo {
+                            name: path.clone(),
+                            detail: format!("module {}", path),
+                            docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                            kind: CompletionItemKind::MODULE,
+                        });
+                        symbols.append(&mut exports);
+                    }
                 }
             }
             _ => {}
@@ -696,15 +698,17 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
         }
         Stmt::Import(paths) => {
             for (path, _) in paths {
-                let mut exports = module_exports(path);
-                let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
-                symbols.push(SymbolInfo {
-                    name: path.clone(),
-                    detail: format!("module {}", path),
-                    docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
-                    kind: CompletionItemKind::MODULE,
-                });
-                symbols.append(&mut exports);
+                if is_valid_module(path) {
+                    let mut exports = module_exports(path);
+                    let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                    symbols.push(SymbolInfo {
+                        name: path.clone(),
+                        detail: format!("module {}", path),
+                        docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                        kind: CompletionItemKind::MODULE,
+                    });
+                    symbols.append(&mut exports);
+                }
             }
         }
         Stmt::If { then_branch, else_branch, .. } => {
@@ -1010,11 +1014,12 @@ fn check_program(program: &Program) -> Vec<Diagnostic> {
                 for (path, span) in paths {
                     imports.push(path.clone());
                     if !is_valid_module(path) {
-                        diags.push(make_diagnostic(span, path, "module not found"));
+                        diags.push(make_diagnostic(span, path, &format!("module not found '{}'", path)));
+                    } else {
+                        let exposed = path.rsplit('.').next().unwrap_or(path);
+                        global.push(exposed.to_string());
+                        global.extend(module_exports_names(path));
                     }
-                    let exposed = path.rsplit('.').next().unwrap_or(path);
-                    global.push(exposed.to_string());
-                    global.extend(module_exports_names(path));
                 }
             }
             _ => {}
@@ -1104,13 +1109,13 @@ fn check_expr(expr: &Expr, scope: &[String], imports: &[String], diags: &mut Vec
     match expr {
         Expr::Variable { name, span } => {
             if !is_defined(name, scope) {
-                diags.push(make_diagnostic(span, name, "undefined variable"));
+                diags.push(make_diagnostic(span, name, &format!("undefined variable '{}'", name)));
             }
         }
         Expr::Call { callee, args } => {
             if let Expr::Variable { name, span } = callee.as_ref() {
                 if !is_defined(name, scope) {
-                    diags.push(make_diagnostic(span, name, "undefined function"));
+                    diags.push(make_diagnostic(span, name, &format!("undefined function '{}'", name)));
                 }
             } else {
                 check_expr(callee, scope, imports, diags);
@@ -1127,7 +1132,7 @@ fn check_expr(expr: &Expr, scope: &[String], imports: &[String], diags: &mut Vec
         Expr::New { class, args } => {
             if let Expr::Variable { name, span } = class.as_ref() {
                 if !is_defined(name, scope) {
-                    diags.push(make_diagnostic(span, name, "undefined class"));
+                    diags.push(make_diagnostic(span, name, &format!("undefined class '{}'", name)));
                 }
             } else {
                 check_expr(class, scope, imports, diags);
@@ -1169,7 +1174,7 @@ fn module_exports_names(module: &str) -> Vec<String> {
     module_exports(module).into_iter().map(|s| s.name).collect()
 }
 
-fn make_diagnostic(span: &Span, name: &str, kind: &str) -> Diagnostic {
+fn make_diagnostic(span: &Span, name: &str, message: &str) -> Diagnostic {
     let line = span.line.saturating_sub(1) as u32;
     let len = name.len() as u32;
     let end_col = span.col.saturating_sub(1) as u32;
@@ -1183,7 +1188,7 @@ fn make_diagnostic(span: &Span, name: &str, kind: &str) -> Diagnostic {
         code: None,
         code_description: None,
         source: Some("period".to_string()),
-        message: format!("{} '{}' (did you forget 'from <module>'?)", kind, name),
+        message: message.to_string(),
         related_information: None,
         tags: None,
         data: None,
