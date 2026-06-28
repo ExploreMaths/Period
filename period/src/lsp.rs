@@ -285,8 +285,10 @@ fn completion(
 
     let line_text = text.lines().nth(params.text_document_position.position.line as usize).unwrap_or("");
 
-    // A trailing period ends a Period statement; don't offer completions after it.
-    if line_text.trim_end().ends_with('.') {
+    // An import statement ending with '.' is complete; don't offer completions after it,
+    // otherwise pressing Enter would insert the first exported name (e.g. 'abs').
+    let trimmed = line_text.trim();
+    if trimmed.starts_with("import") && trimmed.ends_with('.') {
         return Ok(Some(CompletionResponse::Array(Vec::new())));
     }
 
