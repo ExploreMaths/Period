@@ -5,12 +5,12 @@
  * prints the output directly and exits without loading the full Rust
  * interpreter, making the common case faster than a compiled C program.
  *
- * For all other inputs it replaces itself with period-core.exe.
+ * For all other inputs it runs period-core.exe with inherited stdin/stdout
+ * and waits for it to finish.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <io.h>
-#include <process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +27,35 @@ static void find_core_exe(void) {
     char *slash = strrchr(core_path, '\\');
     char *name = slash ? slash + 1 : core_path;
     strcpy(name, "period-core.exe");
+}
+
+static int run_core(int argc, char *argv[]) {
+    find_core_exe();
+
+    char cmdline[8192];
+    int pos = snprintf(cmdline, sizeof(cmdline), "\"%s\"", core_path);
+    for (int i = 1; i < argc; i++) {
+        pos += snprintf(cmdline + pos, sizeof(cmdline) - pos, " %s", argv[i]);
+        if (pos >= (int)sizeof(cmdline)) {
+            fprintf(stderr, "period: command line too long\n");
+            return 1;
+        }
+    }
+
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+
+    if (!CreateProcessA(core_path, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+        fprintf(stderr, "period: could not run %s\n", core_path);
+        return 1;
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)code;
 }
 
 /* Returns 1 and prints the literal if the source is only `show "...".` */
@@ -58,19 +87,13 @@ static int try_fast_show(const char *src) {
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        find_core_exe();
-        _execvp(core_path, argv);
-        fprintf(stderr, "period: could not run %s\n", core_path);
-        return 1;
+        return run_core(argc, argv);
     }
 
     /* Pass-through options that the full interpreter handles. */
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 ||
         strcmp(argv[1], "--lsp") == 0) {
-        find_core_exe();
-        _execvp(core_path, argv);
-        fprintf(stderr, "period: could not run %s\n", core_path);
-        return 1;
+        return run_core(argc, argv);
     }
 
     HANDLE file = CreateFileA(
@@ -83,19 +106,13 @@ int main(int argc, char *argv[]) {
         NULL
     );
     if (file == INVALID_HANDLE_VALUE) {
-        find_core_exe();
-        _execvp(core_path, argv);
-        fprintf(stderr, "period: could not run %s\n", core_path);
-        return 1;
+        return run_core(argc, argv);
     }
 
     DWORD size = GetFileSize(file, NULL);
     if (size == INVALID_FILE_SIZE || size > 1024 * 1024) {
         CloseHandle(file);
-        find_core_exe();
-        _execvp(core_path, argv);
-        fprintf(stderr, "period: could not run %s\n", core_path);
-        return 1;
+        return run_core(argc, argv);
     }
 
     char *buf = (char *)malloc(size + 1);
@@ -110,8 +127,5 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    find_core_exe();
-    _execvp(core_path, argv);
-    fprintf(stderr, "period: could not run %s\n", core_path);
-    return 1;
+    return run_core(argc, argv);
 }
