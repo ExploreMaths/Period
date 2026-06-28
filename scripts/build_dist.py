@@ -44,6 +44,9 @@ def main() -> None:
     shutil.copytree(ROOT / "period" / "stdlib", DIST / "stdlib")
     shutil.copy(ROOT / "assets" / "period.ico", DIST / "period.ico")
 
+    print("Bundling TCC for numeric JIT...")
+    shutil.copytree(ROOT / ".tools" / "tcc" / "tcc", DIST / "tcc")
+
     print("Compiling fast-path wrapper...")
     run([TCC_EXE, PERIOD_DIR / "wrapper.c", "-o", DIST / "period.exe"])
 

@@ -1,5 +1,5 @@
 mod ast;
-mod compiler;
+mod c_backend;
 mod interpreter;
 mod lexer;
 mod lsp;
@@ -84,12 +84,12 @@ fn main() {
         }
     };
 
-    // Fast path: compile numeric programs to Rust and cache the executable.
-    if compiler::try_compile(&program).is_some() {
+    // Fast path: compile numeric programs to C via TCC and cache the executable.
+    if c_backend::try_compile_c(&program).is_some() {
         if let Some(code) = try_run_compiled(&source, &program) {
             process::exit(code);
         }
-        eprintln!("rustc not available; falling back to interpreter.");
+        eprintln!("TCC not available; falling back to interpreter.");
     }
 
     // General path: tree-walking interpreter.
@@ -107,35 +107,21 @@ fn run_interpreter(program: &ast::Program, path: PathBuf) -> ! {
 }
 
 fn try_run_compiled(source: &str, program: &ast::Program) -> Option<i32> {
-    let rust_source = compiler::try_compile(program)?;
-
-    // Verify rustc is on PATH before doing any work.
-    if !Command::new("rustc")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .ok()?
-        .success()
-    {
-        return None;
-    }
+    let c_source = c_backend::try_compile_c(program)?;
+    let tcc_exe = find_tcc()?;
 
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     let source_hash = hasher.finish();
-    let cache_dir = env::temp_dir().join("period_rs_cache");
+    let cache_dir = env::temp_dir().join("period_c_cache");
     fs::create_dir_all(&cache_dir).ok()?;
     let exe_path = cache_dir.join(format!("period_{:016x}.exe", source_hash));
     if !exe_path.exists() {
-        let rs_path = cache_dir.join(format!("period_{:016x}.rs", source_hash));
-        fs::write(&rs_path, &rust_source).ok()?;
-        let status = Command::new("rustc")
-            .arg("-A").arg("warnings")
-            .arg("-C").arg("opt-level=3")
-            .arg("-C").arg("target-cpu=native")
+        let c_path = cache_dir.join(format!("period_{:016x}.c", source_hash));
+        fs::write(&c_path, &c_source).ok()?;
+        let status = Command::new(&tcc_exe)
             .arg("-o").arg(&exe_path)
-            .arg(&rs_path)
+            .arg(&c_path)
             .status()
             .ok()?;
         if !status.success() {
@@ -144,4 +130,35 @@ fn try_run_compiled(source: &str, program: &ast::Program) -> Option<i32> {
     }
     let status = Command::new(&exe_path).status().ok()?;
     Some(status.code().unwrap_or(1))
+}
+
+fn find_tcc() -> Option<PathBuf> {
+    if let Ok(path) = env::var("PERIOD_TCC") {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    // Look next to the current executable (e.g. dist/tcc/tcc.exe).
+    let mut exe_dir = env::current_exe().ok()?;
+    exe_dir.pop();
+    let candidates = [
+        exe_dir.join("tcc").join("tcc.exe"),
+        exe_dir.join("tcc.exe"),
+    ];
+    for candidate in &candidates {
+        if candidate.exists() {
+            return Some(candidate.clone());
+        }
+    }
+    // Fall back to PATH.
+    if let Ok(path) = env::var("PATH") {
+        for dir in path.split(';') {
+            let candidate = PathBuf::from(dir).join("tcc.exe");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
