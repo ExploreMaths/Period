@@ -306,9 +306,10 @@ impl Parser {
     fn parse_or(&mut self) -> Expr {
         let mut left = self.parse_and();
         while self.check(&TokenKind::Or) {
+            let span = self.peek(0).span.clone();
             self.advance();
             let right = self.parse_and();
-            left = Expr::Binary { op: BinOp::Or, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op: BinOp::Or, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -316,9 +317,10 @@ impl Parser {
     fn parse_and(&mut self) -> Expr {
         let mut left = self.parse_equality();
         while self.check(&TokenKind::And) {
+            let span = self.peek(0).span.clone();
             self.advance();
             let right = self.parse_equality();
-            left = Expr::Binary { op: BinOp::And, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op: BinOp::And, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -326,12 +328,12 @@ impl Parser {
     fn parse_equality(&mut self) -> Expr {
         let mut left = self.parse_comparison();
         loop {
-            let op = if self.check(&TokenKind::EqEq) { BinOp::Eq }
-            else if self.check(&TokenKind::NotEq) { BinOp::Ne }
+            let (op, span) = if self.check(&TokenKind::EqEq) { (BinOp::Eq, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::NotEq) { (BinOp::Ne, self.peek(0).span.clone()) }
             else { break; };
             self.advance();
             let right = self.parse_comparison();
-            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -339,14 +341,14 @@ impl Parser {
     fn parse_comparison(&mut self) -> Expr {
         let mut left = self.parse_additive();
         loop {
-            let op = if self.check(&TokenKind::Less) { BinOp::Lt }
-            else if self.check(&TokenKind::Greater) { BinOp::Gt }
-            else if self.check(&TokenKind::LessEq) { BinOp::Le }
-            else if self.check(&TokenKind::GreaterEq) { BinOp::Ge }
+            let (op, span) = if self.check(&TokenKind::Less) { (BinOp::Lt, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::Greater) { (BinOp::Gt, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::LessEq) { (BinOp::Le, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::GreaterEq) { (BinOp::Ge, self.peek(0).span.clone()) }
             else { break; };
             self.advance();
             let right = self.parse_additive();
-            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -354,12 +356,12 @@ impl Parser {
     fn parse_additive(&mut self) -> Expr {
         let mut left = self.parse_multiplicative();
         loop {
-            let op = if self.check(&TokenKind::Plus) { BinOp::Add }
-            else if self.check(&TokenKind::Minus) { BinOp::Sub }
+            let (op, span) = if self.check(&TokenKind::Plus) { (BinOp::Add, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::Minus) { (BinOp::Sub, self.peek(0).span.clone()) }
             else { break; };
             self.advance();
             let right = self.parse_multiplicative();
-            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -367,13 +369,13 @@ impl Parser {
     fn parse_multiplicative(&mut self) -> Expr {
         let mut left = self.parse_power();
         loop {
-            let op = if self.check(&TokenKind::Star) { BinOp::Mul }
-            else if self.check(&TokenKind::Slash) { BinOp::Div }
-            else if self.check(&TokenKind::Percent) { BinOp::Mod }
+            let (op, span) = if self.check(&TokenKind::Star) { (BinOp::Mul, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::Slash) { (BinOp::Div, self.peek(0).span.clone()) }
+            else if self.check(&TokenKind::Percent) { (BinOp::Mod, self.peek(0).span.clone()) }
             else { break; };
             self.advance();
             let right = self.parse_power();
-            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right) };
+            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right), span };
         }
         left
     }
@@ -381,9 +383,10 @@ impl Parser {
     fn parse_power(&mut self) -> Expr {
         let left = self.parse_unary();
         if self.check(&TokenKind::Power) {
+            let span = self.peek(0).span.clone();
             self.advance();
             let right = self.parse_power();
-            Expr::Binary { op: BinOp::Pow, left: Box::new(left), right: Box::new(right) }
+            Expr::Binary { op: BinOp::Pow, left: Box::new(left), right: Box::new(right), span }
         } else { left }
     }
 

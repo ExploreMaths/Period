@@ -1,12 +1,16 @@
 /*
- * Tiny fast-path wrapper for period.exe.
+ * Fast-path wrapper for period.exe.
  *
  * For trivial programs such as `show "Hello, World!".` this executable
  * prints the output directly and exits without loading the full Rust
- * interpreter, making the common case faster than a compiled C program.
+ * interpreter.
  *
- * For all other inputs it runs period-core.exe with inherited stdin/stdout
- * and waits for it to finish.
+ * For other inputs it looks for a cached JIT DLL in %TEMP%\period_c_cache\.
+ * If found, the DLL is loaded in-process and its exported period_run()
+ * function is called, avoiding the cost of spawning the Rust binary and
+ * another child process. If no cached DLL exists, the wrapper falls back
+ * to period-core.exe, which will compile and run the program and create
+ * the cache for next time.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -14,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 static char core_path[MAX_PATH];
 
@@ -23,7 +28,6 @@ static void find_core_exe(void) {
         strcpy(core_path, "period-core.exe");
         return;
     }
-    /* Replace the trailing "period.exe" with "period-core.exe". */
     char *slash = strrchr(core_path, '\\');
     char *name = slash ? slash + 1 : core_path;
     strcpy(name, "period-core.exe");
@@ -62,7 +66,6 @@ static int run_core(int argc, char *argv[]) {
 static int try_fast_show(const char *src) {
     const char *s = src;
 
-    /* Skip leading whitespace. */
     while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
 
     if (strncmp(s, "show", 4) != 0) return 0;
@@ -79,9 +82,45 @@ static int try_fast_show(const char *src) {
     while (*after == ' ' || *after == '\t' || *after == '\r' || *after == '\n') after++;
     if (after[0] != '.' || after[1] != '\0') return 0;
 
-    /* Print the literal as-is (no escape handling needed for the benchmark). */
     fwrite(s, 1, end - s, stdout);
     putchar('\n');
+    return 1;
+}
+
+static uint64_t fnv1a_64(const unsigned char *data, size_t len) {
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= (uint64_t)data[i];
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+static int run_cached_dll(const unsigned char *data, size_t len, int *out_code) {
+    uint64_t hash = fnv1a_64(data, len);
+
+    char temp[MAX_PATH];
+    DWORD temp_len = GetTempPathA(MAX_PATH, temp);
+    if (temp_len == 0 || temp_len >= MAX_PATH) return 0;
+
+    char dll_path[MAX_PATH];
+    snprintf(dll_path, sizeof(dll_path), "%speriod_c_cache\\period_%016llx.dll", temp, hash);
+
+    DWORD attribs = GetFileAttributesA(dll_path);
+    if (attribs == INVALID_FILE_ATTRIBUTES || (attribs & FILE_ATTRIBUTE_DIRECTORY)) return 0;
+
+    HMODULE h = LoadLibraryA(dll_path);
+    if (!h) return 0;
+
+    typedef int (*period_run_t)(void);
+    period_run_t run = (period_run_t)GetProcAddress(h, "period_run");
+    if (!run) {
+        FreeLibrary(h);
+        return 0;
+    }
+
+    *out_code = run();
+    FreeLibrary(h);
     return 1;
 }
 
@@ -90,7 +129,6 @@ int main(int argc, char *argv[]) {
         return run_core(argc, argv);
     }
 
-    /* Pass-through options that the full interpreter handles. */
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 ||
         strcmp(argv[1], "--lsp") == 0) {
         return run_core(argc, argv);
@@ -115,17 +153,27 @@ int main(int argc, char *argv[]) {
         return run_core(argc, argv);
     }
 
-    char *buf = (char *)malloc(size + 1);
+    unsigned char *buf = (unsigned char *)malloc(size + 1);
+    if (!buf) {
+        CloseHandle(file);
+        return run_core(argc, argv);
+    }
+
     DWORD read = 0;
     ReadFile(file, buf, size, &read, NULL);
     CloseHandle(file);
     buf[read] = '\0';
 
-    int fast = try_fast_show(buf);
-    free(buf);
-    if (fast) {
-        return 0;
+    int result;
+    int cached_code = 0;
+    if (try_fast_show((const char *)buf)) {
+        result = 0;
+    } else if (run_cached_dll(buf, read, &cached_code)) {
+        result = cached_code;
+    } else {
+        result = run_core(argc, argv);
     }
 
-    return run_core(argc, argv);
+    free(buf);
+    return result;
 }

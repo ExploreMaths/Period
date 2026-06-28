@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use crate::ast::*;
 
-pub fn try_compile_c(program: &Program) -> Option<String> {
-    let mut generator = CGen::new();
+pub fn try_compile_c(program: &Program, source_path: &str) -> Option<(String, Vec<(usize, Span)>)> {
+    let mut generator = CGen::new(source_path);
     if generator.gen_program(program).is_ok() {
-        Some(generator.output)
+        Some((generator.output, generator.line_map))
     } else {
         None
     }
@@ -18,11 +18,34 @@ struct CGen {
     indent: usize,
     locals: Vec<HashSet<String>>,
     globals: HashSet<String>,
+    source_path: String,
+    stmt_span: Option<Span>,
+    line_map: Vec<(usize, Span)>,
 }
 
 impl CGen {
-    fn new() -> Self {
-        Self { output: String::new(), indent: 0, locals: Vec::new(), globals: HashSet::new() }
+    fn new(source_path: &str) -> Self {
+        Self { output: String::new(), indent: 0, locals: Vec::new(), globals: HashSet::new(), source_path: source_path.to_string(), stmt_span: None, line_map: Vec::new() }
+    }
+
+    fn escape_c_string(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
+    }
+
+    fn expr_span(expr: &Expr) -> Option<&Span> {
+        match expr {
+            Expr::Variable { span, .. } | Expr::Binary { span, .. } => Some(span),
+            _ => None,
+        }
+    }
+
+    fn stmt_span(stmt: &Stmt) -> Option<&Span> {
+        match stmt {
+            Stmt::Show(e) | Stmt::Let { value: e, .. } | Stmt::Set { value: e, .. } | Stmt::Expr(e) | Stmt::Return(Some(e)) => Self::expr_span(e),
+            Stmt::If { cond, .. } | Stmt::While { cond, .. } => Self::expr_span(cond),
+            Stmt::For { iterable, .. } => Self::expr_span(iterable),
+            _ => None,
+        }
     }
 
     fn unsupported<T>() -> Result<T, Unsupported> { Err(Unsupported) }
@@ -41,16 +64,67 @@ impl CGen {
         for _ in 0..self.indent { self.output.push_str("    "); }
         self.output.push_str(s);
         self.output.push('\n');
+        if let Some(span) = &self.stmt_span {
+            let c_line = self.output.matches('\n').count();
+            self.line_map.push((c_line, span.clone()));
+        }
     }
 
     fn gen_program(&mut self, program: &Program) -> Result<(), Unsupported> {
         self.line("#include <stdio.h>");
+        self.line("#include <stdlib.h>");
+        self.line("#include <string.h>");
+        self.line("");
+        self.line(&format!("static const char *period_source_path = \"{}\";", Self::escape_c_string(&self.source_path)));
+        self.line("");
+        self.line("static void period_runtime_error(int line, int col, const char *msg) {");
+        self.indent += 1;
+        self.line("fprintf(stderr, \"%s:%d:%d: runtime error: %s\\n\", period_source_path, line, col, msg);");
+        self.line("FILE *f = fopen(period_source_path, \"r\");");
+        self.line("if (f) {");
+        self.indent += 1;
+        self.line("char buf[1024];");
+        self.line("int cur = 1;");
+        self.line("while (fgets(buf, sizeof(buf), f)) {");
+        self.indent += 1;
+        self.line("size_t len = strlen(buf);");
+        self.line("while (len > 0 && (buf[len-1] == '\\n' || buf[len-1] == '\\r')) { buf[--len] = '\\0'; }");
+        self.line("if (cur == line) {");
+        self.indent += 1;
+        self.line("fprintf(stderr, \"    %d | %s\\n\", line, buf);");
+        self.line("fprintf(stderr, \"%*s^\\n\", 7 + col - 1, \"\");");
+        self.line("break;");
+        self.indent -= 1;
+        self.line("}");
+        self.line("cur++;");
+        self.indent -= 1;
+        self.line("}");
+        self.line("fclose(f);");
+        self.indent -= 1;
+        self.line("}");
+        self.line("exit(1);");
+        self.indent -= 1;
+        self.line("}");
         self.line("");
         self.line("static long long period_pow(long long base, long long exp) {");
         self.indent += 1;
         self.line("long long result = 1;");
         self.line("while (exp > 0) { result *= base; exp--; }");
         self.line("return result;");
+        self.indent -= 1;
+        self.line("}");
+        self.line("");
+        self.line("static long long period_div(long long a, long long b, int line, int col) {");
+        self.indent += 1;
+        self.line("if (b == 0) { period_runtime_error(line, col, \"Division by zero.\"); }");
+        self.line("return a / b;");
+        self.indent -= 1;
+        self.line("}");
+        self.line("");
+        self.line("static long long period_mod(long long a, long long b, int line, int col) {");
+        self.indent += 1;
+        self.line("if (b == 0) { period_runtime_error(line, col, \"Modulo by zero.\"); }");
+        self.line("return a % b;");
         self.indent -= 1;
         self.line("}");
         self.line("");
@@ -62,8 +136,8 @@ impl CGen {
             }
         }
 
-        // Wrap top-level statements in main().
-        self.line("int main(void) {");
+        // Wrap top-level statements in an exported function that the host loads.
+        self.line("__declspec(dllexport) int period_run(void) {");
         self.indent += 1;
         for stmt in &program.statements {
             if !matches!(stmt, Stmt::Define { .. }) {
@@ -115,6 +189,8 @@ impl CGen {
     }
 
     fn gen_stmt(&mut self, stmt: &Stmt) -> Result<(), Unsupported> {
+        let prev_span = self.stmt_span.take();
+        self.stmt_span = Self::stmt_span(stmt).cloned();
         match stmt {
             Stmt::Let { name, value } => {
                 self.globals.insert(name.clone());
@@ -170,6 +246,7 @@ impl CGen {
             Stmt::Expr(expr) => { self.gen_expr(expr)?; }
             _ => return Self::unsupported(),
         }
+        self.stmt_span = prev_span;
         Ok(())
     }
 
@@ -202,7 +279,7 @@ impl CGen {
             Expr::Bool(b) => Ok(if *b { "1" } else { "0" }.to_string()),
             Expr::Number(n) => Ok(format!("{}LL", *n as i64)),
             Expr::Variable { name, .. } => Ok(name.clone()),
-            Expr::Binary { op, left, right } => {
+            Expr::Binary { op, left, right, .. } => {
                 let l = self.gen_expr(left)?;
                 let r = self.gen_expr(right)?;
                 match op {
@@ -233,15 +310,15 @@ impl CGen {
             Expr::Number(n) => Ok(format!("{}LL", *n as i64)),
             Expr::Bool(b) => Ok(if *b { "1LL" } else { "0LL" }.to_string()),
             Expr::Variable { name, .. } => Ok(name.clone()),
-            Expr::Binary { op, left, right } => {
+            Expr::Binary { op, left, right, span } => {
                 let l = self.gen_expr(left)?;
                 let r = self.gen_expr(right)?;
                 match op {
                     BinOp::Add => Ok(format!("({} + {})", l, r)),
                     BinOp::Sub => Ok(format!("({} - {})", l, r)),
                     BinOp::Mul => Ok(format!("({} * {})", l, r)),
-                    BinOp::Div => Ok(format!("({} / {})", l, r)),
-                    BinOp::Mod => Ok(format!("({} % {})", l, r)),
+                    BinOp::Div => Ok(format!("period_div({}, {}, {}, {})", l, r, span.line, span.col)),
+                    BinOp::Mod => Ok(format!("period_mod({}, {}, {}, {})", l, r, span.line, span.col)),
                     BinOp::Pow => Ok(format!("period_pow({}, {})", l, r)),
                     BinOp::Eq => Ok(format!("(({}) == ({}) ? 1LL : 0LL)", l, r)),
                     BinOp::Ne => Ok(format!("(({}) != ({}) ? 1LL : 0LL)", l, r)),

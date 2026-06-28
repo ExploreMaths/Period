@@ -296,8 +296,14 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
       <pre><code>example.period:1:11: error: Expected '.' at the end of a 'let' statement.
        1 | let x be 5
          |           ^</code></pre>
-      <p>Runtime errors, such as division by zero or undefined variables, also include source locations:</p>
-      <pre><code>example.period: runtime error: [line 2, columns 6-11] Division by zero.</code></pre>
+      <p>Runtime errors, such as division by zero or undefined variables, also print the offending source line with a caret pointing to the error, similar to Python:</p>
+      <pre><code>example.period:2:8: runtime error: Division by zero.
+    2 | show 0 / 0.
+      |        ^</code></pre>
+      <p>Even compile-time diagnostics from the C/JIT backend are mapped back to the original Period source, so you see the same caret style instead of raw C compiler output:</p>
+      <pre><code>example.period:1:7: error: 'x' undeclared
+    1 | show x.
+      |       ^</code></pre>
     </section>
 
     <section id="grammar">

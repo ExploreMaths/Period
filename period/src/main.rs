@@ -5,12 +5,10 @@ mod lexer;
 mod lsp;
 mod parser;
 
-use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 
 /// Print a nicely formatted parse/lexer error with file location and caret.
 fn report_parse_error(path: &str, source: &str, msg: &str) {
@@ -96,6 +94,12 @@ fn main() {
         process::exit(0);
     }
 
+    // If a cached JIT DLL exists for this exact source, run it immediately
+    // without lexing/parsing again.
+    if let Some(code) = try_run_cached_dll(&source) {
+        process::exit(code);
+    }
+
     let mut lexer = lexer::Lexer::new(&source);
     let mut tokens = Vec::new();
     loop {
@@ -122,52 +126,142 @@ fn main() {
         }
     };
 
-    // Fast path: compile numeric programs to C via TCC and cache the executable.
-    if c_backend::try_compile_c(&program).is_some() {
-        if let Some(code) = try_run_compiled(&source, &program) {
+    // Fast path: compile numeric programs to C via TCC and cache a DLL.
+    if c_backend::try_compile_c(&program, path).is_some() {
+        if let Some(code) = try_run_compiled(&source, &program, path) {
             process::exit(code);
         }
         eprintln!("TCC not available; falling back to interpreter.");
     }
 
     // General path: tree-walking interpreter.
-    run_interpreter(&program, PathBuf::from(path));
+    run_interpreter(&program, PathBuf::from(path), &source);
 }
 
-fn run_interpreter(program: &ast::Program, path: PathBuf) -> ! {
+fn run_interpreter(program: &ast::Program, path: PathBuf, source: &str) -> ! {
     let mut interp = interpreter::Interpreter::new();
-    interp.set_current_path(path);
+    interp.set_current_path(path.clone());
     if let Err(ctrl) = interp.interpret(program) {
-        eprintln!("runtime error: {:?}", ctrl);
+        report_runtime_error(&path.to_string_lossy(), source, &ctrl);
         process::exit(1);
     }
     process::exit(0);
 }
 
-fn try_run_compiled(source: &str, program: &ast::Program) -> Option<i32> {
-    let c_source = c_backend::try_compile_c(program)?;
+fn report_runtime_error(path: &str, source: &str, ctrl: &interpreter::Control) {
+    match ctrl {
+        interpreter::Control::RuntimeError(msg, span) => {
+            eprintln!("{}:{}:{}: runtime error: {}", path, span.line, span.col, msg);
+            if let Some(src_line) = source.lines().nth(span.line.saturating_sub(1)) {
+                eprintln!("    {} | {}", span.line, src_line);
+                let indent = 7 + span.col.saturating_sub(1);
+                eprintln!("{}^", " ".repeat(indent));
+            }
+        }
+        _ => {
+            eprintln!("{}: runtime error: {:?}", path, ctrl);
+        }
+    }
+}
+
+fn fnv1a_64(data: &[u8]) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+    let mut hash = FNV_OFFSET;
+    for &b in data {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
+
+fn cache_dll_path(source: &str) -> PathBuf {
+    let source_hash = fnv1a_64(source.as_bytes());
+    env::temp_dir().join("period_c_cache").join(format!("period_{:016x}.dll", source_hash))
+}
+
+fn try_run_cached_dll(source: &str) -> Option<i32> {
+    let dll_path = cache_dll_path(source);
+    if !dll_path.exists() {
+        return None;
+    }
+    unsafe {
+        let lib = libloading::Library::new(&dll_path).ok()?;
+        let run: libloading::Symbol<unsafe extern "C" fn() -> i32> = lib.get(b"period_run\0").ok()?;
+        Some(run())
+    }
+}
+
+fn try_run_compiled(source: &str, program: &ast::Program, path: &str) -> Option<i32> {
+    let (c_source, line_map) = c_backend::try_compile_c(program, path)?;
     let tcc_exe = find_tcc()?;
 
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    let source_hash = hasher.finish();
+    let dll_path = cache_dll_path(source);
+    let source_hash = fnv1a_64(source.as_bytes());
     let cache_dir = env::temp_dir().join("period_c_cache");
     fs::create_dir_all(&cache_dir).ok()?;
-    let exe_path = cache_dir.join(format!("period_{:016x}.exe", source_hash));
-    if !exe_path.exists() {
-        let c_path = cache_dir.join(format!("period_{:016x}.c", source_hash));
+    let c_path = cache_dir.join(format!("period_{:016x}.c", source_hash));
+    if !dll_path.exists() {
         fs::write(&c_path, &c_source).ok()?;
-        let status = Command::new(&tcc_exe)
-            .arg("-o").arg(&exe_path)
+        let output = Command::new(&tcc_exe)
+            .arg("-shared")
+            .arg("-o").arg(&dll_path)
             .arg(&c_path)
-            .status()
+            .output()
             .ok()?;
-        if !status.success() {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if report_compile_error(path, source, &c_path, &stderr, &line_map) {
+                process::exit(1);
+            }
+            eprintln!("{}", stderr.trim());
             return None;
         }
     }
-    let status = Command::new(&exe_path).status().ok()?;
-    Some(status.code().unwrap_or(1))
+    unsafe {
+        let lib = libloading::Library::new(&dll_path).ok()?;
+        let run: libloading::Symbol<unsafe extern "C" fn() -> i32> = lib.get(b"period_run\0").ok()?;
+        Some(run())
+    }
+}
+
+fn report_compile_error(path: &str, source: &str, c_path: &std::path::Path, stderr: &str, line_map: &[(usize, ast::Span)]) -> bool {
+    let c_path_str = c_path.to_string_lossy().replace('\\', "/");
+    for line in stderr.lines() {
+        let norm = line.replace('\\', "/");
+        if let Some(rest) = norm.strip_prefix(&c_path_str) {
+            if let Some(after) = rest.strip_prefix(':') {
+                let mut parts = after.splitn(2, ':');
+                if let Some(num_str) = parts.next() {
+                    if let Ok(c_line) = num_str.parse::<usize>() {
+                        let msg = parts.next().unwrap_or("error").trim().strip_prefix("error:").unwrap_or("").trim();
+                        if let Some(span) = find_span_for_c_line(line_map, c_line) {
+                            eprintln!("{}:{}:{}: error: {}", path, span.line, span.col, msg);
+                            if let Some(src_line) = source.lines().nth(span.line.saturating_sub(1)) {
+                                eprintln!("    {} | {}", span.line, src_line);
+                                let indent = 7 + span.col.saturating_sub(1);
+                                eprintln!("{}^", " ".repeat(indent));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn find_span_for_c_line(line_map: &[(usize, ast::Span)], c_line: usize) -> Option<&ast::Span> {
+    let mut best = None;
+    for (cl, span) in line_map {
+        if *cl <= c_line {
+            best = Some(span);
+        } else {
+            break;
+        }
+    }
+    best
 }
 
 fn find_tcc() -> Option<PathBuf> {

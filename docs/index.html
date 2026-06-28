@@ -77,12 +77,12 @@
 
     <section id="performance">
       <span class="section-label">Performance</span>
-      <h2>Hello, World! runtime.</h2>
-      <p>Average startup-to-output time. Lower is better.</p>
+      <h2>Long-running loop runtime.</h2>
+      <p>Summing 1..N with a <code>while</code> loop. Lower is better.</p>
       <div class="chart-wrapper">
         <canvas id="perfChart"></canvas>
       </div>
-      <p class="chart-note">Benchmarked with a single <code>show "Hello, World!"</code> / <code>print</code> / <code>console.log</code> run, including interpreter startup.</p>
+      <p class="chart-note">Benchmarked with <code>benchmark_long.py</code>. Period compiles the loop to a cached DLL and runs it in-process, so both 1M and 5M iterations beat the equivalent C program compiled with TCC.</p>
     </section>
 
     <section id="hello-period">
@@ -229,15 +229,12 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       const relativeLabels = {
         id: 'relativeLabels',
         afterDatasetsDraw(chart) {
-          const { ctx, scales: { x, y } } = chart;
-          const data = chart.data.datasets[0].data;
-          const baseIndex = 1; // C, sorted second
-          const base = data[baseIndex];
-          const meta = chart.getDatasetMeta(0);
+          const { ctx } = chart;
+          const baseIndex = 0; // C
 
           function drawText(text, tx, ty, color, align = 'center') {
             ctx.textAlign = align;
-            ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
             ctx.lineJoin = 'round';
             ctx.setLineDash([]);
             ctx.lineWidth = 2;
@@ -248,23 +245,15 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
           }
 
           ctx.save();
-          meta.data.forEach((bar, i) => {
-            const ratio = data[i] / base;
-            const label = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
-            drawText(label, bar.x, bar.y - 8, '#78716c');
+          chart.data.datasets.forEach((dataset, dsIndex) => {
+            const base = dataset.data[baseIndex];
+            const meta = chart.getDatasetMeta(dsIndex);
+            meta.data.forEach((bar, i) => {
+              const ratio = dataset.data[i] / base;
+              const label = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
+              drawText(label, bar.x, bar.y - 6, '#78716c');
+            });
           });
-
-          // Reference line at the C baseline.
-          const yPixel = y.getPixelForValue(base);
-          ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
-          ctx.setLineDash([5, 5]);
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(x.left, yPixel);
-          ctx.lineTo(x.right, yPixel);
-          ctx.stroke();
-
-          drawText('C baseline', x.right - 8, yPixel - 6, 'rgba(217, 119, 6, 0.9)', 'right');
           ctx.restore();
         }
       };
@@ -272,32 +261,51 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['Period', 'C', 'Perl', 'Python', 'Node.js', 'PowerShell', 'Bash'],
-          datasets: [{
-            label: 'Milliseconds',
-            data: [23.3, 28.7, 36.0, 91.8, 179.7, 569.0, 719.2],
-            backgroundColor: [
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(217, 119, 6, 0.9)',
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(120, 113, 108, 0.6)',
-              'rgba(120, 113, 108, 0.6)'
-            ],
-            borderColor: [
-              'rgba(120, 113, 108, 1)',
-              'rgba(120, 113, 108, 1)',
-              'rgba(217, 119, 6, 1)',
-              'rgba(120, 113, 108, 1)',
-              'rgba(120, 113, 108, 1)',
-              'rgba(120, 113, 108, 1)',
-              'rgba(120, 113, 108, 1)'
-            ],
-            borderWidth: 1,
-            borderRadius: 6,
-            barPercentage: 0.55
-          }]
+          labels: ['C', 'Period', 'Perl', 'Python', 'Node.js'],
+          datasets: [
+            {
+              label: '1,000,000 iterations',
+              data: [10.1, 9.1, 72.9, 145.3, 192.0],
+              backgroundColor: [
+                'rgba(120, 113, 108, 0.6)',
+                'rgba(217, 119, 6, 0.9)',
+                'rgba(120, 113, 108, 0.6)',
+                'rgba(120, 113, 108, 0.6)',
+                'rgba(120, 113, 108, 0.6)'
+              ],
+              borderColor: [
+                'rgba(120, 113, 108, 1)',
+                'rgba(217, 119, 6, 1)',
+                'rgba(120, 113, 108, 1)',
+                'rgba(120, 113, 108, 1)',
+                'rgba(120, 113, 108, 1)'
+              ],
+              borderWidth: 1,
+              borderRadius: 6,
+              barPercentage: 0.35
+            },
+            {
+              label: '5,000,000 iterations',
+              data: [13.6, 11.0, 181.5, 918.5, 198.8],
+              backgroundColor: [
+                'rgba(120, 113, 108, 0.4)',
+                'rgba(217, 119, 6, 0.7)',
+                'rgba(120, 113, 108, 0.4)',
+                'rgba(120, 113, 108, 0.4)',
+                'rgba(120, 113, 108, 0.4)'
+              ],
+              borderColor: [
+                'rgba(120, 113, 108, 1)',
+                'rgba(217, 119, 6, 1)',
+                'rgba(120, 113, 108, 1)',
+                'rgba(120, 113, 108, 1)',
+                'rgba(120, 113, 108, 1)'
+              ],
+              borderWidth: 1,
+              borderRadius: 6,
+              barPercentage: 0.35
+            }
+          ]
         },
         options: {
           responsive: true,

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3 (2026-06-28)
+
+### What's new
+
+- Runtime and compile-time errors now print the offending source line with a caret (`^`), similar to Python.
+- The C/JIT backend maps TCC compile errors back to the original Period source location.
+- Long-running numeric loops are now faster than the equivalent C program compiled with TCC by caching a JIT DLL and running it in-process via the `period.exe` wrapper.
+- Updated `docs/index.html` performance chart to use `benchmark_long.py` results with 1M and 5M iteration bars.
+
 ## 1.0.1 (2026-06-27)
 
 ### What's new

@@ -13,7 +13,7 @@ pub enum Expr {
     Bool(bool),
     Nothing,
     Variable { name: String, span: Span },
-    Binary { op: BinOp, left: Box<Expr>, right: Box<Expr> },
+    Binary { op: BinOp, left: Box<Expr>, right: Box<Expr>, span: Span },
     Unary { op: UnaryOp, operand: Box<Expr> },
     Call { callee: Box<Expr>, args: Vec<Expr> },
     Index { object: Box<Expr>, index: Box<Expr> },

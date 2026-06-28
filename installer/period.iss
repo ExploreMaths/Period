@@ -1,5 +1,5 @@
 #define MyAppName "Period"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "Period Language"
 #define MyAppURL "https://exploremaths.github.io/Period/"
 

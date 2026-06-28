@@ -199,6 +199,7 @@ impl Environment {
 pub enum Control {
     Return(Value),
     Error(String),
+    RuntimeError(String, Span),
 }
 
 pub struct Interpreter {
@@ -357,8 +358,8 @@ impl Interpreter {
             Expr::Bool(b) => Ok(Value::Bool(*b)),
             Expr::Nothing => Ok(Value::Nothing),
             Expr::Ellipsis => Ok(Value::Nothing),
-            Expr::Variable { name, .. } => {
-                let value = self.env.borrow().get(name).ok_or_else(|| Control::Error(format!("Undefined variable '{}'", name)))?;
+            Expr::Variable { name, span } => {
+                let value = self.env.borrow().get(name).ok_or_else(|| Control::RuntimeError(format!("Undefined variable '{}'", name), span.clone()))?;
                 // Zero-argument functions (like input or random) are called automatically when used as a value.
                 if let Value::BuiltIn { min_arity: 0, max_arity: 0, .. } = &value {
                     return self.call_value(&value, vec![]);
@@ -370,7 +371,7 @@ impl Interpreter {
                 }
                 Ok(value)
             }
-            Expr::Binary { op, left, right } => {
+            Expr::Binary { op, left, right, span } => {
                 let l = self.evaluate(left)?;
                 // short-circuit
                 match op {
@@ -379,7 +380,7 @@ impl Interpreter {
                     _ => {}
                 }
                 let r = self.evaluate(right)?;
-                self.eval_binary(op, l, r)
+                self.eval_binary(op, l, r, span)
             }
             Expr::Unary { op, operand } => {
                 let v = self.evaluate(operand)?;
@@ -461,7 +462,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_binary(&self, op: &BinOp, left: Value, right: Value) -> Result<Value, Control> {
+    fn eval_binary(&self, op: &BinOp, left: Value, right: Value, span: &Span) -> Result<Value, Control> {
         match op {
             BinOp::Add => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
@@ -472,42 +473,60 @@ impl Interpreter {
                     items.extend(b.borrow().iter().cloned());
                     Ok(Value::List(Rc::new(RefCell::new(items))))
                 }
-                _ => Err(Control::Error("Invalid operands for +".to_string())),
+                _ => Err(Control::RuntimeError("Invalid operands for +".to_string(), span.clone())),
             },
-            BinOp::Sub => self.numeric_op(&left, &right, |a,b| a - b, |a,b| (a - b) as f64),
+            BinOp::Sub => self.numeric_op(&left, &right, |a,b| a - b, |a,b| (a - b) as f64, span),
             BinOp::Mul => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
                 (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
                 (Value::String(s), Value::Integer(n)) | (Value::Integer(n), Value::String(s)) => {
                     Ok(Value::String(s.repeat(*n as usize)))
                 }
-                _ => Err(Control::Error("Invalid operands for *".to_string())),
+                _ => Err(Control::RuntimeError("Invalid operands for *".to_string(), span.clone())),
             },
-            BinOp::Div => self.numeric_op(&left, &right, |a,b| if b == 0.0 { f64::NAN } else { a / b }, |a,b| if b == 0 { f64::NAN } else { a as f64 / b as f64 }),
-            BinOp::Mod => self.numeric_op(&left, &right, |a,b| a % b, |a,b| (a % b) as f64),
-            BinOp::Pow => self.numeric_op(&left, &right, |a,b| a.powf(b), |a,b| a.pow(b as u32) as f64),
+            BinOp::Div => {
+                if self.is_zero(&right) {
+                    return Err(Control::RuntimeError("Division by zero.".to_string(), span.clone()));
+                }
+                self.numeric_op(&left, &right, |a,b| a / b, |a,b| a as f64 / b as f64, span)
+            }
+            BinOp::Mod => {
+                if self.is_zero(&right) {
+                    return Err(Control::RuntimeError("Modulo by zero.".to_string(), span.clone()));
+                }
+                self.numeric_op(&left, &right, |a,b| a % b, |a,b| (a % b) as f64, span)
+            }
+            BinOp::Pow => self.numeric_op(&left, &right, |a,b| a.powf(b), |a,b| a.pow(b as u32) as f64, span),
             BinOp::Eq => Ok(Value::Bool(left == right)),
             BinOp::Ne => Ok(Value::Bool(left != right)),
-            BinOp::Lt => self.compare(&left, &right, |a,b| a < b),
-            BinOp::Gt => self.compare(&left, &right, |a,b| a > b),
-            BinOp::Le => self.compare(&left, &right, |a,b| a <= b),
-            BinOp::Ge => self.compare(&left, &right, |a,b| a >= b),
+            BinOp::Lt => self.compare(&left, &right, |a,b| a < b, span),
+            BinOp::Gt => self.compare(&left, &right, |a,b| a > b, span),
+            BinOp::Le => self.compare(&left, &right, |a,b| a <= b, span),
+            BinOp::Ge => self.compare(&left, &right, |a,b| a >= b, span),
             _ => unreachable!(),
         }
     }
 
-    fn numeric_op<FN, FI>(&self, left: &Value, right: &Value, float_op: FN, int_to_float: FI) -> Result<Value, Control>
+    fn is_zero(&self, value: &Value) -> bool {
+        match value {
+            Value::Integer(n) => *n == 0,
+            Value::Number(n) => *n == 0.0,
+            _ => false,
+        }
+    }
+
+    fn numeric_op<FN, FI>(&self, left: &Value, right: &Value, float_op: FN, int_to_float: FI, span: &Span) -> Result<Value, Control>
     where FN: Fn(f64, f64) -> f64, FI: Fn(i64, i64) -> f64 {
         match (left, right) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Number(int_to_float(*a, *b))),
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(float_op(*a, *b))),
             (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(float_op(*a as f64, *b))),
             (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(float_op(*a, *b as f64))),
-            _ => Err(Control::Error("Operands must be numbers".to_string())),
+            _ => Err(Control::RuntimeError("Operands must be numbers".to_string(), span.clone())),
         }
     }
 
-    fn compare<F>(&self, left: &Value, right: &Value, op: F) -> Result<Value, Control>
+    fn compare<F>(&self, left: &Value, right: &Value, op: F, span: &Span) -> Result<Value, Control>
     where F: Fn(f64, f64) -> bool {
         match (left, right) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(op(*a as f64, *b as f64))),
@@ -518,7 +537,7 @@ impl Interpreter {
                 let v = match a.cmp(b) { std::cmp::Ordering::Less => -1.0, std::cmp::Ordering::Equal => 0.0, std::cmp::Ordering::Greater => 1.0 };
                 Ok(Value::Bool(op(v, 0.0)))
             }
-            _ => Err(Control::Error("Cannot compare these values".to_string())),
+            _ => Err(Control::RuntimeError("Cannot compare these values".to_string(), span.clone())),
         }
     }
 
