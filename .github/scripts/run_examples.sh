@@ -10,7 +10,7 @@ fi
 
 EXAMPLES_DIR="../examples"
 # These examples intentionally contain errors and must fail.
-EXPECTED_FAILURES=(errors.period multi_errors.period)
+EXPECTED_FAILURES=(errors.period multi_errors.period runtime_error.period)
 
 success_count=0
 failure_count=0
