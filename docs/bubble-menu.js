@@ -8,6 +8,7 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
   const menuItems = [
     { label: "Home", href: "index.html" },
     { label: "Docs", href: "docs.html" },
+    { label: "Download", href: "download.html" },
     { label: "Examples", href: "examples.html" },
     { label: "About", href: "about.html" },
   ].map((item) => ({
