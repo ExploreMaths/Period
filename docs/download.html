@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download Period</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="period.svg" type="image/svg+xml">
+</head>
+<body>
+  <main class="download-page">
+    <section class="download-card">
+      <h1>Download Period</h1>
+      <p>Choose the package for your operating system. The latest release will be selected automatically.</p>
+
+      <div class="download-grid" data-download-grid>
+        <div class="download-platform" data-platform="windows">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+          <h3>Windows</h3>
+          <p>Installer for Windows 10 and later.</p>
+          <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe" data-platform="windows" data-role="primary">Download installer</a>
+          <div class="download-platform-alt" data-role="alt" data-platform="windows"></div>
+        </div>
+
+        <div class="download-platform" data-platform="linux">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C9.5 2 8 4 8 6.5c0 .5.1 1 .3 1.4-.5.3-1 .8-1.3 1.4-.4.8-.5 1.7-.5 2.6 0 1.6.4 3.1 1 4.4.3.6.5 1.3.5 2v2c0 1.1.9 2 2 2h4c1.1 0 2-.9 2-2v-2c0-.7.2-1.4.5-2 .6-1.3 1-2.8 1-4.4 0-.9-.1-1.8-.5-2.6-.3-.6-.8-1.1-1.3-1.4.2-.4.3-.9.3-1.4C16 4 14.5 2 12 2zm-2 4c.5 0 1 .5 1 1s-.5 1-1 1-1-.5-1-1 .5-1 1-1zm4 0c.5 0 1 .5 1 1s-.5 1-1 1-1-.5-1-1 .5-1 1-1z"/></svg>
+          <h3>Linux</h3>
+          <p>Tarball for most distributions.</p>
+          <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest" data-platform="linux" data-role="primary">Download tarball</a>
+          <div class="download-platform-alt" data-role="alt" data-platform="linux"></div>
+        </div>
+
+        <div class="download-platform" data-platform="macos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.7 8.3c-.8-.8-2-.9-2.9-.5-.5.2-1 .3-1.5.3s-1-.1-1.5-.3c-.9-.4-2.1-.3-2.9.5-.8.8-1.2 2-1 3.1.3 1.6 1.5 3 2.9 3.7-.2.7-.5 1.4-1 1.9-.7.7-1.5 1-2.4 1.1-.9.1-1.7-.2-2.4-.7l-.3-.2c.5 1.4 1.6 2.5 3 3 .9.3 1.9.2 2.8-.2.9-.4 1.6-1.1 2.1-2 .5.9 1.2 1.6 2.1 2 .9.4 1.9.5 2.8.2 1.4-.5 2.5-1.6 3-3-.7.5-1.5.8-2.4.7-.9-.1-1.7-.4-2.4-1.1-.5-.5-.8-1.2-1-1.9 1.4-.7 2.6-2.1 2.9-3.7.2-1.1-.2-2.3-1-3.1z"/></svg>
+          <h3>macOS</h3>
+          <p>Tarball for Intel and Apple Silicon.</p>
+          <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest" data-platform="macos" data-role="primary">Download tarball</a>
+          <div class="download-platform-alt" data-role="alt" data-platform="macos"></div>
+        </div>
+      </div>
+
+      <p class="download-note">Looking for an older release or alternative package? <a href="https://github.com/ExploreMaths/Period/releases">View all releases on GitHub</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Period Language. Released under the MIT License.</p>
+  </footer>
+
+  <script>
+    (function () {
+      const RELEASES_API = 'https://api.github.com/repos/ExploreMaths/Period/releases/latest';
+      const RELEASES_PAGE = 'https://github.com/ExploreMaths/Period/releases/latest';
+
+      function resolveVersionedAssets(assets, version) {
+        const map = {};
+        assets.forEach((a) => { map[a.name] = a.browser_download_url; });
+        return {
+          windows: map['Period-Setup.exe'] || null,
+          windowsZip: map[`period-${version}-windows.zip`] || null,
+          linux: map[`period-${version}-linux.tar.gz`] || null,
+          linuxDeb: map[`period-${version}-amd64.deb`] || null,
+          macos: map[`period-${version}-macos.tar.gz`] || null,
+          macosPkg: map[`period-${version}-macos.pkg`] || null,
+        };
+      }
+
+      function labelFor(key) {
+        const labels = {
+          windows: 'Windows installer',
+          windowsZip: 'Windows ZIP',
+          linux: 'Linux tarball',
+          linuxDeb: 'Linux .deb',
+          macos: 'macOS tarball',
+          macosPkg: 'macOS .pkg',
+        };
+        return labels[key] || key;
+      }
+
+      function altLinksFor(platform, assets) {
+        const mapping = {
+          windows: ['windowsZip'],
+          linux: ['linuxDeb'],
+          macos: ['macosPkg'],
+        };
+        const keys = mapping[platform] || [];
+        const parts = [];
+        keys.forEach((key) => {
+          const url = assets[key];
+          if (!url) return;
+          parts.push(`<a href="${url}" target="_blank" rel="noopener">${labelFor(key)}</a>`);
+        });
+        if (!parts.length) return '';
+        return 'Also available: ' + parts.join(' · ');
+      }
+
+      async function initDownloads() {
+        let assets = null;
+
+        try {
+          const res = await fetch(RELEASES_API);
+          if (res.ok) {
+            const data = await res.json();
+            const version = data.tag_name ? data.tag_name.replace(/^v/, '') : '';
+            assets = resolveVersionedAssets(data.assets || [], version);
+          }
+        } catch (e) {
+          // Network/API failure: keep fallback behaviour.
+        }
+
+        const fallbackUrl = RELEASES_PAGE;
+
+        document.querySelectorAll('a[data-platform][data-role="primary"]').forEach((btn) => {
+          const platform = btn.getAttribute('data-platform');
+          const url = assets ? (assets[platform] || fallbackUrl) : fallbackUrl;
+          btn.href = url;
+
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.open(url, '_blank');
+            const params = new URLSearchParams({ platform, started: '1', url });
+            window.location.href = `finish_install.html?${params.toString()}`;
+          });
+        });
+
+        if (assets) {
+          document.querySelectorAll('[data-role="alt"]').forEach((alt) => {
+            const platform = alt.getAttribute('data-platform');
+            alt.innerHTML = altLinksFor(platform, assets);
+          });
+        }
+      }
+
+      initDownloads();
+    })();
+  </script>
+  <script type="module" src="copy-code.js"></script>
+  <script type="module" src="bubble-menu.js"></script>
+</body>
+</html>
