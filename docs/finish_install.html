@@ -13,13 +13,12 @@
   <main class="finish-page">
     <section class="finish-card">
       <div class="finish-icon" aria-hidden="true">📥</div>
-      <h1>Your download is started.</h1>
-      <p>If the installer did not begin automatically, <a id="manual-download" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe">click here to download manually</a>.</p>
+      <h1 id="finish-title">Your download is started.</h1>
+      <p id="finish-manual">If the download did not begin automatically, <a id="manual-download" href="https://github.com/ExploreMaths/Period/releases/latest">click here to download manually</a>.</p>
 
       <div class="finish-next">
         <h2>What is next?</h2>
-        <ul>
-          <li>Run <code>Period-Setup.exe</code> and follow the prompts.</li>
+        <ul id="finish-steps">
           <li>Open a terminal and type <code>period --version</code> to verify the install.</li>
           <li>Read the <a href="docs.html#install">installation notes</a> or browse the <a href="examples.html">examples</a>.</li>
         </ul>
@@ -38,10 +37,51 @@
   </footer>
 
   <script>
-    (function startDownload() {
-      if (location.search.includes('started=1')) return;
-      const url = 'https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe';
-      window.open(url, '_blank');
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const platform = params.get('platform') || 'windows';
+      const downloadUrl = params.get('url') || 'https://github.com/ExploreMaths/Period/releases/latest';
+
+      const content = {
+        windows: {
+          title: 'Your Windows download is started.',
+          steps: [
+            'Run <code>Period-Setup.exe</code> and follow the prompts.',
+            'Open a terminal and type <code>period --version</code> to verify the install.',
+            'Read the <a href="docs.html#install">installation notes</a> or browse the <a href="examples.html">examples</a>.'
+          ]
+        },
+        linux: {
+          title: 'Your Linux download is started.',
+          steps: [
+            'Extract the tarball: <code>tar -xzf period-*-linux.tar.gz</code>.',
+            'Add the <code>period</code> binary to your PATH, or run it directly from the extracted folder.',
+            'Open a terminal and type <code>period --version</code> to verify the install.',
+            'Read the <a href="docs.html#install">installation notes</a> or browse the <a href="examples.html">examples</a>.'
+          ]
+        },
+        macos: {
+          title: 'Your macOS download is started.',
+          steps: [
+            'Extract the tarball: <code>tar -xzf period-*-macos.tar.gz</code>.',
+            'Add the <code>period</code> binary to your PATH, or run it directly from the extracted folder.',
+            'Open a terminal and type <code>period --version</code> to verify the install.',
+            'Read the <a href="docs.html#install">installation notes</a> or browse the <a href="examples.html">examples</a>.'
+          ]
+        }
+      };
+
+      const info = content[platform] || content.windows;
+      document.getElementById('finish-title').textContent = info.title;
+      document.getElementById('manual-download').href = downloadUrl;
+
+      const stepsList = document.getElementById('finish-steps');
+      stepsList.innerHTML = info.steps.map((step) => `<li>${step}</li>`).join('');
+
+      (function startDownload() {
+        if (location.search.includes('started=1')) return;
+        window.open(downloadUrl, '_blank');
+      })();
     })();
   </script>
   <script type="module" src="copy-code.js"></script>

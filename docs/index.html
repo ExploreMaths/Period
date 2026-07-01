@@ -18,7 +18,10 @@
       <h1>Period<span class="period">.</span></h1>
       <p>An English programming language designed to read like an article. Every statement ends with a period, giving your code a calm, literary rhythm.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe" data-download>Download</a>
+        <div class="download-wrap" data-download-wrap>
+          <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe" data-download>Download</a>
+          <div class="download-alt" data-download-alt></div>
+        </div>
         <a class="btn btn-secondary" href="docs.html">Read the Docs</a>
       </div>
     </section>
@@ -214,7 +217,10 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       <h2>Start writing in Period.</h2>
       <p>Download the latest release, install it in seconds, and write your first sentence-like program.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe" data-download>Download Period</a>
+        <div class="download-wrap" data-download-wrap>
+          <a class="btn btn-primary" href="https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe" data-download>Download Period</a>
+          <div class="download-alt" data-download-alt></div>
+        </div>
         <a class="btn btn-secondary" href="docs.html">Explore Docs</a>
       </div>
     </section>
@@ -724,14 +730,130 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
   </script>
   <script>
     (function () {
-      const downloadUrl = 'https://github.com/ExploreMaths/Period/releases/latest/download/Period-Setup.exe';
-      document.querySelectorAll('a[data-download]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          window.open(downloadUrl, '_blank');
-          window.location.href = 'finish_install.html?started=1';
+      const RELEASES_API = 'https://api.github.com/repos/ExploreMaths/Period/releases/latest';
+      const RELEASES_PAGE = 'https://github.com/ExploreMaths/Period/releases/latest';
+
+      function detectPlatform() {
+        const p = navigator.platform.toLowerCase();
+        const ua = navigator.userAgent.toLowerCase();
+        if (p.includes('win') || ua.includes('windows')) return 'windows';
+        if (p.includes('mac') || p.includes('darwin') || ua.includes('macintosh')) return 'macos';
+        if (p.includes('linux') || ua.includes('linux')) return 'linux';
+        return 'windows'; // safe default
+      }
+
+      function pickAssets(assets) {
+        const map = {};
+        assets.forEach((a) => { map[a.name] = a.browser_download_url; });
+        return {
+          windows: map['Period-Setup.exe'] || map['period-windows.zip'] || null,
+          windowsZip: map[`period-${map._version}-windows.zip`] || null,
+          linux: map['period-linux.tar.gz'] || null,
+          linuxDeb: map['period-amd64.deb'] || null,
+          macos: map['period-macos.tar.gz'] || null,
+          macosPkg: map['period-macos.pkg'] || null,
+        };
+      }
+
+      // Fallback names are versioned; look them up from the actual asset list.
+      function resolveVersionedAssets(assets, version) {
+        const map = {};
+        assets.forEach((a) => { map[a.name] = a.browser_download_url; });
+        return {
+          windows: map['Period-Setup.exe'] || null,
+          windowsZip: map[`period-${version}-windows.zip`] || null,
+          linux: map[`period-${version}-linux.tar.gz`] || null,
+          linuxDeb: map[`period-${version}-amd64.deb`] || null,
+          macos: map[`period-${version}-macos.tar.gz`] || null,
+          macosPkg: map[`period-${version}-macos.pkg`] || null,
+        };
+      }
+
+      function labelFor(key) {
+        const labels = {
+          windows: 'Windows installer',
+          windowsZip: 'Windows ZIP',
+          linux: 'Linux tarball',
+          linuxDeb: 'Linux .deb',
+          macos: 'macOS tarball',
+          macosPkg: 'macOS .pkg',
+        };
+        return labels[key] || key;
+      }
+
+      function primaryKeyFor(platform) {
+        if (platform === 'windows') return 'windows';
+        if (platform === 'linux') return 'linux';
+        if (platform === 'macos') return 'macos';
+        return 'windows';
+      }
+
+      function buttonTextFor(platform) {
+        const map = { windows: 'Windows', linux: 'Linux', macos: 'macOS' };
+        return `Download for ${map[platform] || 'Windows'}`;
+      }
+
+      function altLinks(currentPlatform, assets) {
+        const keys = ['windows', 'windowsZip', 'linux', 'linuxDeb', 'macos', 'macosPkg'];
+        const current = primaryKeyFor(currentPlatform);
+        const parts = [];
+        keys.forEach((key) => {
+          if (key === current) return;
+          const url = assets[key];
+          if (!url) return;
+          parts.push(`<a href="${url}" target="_blank" rel="noopener">${labelFor(key)}</a>`);
         });
-      });
+        if (!parts.length) return '';
+        return 'Also available: ' + parts.join(' · ');
+      }
+
+      async function initDownloads() {
+        let assets = null;
+        let platform = detectPlatform();
+        let primaryUrl = null;
+
+        try {
+          const res = await fetch(RELEASES_API);
+          if (res.ok) {
+            const data = await res.json();
+            const version = data.tag_name ? data.tag_name.replace(/^v/, '') : '';
+            assets = resolveVersionedAssets(data.assets || [], version);
+          }
+        } catch (e) {
+          // Network/API failure: keep fallback behaviour.
+        }
+
+        if (assets) {
+          const key = primaryKeyFor(platform);
+          primaryUrl = assets[key];
+        }
+
+        if (!primaryUrl) {
+          platform = 'windows';
+          primaryUrl = `${RELEASES_PAGE}/download/Period-Setup.exe`;
+        }
+
+        document.querySelectorAll('[data-download-wrap]').forEach((wrap) => {
+          const btn = wrap.querySelector('a[data-download]');
+          const alt = wrap.querySelector('[data-download-alt]');
+          if (!btn) return;
+
+          btn.textContent = buttonTextFor(platform);
+          btn.href = primaryUrl;
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.open(primaryUrl, '_blank');
+            const params = new URLSearchParams({ platform, started: '1', url: primaryUrl });
+            window.location.href = `finish_install.html?${params.toString()}`;
+          });
+
+          if (alt && assets) {
+            alt.innerHTML = altLinks(platform, assets);
+          }
+        });
+      }
+
+      initDownloads();
     })();
   </script>
 <script type="module" src="copy-code.js"></script>

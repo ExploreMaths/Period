@@ -361,6 +361,29 @@ main {
   justify-content: center;
 }
 
+.download-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.download-alt {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.download-alt a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.download-alt a:hover {
+  color: var(--accent-hover);
+}
+
 .btn {
   display: inline-block;
   padding: 0.85rem 1.8rem;
