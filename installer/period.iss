@@ -1,5 +1,5 @@
 #define MyAppName "Period"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Period Language"
 #define MyAppURL "https://exploremaths.github.io/Period/"
 
@@ -28,8 +28,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "..\dist\period.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\period-core.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\stdlib\*"; DestDir: "{app}\stdlib"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\tcc\*"; DestDir: "{app}\tcc"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\period.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\vscode-extension\period-language.vsix"; DestDir: "{tmp}"; Flags: ignoreversion
+Source: "..\vscode-extension\period-language-1.0.4.vsix"; DestDir: "{tmp}"; Flags: ignoreversion
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\examples\*"; DestDir: "{app}\examples"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -41,7 +44,7 @@ Name: "{autoprograms}\Period REPL"; Filename: "{cmd}"; Parameters: "/k ""{app}\p
 [Run]
 Filename: "{cmd}"; Parameters: "/c ""{app}\period.exe"" --version"; Description: "Verify installation"; Flags: nowait runhidden
 Filename: "{cmd}"; Parameters: "/c code --uninstall-extension ""period.period-language"""; Description: "Remove old VS Code extension"; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/c code --install-extension ""{tmp}\period-language.vsix"""; Description: "Install VS Code extension"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c code --install-extension ""{tmp}\period-language-1.0.4.vsix"""; Description: "Install VS Code extension"; Flags: runhidden
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath('{app}')
