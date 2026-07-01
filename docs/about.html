@@ -40,8 +40,9 @@
     <section>
       <h2>Technology Stack</h2>
       <ul>
-        <li><strong>Language runtime:</strong> Python 3 with a hand-written lexer, parser, and tree-walking interpreter</li>
-        <li><strong>Executable packaging:</strong> Nuitka compiles the runtime into a single Windows executable</li>
+        <li><strong>Implementation language:</strong> Rust</li>
+        <li><strong>Execution:</strong> Hand-written lexer, parser, and tree-walking interpreter, with a C-backend JIT for numeric code</li>
+        <li><strong>JIT pipeline:</strong> Period source → C → native DLL via Clang, GCC, MSVC, or bundled TCC</li>
         <li><strong>LSP server:</strong> JSON-RPC language server served over stdio from the same executable</li>
         <li><strong>VS Code extension:</strong> TypeScript client built on <code>vscode-languageclient</code></li>
         <li><strong>Documentation site:</strong> Static HTML/CSS with no build step</li>
@@ -52,8 +53,7 @@
       <h2>Roadmap</h2>
       <ul>
         <li>Richer standard library (file I/O, math, dates)</li>
-        <li>Package manager</li>
-        <li>Bytecode compiler and faster VM</li>
+        <li>More LSP features (find references, rename symbol)</li>
         <li>Cross-platform executables (macOS and Linux)</li>
         <li>Online playground in the browser</li>
       </ul>

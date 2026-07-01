@@ -53,7 +53,7 @@
       <pre><code>cd period
 cargo build --release
 sudo cp target/release/period /usr/local/bin/period</code></pre>
-      <p>For the JIT numeric backend on Unix, install <a href="https://bellard.org/tcc/">TCC</a> and ensure <code>tcc</code> is on your PATH. Period will fall back to the interpreter if TCC is not available.</p>
+      <p>For the JIT numeric backend, Period uses any available optimizing C compiler (Clang, GCC, or MSVC) and falls back to the bundled <a href="https://bellard.org/tcc/">TCC</a> if none are found. If no compiler is available, it falls back to the tree-walking interpreter.</p>
       <p>After installation, verify it works:</p>
       <pre><code>period --version</code></pre>
       <p>Run your first program:</p>
@@ -351,6 +351,7 @@ ten
         <li>LSP-powered diagnostics with red/yellow squiggles</li>
         <li>Hover information for keywords, built-ins, and user-defined symbols</li>
         <li>Auto-completion for keywords, built-ins, and defined names</li>
+        <li>Go to Definition for variables, functions, classes, methods, and parameters</li>
       </ul>
       <p>If the language server is not found automatically, set <code>period.languageServerPath</code> in VS Code settings to the full path of <code>period.exe</code>.</p>
     </section>
