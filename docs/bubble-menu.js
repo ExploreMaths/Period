@@ -170,9 +170,6 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
     toggle.setAttribute("aria-expanded", "false");
     overlay.setAttribute("aria-hidden", "true");
 
-    // Pick the angles for the next open while the menu is still hidden/animating out.
-    prepareRotations();
-
     gsap.killTweensOf([...bubbles, ...labels]);
     gsap.to(labels, { y: 24, autoAlpha: 0, duration: 0.2, ease: "power3.in" });
     gsap.to(bubbles, {
@@ -181,6 +178,8 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
       ease: "power3.in",
       onComplete: () => {
         overlay.style.display = "none";
+        // Pick the angles for the next open only after the menu has fully disappeared.
+        prepareRotations();
       }
     });
   };
