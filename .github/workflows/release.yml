@@ -120,7 +120,6 @@ jobs:
             vscode-extension/period-language-${{ steps.ver.outputs.version }}.vsix
             period-${{ steps.ver.outputs.version }}-windows.zip
           fail_on_unmatched_files: true
-          generate_release_notes: true
 
   build-linux:
     runs-on: ubuntu-latest
