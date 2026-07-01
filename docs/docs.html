@@ -173,13 +173,17 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
 
     <section id="types">
       <h2>Type Annotations</h2>
-      <p>Type annotations are optional. Use them on parameters and return values to get runtime type checks.</p>
+      <p>Type annotations are optional. Use them on parameters and return values to get runtime type checks. You can also annotate variables, either before the name or after <code>be</code>.</p>
       <pre><code><span class="keyword">define</span> add <span class="keyword">with</span> number a, number b <span class="keyword">returns</span> number<span class="period">:</span>
     <span class="keyword">return</span> a + b<span class="period">.</span>
 
 <span class="keyword">define</span> greet <span class="keyword">with</span> string name <span class="keyword">returns</span> string<span class="period">:</span>
-    <span class="keyword">return</span> <span class="string">"Hello, "</span> + name + <span class="string">"!"</span><span class="period">.</span></code></pre>
-      <p>Built-in type names are <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, and <code>class</code>. You can also use a class name to match instances of that class.</p>
+    <span class="keyword">return</span> <span class="string">"Hello, "</span> + name + <span class="string">"!"</span><span class="period">.</span>
+
+<span class="keyword">let</span> numbers <span class="keyword">be</span> list <span class="keyword">of</span> integer [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]<span class="period">.</span>
+<span class="keyword">let</span> scores <span class="keyword">be</span> dictionary <span class="keyword">of</span> string <span class="keyword">to</span> number {<span class="string">"Ada"</span>: <span class="number">90</span>}<span class="period">.</span>
+<span class="keyword">let</span> list <span class="keyword">of</span> string names <span class="keyword">be</span> [<span class="string">"Ada"</span>, <span class="string">"Grace"</span>]<span class="period">.</span></code></pre>
+      <p>Built-in type names are <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, and <code>class</code>. Compound types use <code>list of &lt;type&gt;</code> and <code>dictionary of &lt;key&gt; to &lt;value&gt;</code>. You can also use a class name or a generic type variable such as <code>T</code> to match instances of that class.</p>
     </section>
 
     <section id="classes">
@@ -314,7 +318,7 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
       <h2>Grammar Reference</h2>
       <p>A concise reference for the Period language grammar.</p>
       <pre><code>program        := &lt;statement&gt;*
-statement      := "let" &lt;identifier&gt; "be" &lt;expression&gt; "."
+statement      := "let" (&lt;type&gt;)? &lt;identifier&gt; "be" (&lt;type&gt;)? &lt;expression&gt; "."
                 | "set" &lt;expression&gt; "to" &lt;expression&gt; "."
                 | "show" &lt;expression&gt; "."
                 | "if" &lt;expression&gt; (",")? "then" ":" &lt;block&gt; (("otherwise" | "else") ":" &lt;block&gt;)?
@@ -330,6 +334,8 @@ class-body     := &lt;indent&gt; (&lt;init&gt; | &lt;method&gt;)+ &lt;dedent&gt;
 init           := "init" ("with" &lt;params&gt;)? ":" &lt;block&gt;
 method         := "define" &lt;identifier&gt; ("with" &lt;params&gt;)? ("returns" &lt;type&gt;)? ":" &lt;block&gt;
 module-path    := "."* &lt;identifier&gt; ("." &lt;identifier&gt;)*
+type           := &lt;type-name&gt; | "list" "of" &lt;type&gt; | "dictionary" "of" &lt;type&gt; "to" &lt;type&gt;
+type-name      := "nothing" | "boolean" | "integer" | "number" | "string" | "list" | "dictionary" | "function" | "class" | &lt;identifier&gt;
 expression     := &lt;or-expr&gt;
 or-expr        := &lt;and-expr&gt; ("or" &lt;and-expr&gt;)*
 and-expr       := &lt;not-expr&gt; ("and" &lt;not-expr&gt;)*
@@ -345,7 +351,7 @@ primary        := &lt;number&gt; | &lt;string&gt; | &lt;bool&gt; | "nothing" | "
                 | "new" &lt;primary&gt; ("with" &lt;arguments&gt;)?
                 | "tell" &lt;expression&gt; "to" &lt;identifier&gt; ("with" &lt;arguments&gt;)?
                 | "the" &lt;identifier&gt; "of" &lt;expression&gt;
-property       := &lt;primary&gt; &lt;identifier&gt;</code></pre>
+property       := &lt;primary&gt; &lt;identifier&gt; | &lt;primary&gt; "." &lt;identifier&gt;</code></pre>
     </section>
 
     <section id="tips">

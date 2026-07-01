@@ -69,11 +69,45 @@ impl Parser {
     fn parse_let(&mut self) -> Stmt {
         self.advance(); // let
         let (type_ann, name) = self.parse_typed_name();
-        let _ = type_ann;
         self.expect(TokenKind::Be, "expected 'be' after variable name");
+        let type_ann = type_ann.or_else(|| self.try_parse_type_before_value());
         let value = self.parse_expression();
         self.expect(TokenKind::Dot, "expected '.' at end of let");
         Stmt::Let { name, value }
+    }
+
+    fn try_parse_type_before_value(&mut self) -> Option<String> {
+        let start = self.pos;
+        if let TokenKind::Ident(ref first) = self.peek(0).kind.clone() {
+            if self.is_type_start(first) {
+                let t = self.parse_type();
+                if self.is_value_start() {
+                    return Some(t);
+                }
+            }
+        }
+        self.pos = start;
+        None
+    }
+
+    fn is_value_start(&self) -> bool {
+        matches!(
+            self.peek(0).kind,
+            TokenKind::Number(_)
+                | TokenKind::String(_)
+                | TokenKind::Bool(_)
+                | TokenKind::Nothing
+                | TokenKind::Ident(_)
+                | TokenKind::LParen
+                | TokenKind::LBracket
+                | TokenKind::LBrace
+                | TokenKind::New
+                | TokenKind::Tell
+                | TokenKind::Minus
+                | TokenKind::Not
+                | TokenKind::The
+                | TokenKind::Ellipsis
+        )
     }
 
     fn parse_set(&mut self) -> Stmt {
@@ -155,7 +189,7 @@ impl Parser {
         } else { Vec::new() };
         let return_type = if self.check(&TokenKind::Returns) {
             self.advance();
-            Some(self.expect_ident("expected return type"))
+            Some(self.parse_type())
         } else { None };
         self.expect(TokenKind::Colon, "expected ':' after function signature");
         let raw_body = self.parse_block();
@@ -279,11 +313,43 @@ impl Parser {
         params
     }
 
+    fn is_type_start(&self, name: &str) -> bool {
+        matches!(
+            name,
+            "nothing" | "boolean" | "integer" | "number" | "string" | "list" | "dictionary"
+                | "function" | "class"
+        ) || name.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false)
+    }
+
+    fn parse_type_from(&mut self, name: String) -> String {
+        match name.as_str() {
+            "list" => {
+                self.expect(TokenKind::Of, "expected 'of' after list");
+                let elem = self.parse_type();
+                format!("list of {}", elem)
+            }
+            "dictionary" => {
+                self.expect(TokenKind::Of, "expected 'of' after dictionary");
+                let key = self.parse_type();
+                self.expect(TokenKind::To, "expected 'to' after dictionary key type");
+                let value = self.parse_type();
+                format!("dictionary of {} to {}", key, value)
+            }
+            _ => name,
+        }
+    }
+
+    fn parse_type(&mut self) -> String {
+        let name = self.expect_ident("expected type name");
+        self.parse_type_from(name)
+    }
+
     fn parse_typed_name(&mut self) -> (Option<String>, String) {
         let first = self.expect_ident("expected name");
-        if let TokenKind::Ident(name) = self.peek(0).kind.clone() {
-            self.advance();
-            (Some(first), name)
+        if self.is_type_start(&first) {
+            let type_ann = self.parse_type_from(first);
+            let name = self.expect_ident("expected variable name after type");
+            (Some(type_ann), name)
         } else {
             (None, first)
         }
