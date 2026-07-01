@@ -375,7 +375,7 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 2.5rem;
+  padding: 2rem 1.5rem;
   text-align: center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
 }
@@ -1269,7 +1269,7 @@ footer {
     width: 100%;
   }
   .download-card {
-    padding: 1.75rem 1.25rem;
+    padding: 1.5rem 1rem;
   }
   .download-grid {
     grid-template-columns: 1fr;
