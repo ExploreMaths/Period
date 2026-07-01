@@ -6,7 +6,7 @@ pub enum TokenKind {
     Let, Set, Show, If, Then, Otherwise, While, Repeat, For, In,
     Define, With, Return, Be, To, And, Or, Not,
     Class, Init, New, Tell, The, Of, Import, From, Returns,
-    Read, Write, Try, Catch,
+    Read, Write, Try, Catch, Export,
     // Literals
     Number(f64), String(String), Ident(String), Bool(bool), Nothing,
     // Operators
@@ -197,7 +197,8 @@ impl<'a> Lexer<'a> {
                     "let" | "set" | "show" | "if" | "then" | "otherwise" | "while" | "repeat"
                     | "for" | "in" | "define" | "with" | "return" | "be" | "to" | "and" | "or"
                     | "not" | "class" | "init" | "new" | "tell" | "the" | "of" | "import"
-                    | "from" | "returns" | "read" | "write" | "try" | "catch" | "true" | "false" | "nothing"
+                    | "from" | "returns" | "read" | "write" | "try" | "catch" | "export"
+                    | "true" | "false" | "nothing"
                 );
                 if reserved && name != lower {
                     self.error(&format!("keyword '{}' must be lowercase", name));
@@ -217,6 +218,7 @@ impl<'a> Lexer<'a> {
                     "returns" => TokenKind::Returns,
                     "read" => TokenKind::Read, "write" => TokenKind::Write,
                     "try" => TokenKind::Try, "catch" => TokenKind::Catch,
+                    "export" => TokenKind::Export,
                     "true" => TokenKind::Bool(true),
                     "false" => TokenKind::Bool(false),
                     "nothing" => TokenKind::Nothing,

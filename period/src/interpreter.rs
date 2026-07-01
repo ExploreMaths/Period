@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -157,16 +157,25 @@ impl ValueKey {
 #[derive(Clone)]
 pub struct Environment {
     values: RefCell<HashMap<String, Value>>,
+    exports: RefCell<HashSet<String>>,
     parent: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
     pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), parent: None }))
+        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), exports: RefCell::new(HashSet::new()), parent: None }))
     }
 
     pub fn with_parent(parent: Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), parent: Some(parent) }))
+        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), exports: RefCell::new(HashSet::new()), parent: Some(parent) }))
+    }
+
+    pub fn add_export(&self, name: &str) {
+        self.exports.borrow_mut().insert(name.to_string());
+    }
+
+    pub fn exported_names(&self) -> HashSet<String> {
+        self.exports.borrow().clone()
     }
 
     pub fn define(&self, name: &str, value: Value) {
@@ -288,6 +297,9 @@ impl Interpreter {
                     }
                     Err(other) => return Err(other),
                 }
+            }
+            Stmt::Export(names) => {
+                for name in names { self.env.borrow().add_export(name); }
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 if Self::is_truthy(&self.evaluate(cond)?) {
@@ -723,8 +735,14 @@ impl Interpreter {
         self.modules.borrow_mut().insert(path.to_string(), env.clone());
         let exposed_name = path.rsplit('.').next().unwrap_or(path);
         self.env.borrow().define(exposed_name, Value::Module { name: path.to_string(), env: env.clone() });
-        for (name, value) in env.borrow().values.borrow().iter() {
-            self.env.borrow().define(name, value.clone());
+        let exports = env.borrow().exported_names();
+        let all_names = env.borrow().values.borrow().keys().cloned().collect::<Vec<_>>();
+        let filter = !exports.is_empty();
+        for name in all_names {
+            if !filter || exports.contains(&name) {
+                let value = env.borrow().values.borrow().get(&name).unwrap().clone();
+                self.env.borrow().define(&name, value);
+            }
         }
         Ok(())
     }

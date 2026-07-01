@@ -27,6 +27,7 @@
         <li><a href="#builtins">Built-ins</a></li>
         <li><a href="#files">File I/O</a></li>
         <li><a href="#exceptions">Exceptions</a></li>
+        <li><a href="#exports">Exports</a></li>
         <li><a href="#repl">REPL</a></li>
         <li><a href="#vscode">VS Code</a></li>
         <li><a href="#errors">Errors</a></li>
@@ -290,6 +291,19 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       <p>Only runtime errors are caught; normal <code>return</code> statements still propagate out of the try block.</p>
     </section>
 
+    <section id="exports">
+      <h2>Exports</h2>
+      <p>By default, all top-level names defined in a module are visible to importers. Use <code>export</code> to restrict the public API:</p>
+      <pre><code><span class="keyword">define</span> helper <span class="keyword">with</span> x<span class="period">:</span>
+    <span class="keyword">return</span> x * <span class="number">2</span><span class="period">.</span>
+
+<span class="keyword">define</span> publicFn <span class="keyword">with</span> x<span class="period">:</span>
+    <span class="keyword">return</span> helper <span class="keyword">with</span> x<span class="period">.</span>
+
+<span class="keyword">export</span> publicFn<span class="period">.</span></code></pre>
+      <p>When a module contains an <code>export</code> statement, only the listed names are imported. Built-in modules always export their documented names.</p>
+    </section>
+
     <section id="repl">
       <h2>REPL</h2>
       <p>Running <code>period</code> without arguments starts the interactive Read-Eval-Print Loop. Type statements ending with a period and press Enter.</p>
@@ -344,6 +358,7 @@ statement      := "let" (&lt;type&gt;)? &lt;identifier&gt; "be" (&lt;type&gt;)? 
                 | "read" &lt;identifier&gt; "from" &lt;expression&gt; "."
                 | "write" &lt;expression&gt; "to" &lt;expression&gt; "."
                 | "try" ":" &lt;block&gt; "catch" &lt;identifier&gt; ":" &lt;block&gt;
+                | "export" &lt;identifier&gt; ("," &lt;identifier&gt;)* ("and" &lt;identifier&gt;)? "."
                 | "if" &lt;expression&gt; (",")? "then" ":" &lt;block&gt; (("otherwise" | "else") ":" &lt;block&gt;)?
                 | "while" &lt;expression&gt; "repeat" ":" &lt;block&gt;
                 | "for" &lt;identifier&gt; "in" &lt;expression&gt; "repeat" ":" &lt;block&gt;

@@ -83,6 +83,7 @@ pub enum Stmt {
     Read { name: String, path: Expr },
     Write { content: Expr, path: Expr },
     Try { body: Vec<Stmt>, catch_var: String, catch_body: Vec<Stmt> },
+    Export(Vec<String>),
     Expr(Expr),
     Pass,
 }

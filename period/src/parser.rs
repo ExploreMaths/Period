@@ -64,6 +64,7 @@ impl Parser {
             TokenKind::Read => self.parse_read(),
             TokenKind::Write => self.parse_write(),
             TokenKind::Try => self.parse_try(),
+            TokenKind::Export => self.parse_export(),
             TokenKind::Ellipsis => { self.advance(); Stmt::Pass }
             _ => self.parse_expr_statement(),
         }
@@ -283,6 +284,18 @@ impl Parser {
         self.expect(TokenKind::Colon, "expected ':' after catch variable");
         let catch_body = self.parse_block();
         Stmt::Try { body, catch_var, catch_body }
+    }
+
+    fn parse_export(&mut self) -> Stmt {
+        self.advance(); // export
+        let mut names = Vec::new();
+        loop {
+            names.push(self.expect_ident("expected name to export"));
+            if !self.check(&TokenKind::Comma) && !self.check(&TokenKind::And) { break; }
+            self.advance();
+        }
+        self.expect(TokenKind::Dot, "expected '.' at end of export");
+        Stmt::Export(names)
     }
 
     fn parse_module_path(&mut self) -> (String, Span) {

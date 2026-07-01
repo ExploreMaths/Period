@@ -265,6 +265,7 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Write => "```period\nwrite <content> to <path>.\n```\n\nWrite a string to a file.",
         TokenKind::Try => "```period\ntry:\n    ...\ncatch err:\n    ...\n```\n\nRun a block and handle runtime errors in the catch block.",
         TokenKind::Catch => "```period\ncatch <variable>:\n    ...\n```\n\nHandle an error raised in the matching try block.",
+        TokenKind::Export => "```period\nexport name1, name2.\n```\n\nMark top-level names as public when this file is imported.",
         _ => return None,
     })
 }
@@ -484,6 +485,7 @@ fn token_len(kind: &TokenKind) -> u32 {
         TokenKind::Write => 5,
         TokenKind::Try => 3,
         TokenKind::Catch => 3,
+        TokenKind::Export => 6,
         TokenKind::Returns => 7,
         TokenKind::Ellipsis => 3,
         TokenKind::Comma | TokenKind::Dot | TokenKind::Colon
@@ -983,6 +985,7 @@ fn keyword_completions() -> Vec<SymbolInfo> {
         ("write", "write <content> to <path>."),
         ("try", "try: ... catch error: ..."),
         ("catch", "catch <variable>:"),
+        ("export", "export name1, name2."),
         ("and", "Logical and."),
         ("or", "Logical or."),
         ("not", "Logical not."),
