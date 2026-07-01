@@ -180,7 +180,6 @@ jobs:
             period-${{ steps.ver.outputs.version }}-linux.tar.gz
             period-${{ steps.ver.outputs.version }}-amd64.deb
           fail_on_unmatched_files: true
-          generate_release_notes: true
 
   build-macos:
     runs-on: macos-latest
@@ -242,4 +241,3 @@ jobs:
             period-${{ steps.ver.outputs.version }}-macos.tar.gz
             period-${{ steps.ver.outputs.version }}-macos.pkg
           fail_on_unmatched_files: true
-          generate_release_notes: true
