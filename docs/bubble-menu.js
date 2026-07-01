@@ -131,7 +131,6 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
     overlay.style.display = "flex";
 
     gsap.killTweensOf([...bubbles, ...labels]);
-    gsap.set(bubbles, { scale: 0, transformOrigin: "50% 50%" });
     gsap.set(labels, { y: 24, autoAlpha: 0 });
 
     bubbles.forEach((bubble, i) => {
@@ -139,7 +138,11 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
       bubble.style.setProperty('--item-rot', `${rotation}deg`);
       const delay = i * 0.1 + gsap.utils.random(-0.03, 0.03);
       const tl = gsap.timeline({ delay });
-      tl.to(bubble, { scale: 1, duration: 0.5, ease: "back.out(1.5)" });
+      tl.fromTo(
+        bubble,
+        { scale: 0, transformOrigin: "50% 50%" },
+        { scale: 1, duration: 0.5, ease: "back.out(1.5)", clearProps: "transform" }
+      );
       tl.to(
         labels[i],
         { y: 0, autoAlpha: 1, duration: 0.5, ease: "power3.out" },
