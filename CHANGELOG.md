@@ -2,22 +2,15 @@
 
 ## Unreleased
 
+## 1.0.4 (2026-07-01)
+
 ### What's new
 
-- String interpolation: `"Hello, {name}!"` and `"1 + 2 = {1 + 2}"`.
-- `else` is accepted as an alias for `otherwise` in `if` statements.
-- Dot property access and assignment: `ada.age` and `set this.name to ...`.
-- Compound type annotations: `list of integer`, `dictionary of string to number`, and generic type variables.
-- File I/O statements: `read x from "file.txt"` and `write x to "file.txt"`.
-- Exception handling: `try: ... catch err: ...`.
-- Explicit module exports: `export name1, name2.`.
-- Basic package manager: `period install <package-or-url>` with `period_packages/` lookup.
-- Cross-platform build notes for Linux/macOS and PATH-aware TCC lookup.
-- Documentation clarifications for `integer` vs `number` and property access syntax.
-- Interactive REPL: run `period` with no arguments to evaluate statements line-by-line.
-- VS Code: / LSP "Go to Definition" for variables, function/class/method names, parameters, loop variables, and catch variables.
-- LSP diagnostics now flag undefined variables in `set` assignment targets (`set c to 3.` where `c` is undeclared).
-- CLI prints semantic errors with source locations before falling back to the interpreter, avoiding raw C compiler output for source-level mistakes.
+- JIT compiler auto-selection: numeric programs are compiled to a cached DLL using the best available C compiler (Clang, GCC, or MSVC), falling back to the bundled TCC.
+- General 8x loop unrolling for pure numeric `while` loops.
+- New `benchmark_long.py` workload: count numbers divisible by 3 or 5.
+- Website copy updated to match the current Rust/JIT/LSP implementation.
+- Package manager documentation removed from the site; the feature remains experimental.
 
 ## 1.0.3 (2026-06-28)
 
@@ -42,15 +35,6 @@
 - Allowed docstrings without a trailing `.` inside block bodies.
 - Improved VS Code: syntax highlighting for module names, exported functions, and keyword capitalization.
 - Fixed lexer panic on Windows CRLF line endings.
-
-## 1.0.1 (2026-06-27)
-
-### What's new
-
-- Runtime and compile-time errors now print the offending source line with a caret (`^`), similar to Python.
-- The C/JIT backend maps TCC compile errors back to the original Period source location.
-- Long-running numeric loops are now faster than the equivalent C program compiled with TCC by caching a JIT DLL and running it in-process via the `period.exe` wrapper.
-- Updated `docs/index.html` performance chart to use `benchmark_long.py` results with 1M and 5M iteration bars.
 
 ## 1.0.1 (2026-06-27)
 
