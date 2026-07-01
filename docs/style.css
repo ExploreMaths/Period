@@ -263,6 +263,10 @@ nav a.active {
   position: relative;
   transition: background 0.3s ease, color 0.3s ease, transform 0.3s ease;
   will-change: transform;
+}
+
+.bubble-menu-items .pill-link.animating {
+  transition: background 0.3s ease, color 0.3s ease;
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;

@@ -150,6 +150,8 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
     gsap.killTweensOf([...bubbles, ...labels]);
     gsap.set(labels, { y: 24, autoAlpha: 0 });
 
+    bubbles.forEach((bubble) => bubble.classList.add('animating'));
+
     bubbles.forEach((bubble, i) => {
       const rotation = rotations.get(bubble) || 0;
       const delay = i * 0.1 + gsap.utils.random(-0.03, 0.03);
@@ -157,7 +159,14 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
       tl.fromTo(
         bubble,
         { scale: 0, rotation: rotation, transformOrigin: "50% 50%" },
-        { scale: 1, rotation: rotation, duration: 0.5, ease: "back.out(1.5)", clearProps: "transform" }
+        {
+          scale: 1,
+          rotation: rotation,
+          duration: 0.5,
+          ease: "back.out(1.5)",
+          clearProps: "transform",
+          onComplete: () => bubble.classList.remove('animating')
+        }
       );
       tl.to(
         labels[i],
@@ -175,6 +184,8 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
     toggle.setAttribute("aria-expanded", "false");
     overlay.setAttribute("aria-hidden", "true");
 
+    bubbles.forEach((bubble) => bubble.classList.add('animating'));
+
     gsap.killTweensOf([...bubbles, ...labels]);
     gsap.to(labels, { y: 24, autoAlpha: 0, duration: 0.2, ease: "power3.in" });
     gsap.to(bubbles, {
@@ -183,6 +194,7 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
       ease: "power3.in",
       onComplete: () => {
         overlay.style.display = "none";
+        bubbles.forEach((bubble) => bubble.classList.remove('animating'));
         // Pick the angles for the next open only after the menu has fully disappeared.
         prepareRotations();
       }
