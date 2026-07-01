@@ -263,6 +263,8 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Tell => "```period\ntell <object> to <method> with <args>.\n```\n\nSend a message to an object.",
         TokenKind::Read => "```period\nread <variable> from <path>.\n```\n\nRead the contents of a file into a variable.",
         TokenKind::Write => "```period\nwrite <content> to <path>.\n```\n\nWrite a string to a file.",
+        TokenKind::Try => "```period\ntry:\n    ...\ncatch err:\n    ...\n```\n\nRun a block and handle runtime errors in the catch block.",
+        TokenKind::Catch => "```period\ncatch <variable>:\n    ...\n```\n\nHandle an error raised in the matching try block.",
         _ => return None,
     })
 }
@@ -480,6 +482,8 @@ fn token_len(kind: &TokenKind) -> u32 {
         TokenKind::From => 4,
         TokenKind::Read => 5,
         TokenKind::Write => 5,
+        TokenKind::Try => 3,
+        TokenKind::Catch => 3,
         TokenKind::Returns => 7,
         TokenKind::Ellipsis => 3,
         TokenKind::Comma | TokenKind::Dot | TokenKind::Colon
@@ -718,6 +722,16 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
         Stmt::If { then_branch, else_branch, .. } => {
             for s in then_branch { collect_symbols(s, func_returns, symbols); }
             for s in else_branch { collect_symbols(s, func_returns, symbols); }
+        }
+        Stmt::Try { body, catch_var, catch_body } => {
+            for s in body { collect_symbols(s, func_returns, symbols); }
+            symbols.push(SymbolInfo {
+                name: catch_var.clone(),
+                detail: format!("{}: string", catch_var),
+                docstring: None,
+                kind: CompletionItemKind::VARIABLE,
+            });
+            for s in catch_body { collect_symbols(s, func_returns, symbols); }
         }
         Stmt::While { body, .. } => {
             for s in body { collect_symbols(s, func_returns, symbols); }
@@ -967,6 +981,8 @@ fn keyword_completions() -> Vec<SymbolInfo> {
         ("show", "show <expression>."),
         ("read", "read <variable> from <path>."),
         ("write", "write <content> to <path>."),
+        ("try", "try: ... catch error: ..."),
+        ("catch", "catch <variable>:"),
         ("and", "Logical and."),
         ("or", "Logical or."),
         ("not", "Logical not."),
@@ -1081,6 +1097,12 @@ fn check_stmt(stmt: &Stmt, scope: &mut Vec<String>, imports: &[String], diags: &
             let mut for_scope = scope.clone();
             for_scope.push(var.clone());
             check_block(body, &for_scope, imports, diags);
+        }
+        Stmt::Try { body, catch_var, catch_body } => {
+            check_block(body, scope, imports, diags);
+            let mut catch_scope = scope.clone();
+            catch_scope.push(catch_var.clone());
+            check_block(catch_body, &catch_scope, imports, diags);
         }
         Stmt::Define { params, body, .. } => {
             let mut func_scope = scope.clone();

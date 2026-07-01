@@ -82,6 +82,7 @@ pub enum Stmt {
     Import(Vec<(String, Span)>),
     Read { name: String, path: Expr },
     Write { content: Expr, path: Expr },
+    Try { body: Vec<Stmt>, catch_var: String, catch_body: Vec<Stmt> },
     Expr(Expr),
     Pass,
 }

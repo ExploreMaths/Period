@@ -274,6 +274,21 @@ impl Interpreter {
                     return Err(Control::Error(format!("Could not write file '{}': {}", path_str, e)));
                 }
             }
+            Stmt::Try { body, catch_var, catch_body } => {
+                match self.execute_block(body) {
+                    Ok(()) => {}
+                    Err(Control::Error(msg)) | Err(Control::RuntimeError(msg, _)) => {
+                        let env = Environment::with_parent(self.env.clone());
+                        env.borrow().define(catch_var, Value::String(msg));
+                        let old = self.env.clone();
+                        self.env = env;
+                        let result = self.execute_block(catch_body);
+                        self.env = old;
+                        result?;
+                    }
+                    Err(other) => return Err(other),
+                }
+            }
             Stmt::If { cond, then_branch, else_branch } => {
                 if Self::is_truthy(&self.evaluate(cond)?) {
                     self.execute_block(then_branch)?;
