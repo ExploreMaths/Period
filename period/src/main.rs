@@ -41,6 +41,33 @@ fn parse_error_location(rest: &str, fallback: &str) -> (usize, usize, String) {
 /// If the source is nothing but `show "literal".` (with optional whitespace),
 /// print the literal and return true. This lets trivial programs run faster than
 /// a compiled C hello-world by avoiding the interpreter pipeline entirely.
+fn install_package(name: &str) -> Result<(), String> {
+    let packages_dir = std::path::PathBuf::from("period_packages");
+    fs::create_dir_all(&packages_dir).map_err(|e| format!("cannot create period_packages: {}", e))?;
+
+    let (url, filename) = if name.starts_with("http://") || name.starts_with("https://") {
+        let filename = name.rsplit('/').next().unwrap_or(name);
+        let filename = if filename.is_empty() { "package.period" } else { filename };
+        (name.to_string(), filename.to_string())
+    } else {
+        let registry = env::var("PERIOD_REGISTRY")
+            .unwrap_or_else(|_| "https://raw.githubusercontent.com/ExploreMaths/period-packages/main".to_string());
+        let url = format!("{}/{}.period", registry.trim_end_matches('/'), name);
+        (url, format!("{}.period", name))
+    };
+
+    let out_path = packages_dir.join(&filename);
+    let status = Command::new("curl")
+        .args(["-fsSL", &url, "-o", out_path.to_str().unwrap()])
+        .status()
+        .map_err(|e| format!("failed to run curl: {}", e))?;
+    if !status.success() {
+        return Err(format!("could not download '{}'", url));
+    }
+    println!("Installed {} -> {}", name, out_path.display());
+    Ok(())
+}
+
 fn try_fast_show(source: &str) -> bool {
     let s = source.trim();
     let Some(rest) = s.strip_prefix("show") else {
@@ -74,6 +101,17 @@ fn main() {
     if args.iter().any(|a| a == "--lsp") {
         if let Err(e) = lsp::run() {
             eprintln!("lsp error: {}", e);
+            process::exit(1);
+        }
+        return;
+    }
+    if args.len() >= 2 && args[1] == "install" {
+        if args.len() != 3 {
+            eprintln!("usage: period install <package-or-url>");
+            process::exit(1);
+        }
+        if let Err(e) = install_package(&args[2]) {
+            eprintln!("install error: {}", e);
             process::exit(1);
         }
         return;

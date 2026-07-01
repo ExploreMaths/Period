@@ -821,8 +821,12 @@ fn module_file_candidates(module: &str, current_path: Option<&std::path::Path>) 
             candidates.push(base.join("lib").join(parts.join(std::path::MAIN_SEPARATOR_STR)).with_extension("period"));
         }
     } else {
-        // Plain module names resolve to the standard library or built-in modules only.
+        // Plain module names resolve to the standard library, built-in modules,
+        // or packages installed in the local period_packages/ directory.
         let file = format!("{}.period", module);
+        if let Ok(cwd) = env::current_dir() {
+            candidates.push(cwd.join("period_packages").join(&file));
+        }
         for loc in stdlib_locations() {
             candidates.push(loc.join(&file));
         }
