@@ -1,6 +1,12 @@
 use crate::ast::Span;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum StringPart {
+    Literal(String),
+    Expr(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
     Let, Set, Show, If, Then, Otherwise, While, Repeat, For, In,
@@ -8,7 +14,7 @@ pub enum TokenKind {
     Class, Init, New, Tell, The, Of, Import, From, Returns,
     Read, Write, Try, Catch, Export,
     // Literals
-    Number(f64), String(String), Ident(String), Bool(bool), Nothing,
+    Number(f64), String(String), Interpolated(Vec<StringPart>), Ident(String), Bool(bool), Nothing,
     // Operators
     Plus, Minus, Star, Slash, Percent, Power,
     EqEq, NotEq, Less, Greater, LessEq, GreaterEq,
@@ -187,7 +193,7 @@ impl<'a> Lexer<'a> {
                 if self.peek_char() == Some('=') { self.advance(); Some(TokenKind::NotEq) }
                 else { self.error("unexpected '!'") }
             }
-            '"' => Some(TokenKind::String(self.read_string())),
+            '"' => Some(self.read_string_token()),
             d if d.is_ascii_digit() => Some(TokenKind::Number(self.read_number())),
             a if a.is_alphabetic() || a == '_' => {
                 let name = self.read_identifier();
@@ -256,27 +262,90 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_string(&mut self) -> String {
+    fn read_string_token(&mut self) -> TokenKind {
         self.advance(); // opening quote
-        let mut result = String::new();
+        let mut literal = String::new();
+        let mut parts: Vec<StringPart> = Vec::new();
+        let mut has_interp = false;
+
+        fn flush(literal: &mut String, parts: &mut Vec<StringPart>) {
+            if !literal.is_empty() {
+                parts.push(StringPart::Literal(std::mem::take(literal)));
+            }
+        }
+
         while let Some(c) = self.peek_char() {
             if c == '"' { self.advance(); break; }
             if c == '\\' {
                 self.advance();
                 match self.advance() {
-                    Some('n') => result.push('\n'),
-                    Some('t') => result.push('\t'),
-                    Some('"') => result.push('"'),
-                    Some('\\') => result.push('\\'),
-                    Some(other) => result.push(other),
+                    Some('n') => literal.push('\n'),
+                    Some('t') => literal.push('\t'),
+                    Some('"') => literal.push('"'),
+                    Some('\\') => literal.push('\\'),
+                    Some('{') => literal.push('{'),
+                    Some('}') => literal.push('}'),
+                    Some(other) => literal.push(other),
                     None => self.error("unterminated string"),
                 }
+            } else if c == '{' {
+                has_interp = true;
+                flush(&mut literal, &mut parts);
+                self.advance(); // '{'
+                let expr = self.read_interpolation_expr();
+                parts.push(StringPart::Expr(expr));
             } else {
-                result.push(c);
+                literal.push(c);
                 self.advance();
             }
         }
-        result
+
+        if has_interp {
+            flush(&mut literal, &mut parts);
+            TokenKind::Interpolated(parts)
+        } else {
+            TokenKind::String(literal)
+        }
+    }
+
+    fn read_interpolation_expr(&mut self) -> String {
+        let mut expr = String::new();
+        let mut depth = 1;
+        while let Some(c) = self.peek_char() {
+            if c == '"' { self.error("unterminated interpolation expression"); }
+            if c == '{' {
+                depth += 1;
+                expr.push(c);
+                self.advance();
+            } else if c == '}' {
+                depth -= 1;
+                self.advance();
+                if depth == 0 { break; }
+                expr.push(c);
+            } else if c == '\\' {
+                self.advance();
+                if let Some(escaped) = self.advance() {
+                    expr.push('\\');
+                    expr.push(escaped);
+                }
+            } else {
+                expr.push(c);
+                self.advance();
+            }
+        }
+        expr
+    }
+
+    pub fn lex_string(source: &str) -> Vec<Token> {
+        let mut lexer = Lexer::new(source);
+        let mut tokens = Vec::new();
+        loop {
+            let t = lexer.next_token();
+            let eof = matches!(t.kind, TokenKind::Eof);
+            tokens.push(t);
+            if eof { break; }
+        }
+        tokens
     }
 
     fn read_number(&mut self) -> f64 {

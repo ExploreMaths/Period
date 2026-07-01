@@ -82,6 +82,10 @@ static int try_fast_show(const char *src) {
     while (*after == ' ' || *after == '\t' || *after == '\r' || *after == '\n') after++;
     if (after[0] != '.' || after[1] != '\0') return 0;
 
+    for (const char *p = s; p < end; p++) {
+        if (*p == '{' || *p == '}') return 0;
+    }
+
     fwrite(s, 1, end - s, stdout);
     putchar('\n');
     return 1;

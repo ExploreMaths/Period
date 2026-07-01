@@ -452,6 +452,7 @@ fn token_len(kind: &TokenKind) -> u32 {
     match kind {
         TokenKind::Ident(s) => s.len() as u32,
         TokenKind::String(s) => s.len() as u32,
+        TokenKind::Interpolated(_) => 1,
         TokenKind::Number(n) => format!("{}", n).len() as u32,
         TokenKind::Bool(b) => if *b { 4 } else { 5 },
         TokenKind::Nothing => 7,

@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{StringPart, Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -74,7 +74,7 @@ impl Parser {
         self.advance(); // let
         let (type_ann, name) = self.parse_typed_name();
         self.expect(TokenKind::Be, "expected 'be' after variable name");
-        let type_ann = type_ann.or_else(|| self.try_parse_type_before_value());
+        let _type_ann = type_ann.or_else(|| self.try_parse_type_before_value());
         let value = self.parse_expression();
         self.expect(TokenKind::Dot, "expected '.' at end of let");
         Stmt::Let { name, value }
@@ -563,10 +563,41 @@ impl Parser {
         self.check(&TokenKind::Dot) || self.check(&TokenKind::Newline) || self.check(&TokenKind::Indent) || self.check(&TokenKind::Dedent) || self.check(&TokenKind::Eof)
     }
 
+    fn parse_interpolated(&self, parts: Vec<StringPart>) -> Expr {
+        let mut exprs: Vec<Expr> = Vec::new();
+        for part in parts {
+            match part {
+                StringPart::Literal(s) => exprs.push(Expr::String(s)),
+                StringPart::Expr(src) => {
+                    let tokens = crate::lexer::Lexer::lex_string(&src);
+                    let inner = Parser::new(tokens).parse_expression();
+                    // Wrap the interpolated expression with the built-in `string` function so
+                    // numbers, booleans, lists, etc. are automatically converted to text.
+                    let span = Span { line: 1, col: 1 };
+                    let string_call = Expr::Call {
+                        callee: Box::new(Expr::Variable { name: "string".to_string(), span: span.clone() }),
+                        args: vec![inner],
+                    };
+                    exprs.push(string_call);
+                }
+            }
+        }
+        if exprs.is_empty() {
+            return Expr::String(String::new());
+        }
+        let mut result = exprs.remove(0);
+        for e in exprs {
+            let span = Span { line: 1, col: 1 };
+            result = Expr::Binary { op: BinOp::Add, left: Box::new(result), right: Box::new(e), span };
+        }
+        result
+    }
+
     fn parse_primary(&mut self) -> Expr {
         match self.peek(0).kind.clone() {
             TokenKind::Number(n) => { self.advance(); Expr::Number(n) }
             TokenKind::String(s) => { self.advance(); Expr::String(s) }
+            TokenKind::Interpolated(parts) => { self.advance(); self.parse_interpolated(parts) }
             TokenKind::Bool(b) => { self.advance(); Expr::Bool(b) }
             TokenKind::Nothing => { self.advance(); Expr::Nothing }
             TokenKind::Ellipsis => { self.advance(); Expr::Ellipsis }

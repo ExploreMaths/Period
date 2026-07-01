@@ -645,7 +645,7 @@ impl Interpreter {
     }
 
     fn new_instance(&mut self, cls: &Value, args: Vec<Value>) -> Result<Value, Control> {
-        if let Value::Class { name, init, methods } = cls {
+        if let Value::Class { name, init, methods: _ } = cls {
             let instance = Value::Instance {
                 class: Box::new(cls.clone()),
                 fields: Rc::new(RefCell::new(HashMap::new())),
