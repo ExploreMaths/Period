@@ -183,7 +183,7 @@ def source_for(lang: str, n: int) -> str:
     raise ValueError(lang)
 
 
-def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 3) -> float | None:
+def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 10) -> float | None:
     with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
         f.write(source)
         src = Path(f.name)

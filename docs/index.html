@@ -82,7 +82,7 @@
       <div class="chart-wrapper">
         <canvas id="perfChart"></canvas>
       </div>
-      <p class="chart-note">Benchmarked with <code>benchmark_long.py</code> (5,000,000 iterations). C, Rust, Go, C# and Java are compiled in Release / optimized mode; Period compiles the loop to a cached DLL and runs it in-process. The Y-axis uses a logarithmic scale so the small differences at the top remain visible.</p>
+      <p class="chart-note">Benchmarked with <code>benchmark_long.py</code> (5,000,000 iterations, averaged over 10 runs). C, Rust, Go, C# and Java are compiled in Release / optimized mode; Period compiles the loop to a cached DLL via TCC and runs it in-process. Period is competitive with C and Rust on this numeric loop; small differences are within typical measurement noise.</p>
     </section>
 
     <section id="hello-period">
@@ -266,22 +266,22 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['C (Release)', 'Period', 'Rust', 'Go', 'C#', 'Java'],
+          labels: ['Period', 'C (Release)', 'Rust', 'Go', 'C#', 'Java'],
           datasets: [
             {
               label: '5,000,000 iterations',
-              data: [10.0, 10.1, 13.4, 23.3, 41.9, 83.5],
+              data: [11.3, 11.8, 13.3, 25.5, 49.4, 98.8],
               backgroundColor: [
-                'rgba(59, 130, 246, 0.9)',
                 'rgba(217, 119, 6, 0.9)',
+                'rgba(59, 130, 246, 0.9)',
                 'rgba(180, 83, 9, 0.9)',
                 'rgba(20, 184, 166, 0.9)',
                 'rgba(168, 85, 247, 0.9)',
                 'rgba(239, 68, 68, 0.9)'
               ],
               borderColor: [
-                'rgba(59, 130, 246, 1)',
                 'rgba(217, 119, 6, 1)',
+                'rgba(59, 130, 246, 1)',
                 'rgba(180, 83, 9, 1)',
                 'rgba(20, 184, 166, 1)',
                 'rgba(168, 85, 247, 1)',

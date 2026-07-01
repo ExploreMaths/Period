@@ -277,6 +277,7 @@ fn try_run_compiled(source: &str, program: &ast::Program, path: &str) -> Option<
         fs::write(&c_path, &c_source).ok()?;
         let output = Command::new(&tcc_exe)
             .arg("-shared")
+            .arg("-O2")
             .arg("-o").arg(&dll_path)
             .arg(&c_path)
             .output()
