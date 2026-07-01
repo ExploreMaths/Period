@@ -14,7 +14,6 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
   ].map((item) => ({
     ...item,
     ariaLabel: item.label,
-    rotation: Math.round((Math.random() * 24 - 12) * 100) / 100,
     hoverStyles: { bgColor: "var(--accent)", textColor: "#fff" },
   }));
 
@@ -54,7 +53,7 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
             href="${item.href}"
             aria-label="${item.ariaLabel}"
             class="pill-link ${item.href.includes(currentPath) ? "active" : ""}"
-            style="--item-rot: ${item.rotation}deg; --hover-bg: ${item.hoverStyles.bgColor}; --hover-color: ${item.hoverStyles.textColor}"
+            style="--item-rot: 0deg; --hover-bg: ${item.hoverStyles.bgColor}; --hover-color: ${item.hoverStyles.textColor}"
             data-index="${idx}"
           >
             <span class="pill-label">${item.label}</span>
@@ -136,6 +135,8 @@ const SIDEBAR_CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="22" h
     gsap.set(labels, { y: 24, autoAlpha: 0 });
 
     bubbles.forEach((bubble, i) => {
+      const rotation = Math.round((Math.random() * 24 - 12) * 100) / 100;
+      bubble.style.setProperty('--item-rot', `${rotation}deg`);
       const delay = i * 0.1 + gsap.utils.random(-0.03, 0.03);
       const tl = gsap.timeline({ delay });
       tl.to(bubble, { scale: 1, duration: 0.5, ease: "back.out(1.5)" });
