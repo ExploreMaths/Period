@@ -223,6 +223,9 @@ impl CGen {
                 }
             }
             Stmt::While { cond, body } => {
+                if self.try_unroll_while_loop(cond, body)? {
+                    return Ok(());
+                }
                 let c = self.gen_cond(cond)?;
                 self.line(&format!("while ({}) {{", c));
                 self.indent += 1;
@@ -256,6 +259,113 @@ impl CGen {
             AssignTarget::Index { .. } => Self::unsupported(),
             AssignTarget::Property { .. } => Self::unsupported(),
         }
+    }
+
+    fn is_side_effect_free_expr(expr: &Expr) -> bool {
+        match expr {
+            Expr::Number(_) | Expr::Bool(_) | Expr::Variable { .. } => true,
+            Expr::Binary { left, right, .. } => Self::is_side_effect_free_expr(left) && Self::is_side_effect_free_expr(right),
+            Expr::Unary { operand, .. } => Self::is_side_effect_free_expr(operand),
+            _ => false,
+        }
+    }
+
+    fn substitute_var_in_expr(expr: &Expr, name: &str, offset: i64) -> Expr {
+        match expr {
+            Expr::Variable { name: n, span } if n == name => Expr::Binary {
+                op: BinOp::Add,
+                left: Box::new(Expr::Variable { name: n.clone(), span: span.clone() }),
+                right: Box::new(Expr::Number(offset as f64)),
+                span: span.clone(),
+            },
+            Expr::Binary { op, left, right, span } => Expr::Binary {
+                op: *op,
+                left: Box::new(Self::substitute_var_in_expr(left, name, offset)),
+                right: Box::new(Self::substitute_var_in_expr(right, name, offset)),
+                span: span.clone(),
+            },
+            Expr::Unary { op, operand } => Expr::Unary {
+                op: *op,
+                operand: Box::new(Self::substitute_var_in_expr(operand, name, offset)),
+            },
+            _ => expr.clone(),
+        }
+    }
+
+    fn substitute_var_in_stmt(stmt: &Stmt, name: &str, offset: i64) -> Stmt {
+        match stmt {
+            Stmt::Set { target, value } => Stmt::Set {
+                target: target.clone(),
+                value: Self::substitute_var_in_expr(value, name, offset),
+            },
+            _ => stmt.clone(),
+        }
+    }
+
+    /// Try to unroll simple numeric `while` loops whose body only updates local
+    /// accumulators with the induction variable. This is a general optimization
+    /// for the common 1..N summation pattern and similar pure numeric loops.
+    fn try_unroll_while_loop(&mut self, cond: &Expr, body: &[Stmt]) -> Result<bool, Unsupported> {
+        const FACTOR: i64 = 8;
+
+        // Match `idx <= n` where n is side-effect-free.
+        let (idx, n_expr) = match cond {
+            Expr::Binary { op: BinOp::Le, left, right, .. } => {
+                let idx = match left.as_ref() {
+                    Expr::Variable { name, .. } => name.clone(),
+                    _ => return Ok(false),
+                };
+                if !Self::is_side_effect_free_expr(right) { return Ok(false); }
+                (idx, right)
+            }
+            _ => return Ok(false),
+        };
+
+        if body.is_empty() { return Ok(false); }
+
+        // Last statement must be `idx = idx + 1`.
+        match &body[body.len() - 1] {
+            Stmt::Set { target: AssignTarget::Variable { name: inc_var, .. }, value: Expr::Binary { op: BinOp::Add, left, right, .. } } => {
+                let l = match left.as_ref() { Expr::Variable { name, .. } => name.clone(), _ => return Ok(false) };
+                if l != idx || inc_var != &idx { return Ok(false); }
+                if !matches!(right.as_ref(), Expr::Number(1.0)) { return Ok(false); }
+            }
+            _ => return Ok(false),
+        }
+
+        let loop_body = &body[..body.len() - 1];
+        for s in loop_body {
+            match s {
+                Stmt::Set { target: AssignTarget::Variable { name: t, .. }, value } => {
+                    if t == &idx { return Ok(false); }
+                    if !Self::is_side_effect_free_expr(value) { return Ok(false); }
+                }
+                _ => return Ok(false),
+            }
+        }
+
+        let n_str = self.gen_expr(n_expr)?;
+        self.line(&format!("long long __p_n = {};", n_str));
+        self.line(&format!("long long __p_lim = __p_n - {}LL;", FACTOR - 1));
+        self.line(&format!("while (({}) <= (__p_lim)) {{", idx));
+        self.indent += 1;
+        for k in 0..FACTOR {
+            for s in loop_body {
+                let subst = if k == 0 { s.clone() } else { Self::substitute_var_in_stmt(s, &idx, k) };
+                self.gen_stmt(&subst)?;
+            }
+        }
+        self.line(&format!("{} = {} + {}LL;", idx, idx, FACTOR));
+        self.indent -= 1;
+        self.line("}");
+
+        self.line(&format!("while (({}) <= (__p_n)) {{", idx));
+        self.indent += 1;
+        for s in body { self.gen_stmt(s)?; }
+        self.indent -= 1;
+        self.line("}");
+
+        Ok(true)
     }
 
     fn gen_iterable(&mut self, expr: &Expr) -> Result<String, Unsupported> {

@@ -182,15 +182,15 @@ fn main() {
         process::exit(1);
     }
 
-    // Fast path: compile numeric programs to C via TCC and cache a DLL.
+    // Fast path: compile numeric programs to C and cache a DLL.
     if c_backend::try_compile_c(&program, path).is_some() {
         if let Some(code) = try_run_compiled(&source, &program, path) {
             process::exit(code);
         }
-        if find_tcc().is_some() {
+        if find_c_compiler().is_some() {
             eprintln!("compilation failed; falling back to interpreter.");
         } else {
-            eprintln!("TCC not available; falling back to interpreter.");
+            eprintln!("no C compiler available; falling back to interpreter.");
         }
     }
 
@@ -266,18 +266,32 @@ fn try_run_cached_dll(source: &str) -> Option<i32> {
 
 fn try_run_compiled(source: &str, program: &ast::Program, path: &str) -> Option<i32> {
     let (c_source, line_map) = c_backend::try_compile_c(program, path)?;
-    let tcc_exe = find_tcc()?;
+    let (compiler, compile_args) = find_c_compiler()?;
 
     let dll_path = cache_dll_path(source);
     let source_hash = fnv1a_64(source.as_bytes());
     let cache_dir = env::temp_dir().join("period_c_cache");
     fs::create_dir_all(&cache_dir).ok()?;
     let c_path = cache_dir.join(format!("period_{:016x}.c", source_hash));
+    let sidecar = cache_dir.join(format!("period_{:016x}.compiler", source_hash));
+    let compiler_tag = compiler.to_string_lossy().to_string();
+
+    // Recompile if the cached DLL was built by a different compiler.
+    if dll_path.exists() {
+        let stale = fs::read_to_string(&sidecar)
+            .ok()
+            .map(|s| s.trim() != compiler_tag)
+            .unwrap_or(true);
+        if stale {
+            let _ = fs::remove_file(&dll_path);
+            let _ = fs::remove_file(&c_path);
+        }
+    }
+
     if !dll_path.exists() {
         fs::write(&c_path, &c_source).ok()?;
-        let output = Command::new(&tcc_exe)
-            .arg("-shared")
-            .arg("-O2")
+        let output = Command::new(&compiler)
+            .args(&compile_args)
             .arg("-o").arg(&dll_path)
             .arg(&c_path)
             .output()
@@ -289,6 +303,7 @@ fn try_run_compiled(source: &str, program: &ast::Program, path: &str) -> Option<
             }
             return None;
         }
+        fs::write(&sidecar, &compiler_tag).ok()?;
     }
     unsafe {
         let lib = libloading::Library::new(&dll_path).ok()?;
@@ -336,34 +351,57 @@ fn find_span_for_c_line(line_map: &[(usize, ast::Span)], c_line: usize) -> Optio
     best
 }
 
-fn find_tcc() -> Option<PathBuf> {
-    if let Ok(path) = env::var("PERIOD_TCC") {
-        let p = PathBuf::from(path);
-        if p.exists() {
-            return Some(p);
+fn find_on_path(name: &str) -> Option<PathBuf> {
+    if let Ok(path) = env::var("PATH") {
+        for dir in env::split_paths(&path) {
+            let candidate = dir.join(name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
         }
     }
-    // Look next to the current executable (e.g. dist/tcc/tcc.exe).
+    None
+}
+
+/// Find a suitable C compiler for the JIT backend.
+///
+/// Prefer Clang or GCC with `-O2 -march=native`, falling back to the bundled TCC.
+fn find_c_compiler() -> Option<(PathBuf, Vec<String>)> {
+    if let Ok(path) = env::var("PERIOD_CC") {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Some((p, vec!["-O2".into(), "-march=native".into(), "-shared".into()]));
+        }
+    }
+
+    // Common Windows install locations for LLVM/Clang.
+    let clang_locations = [
+        PathBuf::from(r"C:\Program Files\LLVM\bin\clang.exe"),
+        PathBuf::from(r"C:\Program Files (x86)\LLVM\bin\clang.exe"),
+    ];
+    for p in &clang_locations {
+        if p.exists() {
+            return Some((p.clone(), vec!["-O2".into(), "-march=native".into(), "-shared".into()]));
+        }
+    }
+
+    if let Some(p) = find_on_path("clang.exe") {
+        return Some((p, vec!["-O2".into(), "-march=native".into(), "-shared".into()]));
+    }
+    if let Some(p) = find_on_path("gcc.exe") {
+        return Some((p, vec!["-O2".into(), "-march=native".into(), "-shared".into()]));
+    }
+
+    // Bundled TCC is the final fallback.
     let mut exe_dir = env::current_exe().ok()?;
     exe_dir.pop();
-    let candidates = [
+    let tcc_candidates = [
         exe_dir.join("tcc").join("tcc.exe"),
         exe_dir.join("tcc.exe"),
     ];
-    for candidate in &candidates {
+    for candidate in &tcc_candidates {
         if candidate.exists() {
-            return Some(candidate.clone());
-        }
-    }
-    // Fall back to PATH.
-    if let Ok(path) = env::var("PATH") {
-        for dir in env::split_paths(&path) {
-            for name in ["tcc.exe", "tcc"] {
-                let candidate = dir.join(name);
-                if candidate.exists() {
-                    return Some(candidate);
-                }
-            }
+            return Some((candidate.clone(), vec!["-shared".into(), "-O2".into()]));
         }
     }
     None

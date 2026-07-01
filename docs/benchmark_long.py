@@ -18,9 +18,6 @@ DIST = ROOT / "dist"
 PERIOD_EXE = DIST / "period.exe"
 TCC_EXE = ROOT / ".tools" / "tcc" / "tcc" / "tcc.exe"
 
-NS = [1_000_000, 5_000_000]
-
-
 def augment_path() -> None:
     """Add common Windows install locations to PATH so winget-installed
     toolchains are discoverable even when the current shell was not restarted."""
@@ -52,135 +49,190 @@ def has_dotnet_sdk() -> bool:
         return False
 
 
-def find_release_c_compiler() -> list[str] | None:
-    """Return an optimizing C compiler command if one is available.
+def c_compiler_candidates(src: Path, exe: Path) -> list[list[str]]:
+    """Return C compiler commands to try, from strongest to fallback.
 
     Prefer a real optimizing compiler (MSVC cl /O2, gcc -O2, clang -O2).
-    If none are on PATH, fall back to the bundled TCC with -O2.
+    Also look in common Windows install locations. If nothing works, fall
+    back to the bundled TCC with -O2.
     """
+    candidates: list[list[str]] = []
+
     if shutil.which("cl"):
-        return ["cl", "/O2"]
+        candidates.append(["cl", "/O2", f"/Fe:{exe}", str(src)])
+
+    gcc_locations = [
+        Path(r"C:\msys64\mingw64\bin\gcc.exe"),
+        Path(r"C:\mingw64\bin\gcc.exe"),
+    ]
+    for gcc in gcc_locations:
+        if gcc.exists():
+            candidates.append([str(gcc), "-O2", "-march=native", str(src), "-o", str(exe)])
+            break
     if shutil.which("gcc"):
-        return ["gcc", "-O2"]
+        candidates.append(["gcc", "-O2", "-march=native", str(src), "-o", str(exe)])
+
+    clang_locations = [
+        Path(r"C:\Program Files\LLVM\bin\clang.exe"),
+        Path(r"C:\Program Files (x86)\LLVM\bin\clang.exe"),
+        Path(r"C:\msys64\mingw64\bin\clang.exe"),
+    ]
+    for clang in clang_locations:
+        if clang.exists():
+            candidates.append([str(clang), "-O2", "-march=native", str(src), "-o", str(exe)])
+            break
     if shutil.which("clang"):
-        return ["clang", "-O2"]
-    return None
+        candidates.append(["clang", "-O2", "-march=native", str(src), "-o", str(exe)])
+
+    candidates.append([str(TCC_EXE), "-O2", str(src), "-o", str(exe)])
+    return candidates
 
 
-def source_for(lang: str, n: int) -> str:
-    if lang == "period":
-        return (
-            f"let sum be 0.\n"
-            f"let i be 1.\n"
-            f"while i <= {n} repeat:\n"
-            f"    set sum to sum + i.\n"
-            f"    set i to i + 1.\n"
-            f"show sum.\n"
-        )
-    if lang == "python":
-        return (
-            f"s = 0\n"
-            f"for i in range(1, {n + 1}):\n"
-            f"    s += i\n"
-            f"print(s)\n"
-        )
-    if lang == "node":
-        return (
-            f"let s = 0;\n"
-            f"for (let i = 1; i <= {n}; i++) {{\n"
-            f"    s += i;\n"
-            f"}}\n"
-            f"console.log(s);\n"
-        )
-    if lang == "perl":
-        return (
-            f"my $s = 0;\n"
-            f"for my $i (1..{n}) {{ $s += $i; }}\n"
-            f"print \"$s\\n\";\n"
-        )
-    if lang == "c":
-        return (
-            f"#include <stdio.h>\n"
-            f"int main(void) {{\n"
-            f"    long long s = 0;\n"
-            f"    for (long long i = 1; i <= {n}; i++) s += i;\n"
-            f"    printf(\"%lld\\n\", s);\n"
-            f"    return 0;\n"
-            f"}}\n"
-        )
-    if lang == "rust":
-        return (
-            f"fn main() {{\n"
-            f"    let n: i64 = {n};\n"
-            f"    let mut s: i64 = 0;\n"
-            f"    for i in 1..=n {{ s += i; }}\n"
-            f"    println!(\"{{}}\", s);\n"
-            f"}}\n"
-        )
-    if lang == "go":
-        return (
-            f"package main\n"
-            f"import \"fmt\"\n"
-            f"func main() {{\n"
-            f"    var s int64 = 0\n"
-            f"    var n int64 = {n}\n"
-            f"    for i := int64(1); i <= n; i++ {{ s += i }}\n"
-            f"    fmt.Println(s)\n"
-            f"}}\n"
-        )
-    if lang == "java":
-        return (
-            f"class Main {{\n"
-            f"    public static void main(String[] args) {{\n"
-            f"        long s = 0;\n"
-            f"        long n = {n}L;\n"
-            f"        for (long i = 1; i <= n; i++) s += i;\n"
-            f"        System.out.println(s);\n"
-            f"    }}\n"
-            f"}}\n"
-        )
-    if lang == "csharp":
-        return (
-            f"using System;\n"
-            f"class Program {{\n"
-            f"    static void Main() {{\n"
-            f"        long s = 0;\n"
-            f"        long n = {n}L;\n"
-            f"        for (long i = 1; i <= n; i++) s += i;\n"
-            f"        Console.WriteLine(s);\n"
-            f"    }}\n"
-            f"}}\n"
-        )
-    if lang == "ruby":
-        return (
-            f"s = 0\n"
-            f"n = {n}\n"
-            f"(1..n).each {{ |i| s += i }}\n"
-            f"puts s\n"
-        )
-    if lang == "php":
-        return (
-            f"<?php\n"
-            f"$s = 0;\n"
-            f"$n = {n};\n"
-            f"for ($i = 1; $i <= $n; $i++) $s += $i;\n"
-            f"echo $s . \"\\n\";\n"
-        )
-    if lang == "lua":
-        return (
-            f"local s = 0\n"
-            f"local n = {n}\n"
-            f"for i = 1, n do s = s + i end\n"
-            f"print(s)\n"
-        )
-    if lang == "powershell":
-        return (
-            f"$n = {n}\n"
-            f"$s = [long]0\n"
-            f"for ($i = 1; $i -le $n; $i++) {{ $s += $i }}\n"
-            f"Write-Output $s\n"
-        )
-    raise ValueError(lang)
+WORKLOADS = {
+    "sum": 5_000_000,
+    "div3or5": 5_000_000,
+}
+
+
+def source_for(lang: str, workload: str, n: int) -> str:
+    if workload == "sum":
+        if lang == "period":
+            return (
+                f"let sum be 0.\n"
+                f"let i be 1.\n"
+                f"while i <= {n} repeat:\n"
+                f"    set sum to sum + i.\n"
+                f"    set i to i + 1.\n"
+                f"show sum.\n"
+            )
+        if lang == "c":
+            return (
+                f"#include <stdio.h>\n"
+                f"int main(void) {{\n"
+                f"    long long s = 0;\n"
+                f"    for (long long i = 1; i <= {n}; i++) s += i;\n"
+                f"    printf(\"%lld\\n\", s);\n"
+                f"    return 0;\n"
+                f"}}\n"
+            )
+        if lang == "rust":
+            return (
+                f"fn main() {{\n"
+                f"    let n: i64 = {n};\n"
+                f"    let mut s: i64 = 0;\n"
+                f"    for i in 1..=n {{ s += i; }}\n"
+                f"    println!(\"{{}}\", s);\n"
+                f"}}\n"
+            )
+        if lang == "go":
+            return (
+                f"package main\n"
+                f"import \"fmt\"\n"
+                f"func main() {{\n"
+                f"    var s int64 = 0\n"
+                f"    var n int64 = {n}\n"
+                f"    for i := int64(1); i <= n; i++ {{ s += i }}\n"
+                f"    fmt.Println(s)\n"
+                f"}}\n"
+            )
+        if lang == "java":
+            return (
+                f"class Main {{\n"
+                f"    public static void main(String[] args) {{\n"
+                f"        long s = 0;\n"
+                f"        long n = {n}L;\n"
+                f"        for (long i = 1; i <= n; i++) s += i;\n"
+                f"        System.out.println(s);\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+        if lang == "csharp":
+            return (
+                f"using System;\n"
+                f"class Program {{\n"
+                f"    static void Main() {{\n"
+                f"        long s = 0;\n"
+                f"        long n = {n}L;\n"
+                f"        for (long i = 1; i <= n; i++) s += i;\n"
+                f"        Console.WriteLine(s);\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+
+    if workload == "div3or5":
+        if lang == "period":
+            return (
+                f"let count be 0.\n"
+                f"let i be 1.\n"
+                f"while i <= {n} repeat:\n"
+                f"    if i % 3 == 0 or i % 5 == 0 then:\n"
+                f"        set count to count + 1.\n"
+                f"    set i to i + 1.\n"
+                f"show count.\n"
+            )
+        if lang == "c":
+            return (
+                f"#include <stdio.h>\n"
+                f"int main(void) {{\n"
+                f"    long long count = 0;\n"
+                f"    long long n = {n}LL;\n"
+                f"    for (long long i = 1; i <= n; i++)\n"
+                f"        if (i % 3 == 0 || i % 5 == 0) count++;\n"
+                f"    printf(\"%lld\\n\", count);\n"
+                f"    return 0;\n"
+                f"}}\n"
+            )
+        if lang == "rust":
+            return (
+                f"fn main() {{\n"
+                f"    let n: i64 = {n};\n"
+                f"    let mut count = 0;\n"
+                f"    for i in 1..=n {{\n"
+                f"        if i % 3 == 0 || i % 5 == 0 {{ count += 1; }}\n"
+                f"    }}\n"
+                f"    println!(\"{{}}\", count);\n"
+                f"}}\n"
+            )
+        if lang == "go":
+            return (
+                f"package main\n"
+                f"import \"fmt\"\n"
+                f"func main() {{\n"
+                f"    var n int64 = {n}\n"
+                f"    var count int64 = 0\n"
+                f"    for i := int64(1); i <= n; i++ {{\n"
+                f"        if i%3 == 0 || i%5 == 0 {{ count++ }}\n"
+                f"    }}\n"
+                f"    fmt.Println(count)\n"
+                f"}}\n"
+            )
+        if lang == "java":
+            return (
+                f"class Main {{\n"
+                f"    public static void main(String[] args) {{\n"
+                f"        long count = 0;\n"
+                f"        long n = {n}L;\n"
+                f"        for (long i = 1; i <= n; i++)\n"
+                f"            if (i % 3 == 0 || i % 5 == 0) count++;\n"
+                f"        System.out.println(count);\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+        if lang == "csharp":
+            return (
+                f"using System;\n"
+                f"class Program {{\n"
+                f"    static void Main() {{\n"
+                f"        long count = 0;\n"
+                f"        long n = {n}L;\n"
+                f"        for (long i = 1; i <= n; i++)\n"
+                f"            if (i % 3 == 0 || i % 5 == 0) count++;\n"
+                f"        Console.WriteLine(count);\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+
+    raise ValueError((lang, workload))
 
 
 def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 10) -> float | None:
@@ -192,21 +244,22 @@ def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 10) -> float 
     exe = src.with_suffix(".exe")
 
     if ext == ".c":
-        release_cc = find_release_c_compiler()
-        if release_cc:
-            compile_cmd = release_cc + [str(src), "-o", str(exe)]
-        else:
-            compile_cmd = [str(TCC_EXE), "-O2", str(src), "-o", str(exe)]
-        result = subprocess.run(
-            compile_cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        if result.returncode != 0:
-            print(f"compile failed: {result.stderr}")
+        run_cmd = None
+        last_error = ""
+        for compile_cmd in c_compiler_candidates(src, exe):
+            result = subprocess.run(
+                compile_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if result.returncode == 0:
+                run_cmd = [str(exe)]
+                break
+            last_error = result.stderr
+        if run_cmd is None:
+            print(f"all C compilers failed; last error: {last_error}")
             return None
-        run_cmd = [str(exe)]
     elif ext == ".rs":
         result = subprocess.run(
             ["rustc", "-O", str(src), "-o", str(exe)],
@@ -285,6 +338,7 @@ def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 10) -> float 
     src.unlink(missing_ok=True)
     if ext in compiled_exts:
         exe.unlink(missing_ok=True)
+        src.with_suffix(".obj").unlink(missing_ok=True)
     if ext == ".java":
         for cls in src.parent.glob("*.class"):
             cls.unlink(missing_ok=True)
@@ -326,24 +380,21 @@ def main() -> None:
         "C#": "csharp",
     }
 
-    print(f"{'Language':<12}", end="")
-    for n in NS:
-        print(f"{n:>15,}", end="")
-    print()
-    print("-" * (12 + 15 * len(NS)))
+    for workload, n in WORKLOADS.items():
+        print(f"\nWorkload: {workload} (n={n:,})")
+        print(f"{'Language':<12}", end="")
+        print(f"{'time (ms)':>15}")
+        print("-" * 28)
 
-    for name, cmd, ext in languages:
-        first = cmd[0]
-        if shutil.which(first) is None and not Path(first).exists():
-            continue
-        print(f"{name:<12}", end="")
-        for n in NS:
-            ms = run(cmd, source_for(lang_key[name], n), ext, n)
+        for name, cmd, ext in languages:
+            first = cmd[0]
+            if shutil.which(first) is None and not Path(first).exists():
+                continue
+            ms = run(cmd, source_for(lang_key[name], workload, n), ext, n)
             if ms is None:
-                print(f"{'failed':>15}", end="")
+                print(f"{name:<12}{'failed':>15}")
             else:
-                print(f"{ms:>14.1f}ms", end="")
-        print()
+                print(f"{name:<12}{ms:>14.1f}ms")
 
 
 if __name__ == "__main__":
