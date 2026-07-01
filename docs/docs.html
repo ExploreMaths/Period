@@ -25,6 +25,7 @@
         <li><a href="#classes">Classes</a></li>
         <li><a href="#imports">Imports</a></li>
         <li><a href="#builtins">Built-ins</a></li>
+        <li><a href="#files">File I/O</a></li>
         <li><a href="#repl">REPL</a></li>
         <li><a href="#vscode">VS Code</a></li>
         <li><a href="#errors">Errors</a></li>
@@ -270,6 +271,14 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
 <span class="builtin">show</span> <span class="string">"Nice to meet you, "</span> + name + <span class="string">"."</span><span class="period">.</span></code></pre>
     </section>
 
+    <section id="files">
+      <h2>File I/O</h2>
+      <p>Use <code>read</code> to load a file's contents into a variable, and <code>write</code> to save a string to a file. Paths are relative to the source file's directory.</p>
+      <pre><code><span class="keyword">read</span> content <span class="keyword">from</span> <span class="string">"input.txt"</span><span class="period">.</span>
+<span class="keyword">write</span> content <span class="keyword">to</span> <span class="string">"output.txt"</span><span class="period">.</span></code></pre>
+      <p>If the file cannot be read or written, the program stops with a runtime error.</p>
+    </section>
+
     <section id="repl">
       <h2>REPL</h2>
       <p>Running <code>period</code> without arguments starts the interactive Read-Eval-Print Loop. Type statements ending with a period and press Enter.</p>
@@ -321,6 +330,8 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
 statement      := "let" (&lt;type&gt;)? &lt;identifier&gt; "be" (&lt;type&gt;)? &lt;expression&gt; "."
                 | "set" &lt;expression&gt; "to" &lt;expression&gt; "."
                 | "show" &lt;expression&gt; "."
+                | "read" &lt;identifier&gt; "from" &lt;expression&gt; "."
+                | "write" &lt;expression&gt; "to" &lt;expression&gt; "."
                 | "if" &lt;expression&gt; (",")? "then" ":" &lt;block&gt; (("otherwise" | "else") ":" &lt;block&gt;)?
                 | "while" &lt;expression&gt; "repeat" ":" &lt;block&gt;
                 | "for" &lt;identifier&gt; "in" &lt;expression&gt; "repeat" ":" &lt;block&gt;

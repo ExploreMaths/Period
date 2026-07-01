@@ -261,6 +261,8 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Import => "```period\nimport <module>.\n```\n\nImport a built-in or standard-library module. Use a leading dot (e.g. `.helper`) for local files.",
         TokenKind::From => "```period\n<name> from <module>.\n```\n\nUse or import a specific name from a module.",
         TokenKind::Tell => "```period\ntell <object> to <method> with <args>.\n```\n\nSend a message to an object.",
+        TokenKind::Read => "```period\nread <variable> from <path>.\n```\n\nRead the contents of a file into a variable.",
+        TokenKind::Write => "```period\nwrite <content> to <path>.\n```\n\nWrite a string to a file.",
         _ => return None,
     })
 }
@@ -476,6 +478,8 @@ fn token_len(kind: &TokenKind) -> u32 {
         TokenKind::Of => 2,
         TokenKind::Import => 6,
         TokenKind::From => 4,
+        TokenKind::Read => 5,
+        TokenKind::Write => 5,
         TokenKind::Returns => 7,
         TokenKind::Ellipsis => 3,
         TokenKind::Comma | TokenKind::Dot | TokenKind::Colon
@@ -961,6 +965,8 @@ fn keyword_completions() -> Vec<SymbolInfo> {
         ("let", "let <name> be <expression>."),
         ("set", "set <target> to <expression>."),
         ("show", "show <expression>."),
+        ("read", "read <variable> from <path>."),
+        ("write", "write <content> to <path>."),
         ("and", "Logical and."),
         ("or", "Logical or."),
         ("not", "Logical not."),
@@ -1045,6 +1051,14 @@ fn check_block(stmts: &[Stmt], scope: &[String], imports: &[String], diags: &mut
 fn check_stmt(stmt: &Stmt, scope: &mut Vec<String>, imports: &[String], diags: &mut Vec<Diagnostic>) {
     match stmt {
         Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => check_expr(expr, scope, imports, diags),
+        Stmt::Read { name, path } => {
+            check_expr(path, scope, imports, diags);
+            scope.push(name.clone());
+        }
+        Stmt::Write { content, path } => {
+            check_expr(content, scope, imports, diags);
+            check_expr(path, scope, imports, diags);
+        }
         Stmt::Let { name, value } => {
             check_expr(value, scope, imports, diags);
             scope.push(name.clone());

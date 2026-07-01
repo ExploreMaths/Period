@@ -223,6 +223,16 @@ impl Interpreter {
         self.current_path = Some(path.into());
     }
 
+    fn resolve_path(&self, path: &str) -> PathBuf {
+        let p = PathBuf::from(path);
+        if p.is_absolute() { return p; }
+        if let Some(current) = &self.current_path {
+            let dir = if current.is_file() { current.parent().unwrap_or(current) } else { current };
+            return dir.join(p);
+        }
+        p
+    }
+
     pub fn interpret(&mut self, program: &Program) -> Result<(), Control> {
         for stmt in &program.statements {
             self.execute(stmt)?;
@@ -246,6 +256,22 @@ impl Interpreter {
                 self.output.push(text.clone());
                 if !self.silent {
                     println!("{}", text);
+                }
+            }
+            Stmt::Read { name, path } => {
+                let path_str = self.evaluate(path)?.to_string();
+                let full_path = self.resolve_path(&path_str);
+                match std::fs::read_to_string(&full_path) {
+                    Ok(text) => { self.env.borrow().define(name, Value::String(text)); }
+                    Err(e) => return Err(Control::Error(format!("Could not read file '{}': {}", path_str, e))),
+                }
+            }
+            Stmt::Write { content, path } => {
+                let content_str = self.evaluate(content)?.to_string();
+                let path_str = self.evaluate(path)?.to_string();
+                let full_path = self.resolve_path(&path_str);
+                if let Err(e) = std::fs::write(&full_path, content_str) {
+                    return Err(Control::Error(format!("Could not write file '{}': {}", path_str, e)));
                 }
             }
             Stmt::If { cond, then_branch, else_branch } => {

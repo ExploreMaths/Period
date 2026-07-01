@@ -80,6 +80,8 @@ pub enum Stmt {
     Init(Init),
     Class { name: String, init: Option<Init>, methods: Vec<Stmt>, docstring: Option<String> },
     Import(Vec<(String, Span)>),
+    Read { name: String, path: Expr },
+    Write { content: Expr, path: Expr },
     Expr(Expr),
     Pass,
 }

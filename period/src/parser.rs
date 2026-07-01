@@ -61,6 +61,8 @@ impl Parser {
             TokenKind::Init => self.parse_init(),
             TokenKind::Class => self.parse_class(),
             TokenKind::Import => self.parse_import(),
+            TokenKind::Read => self.parse_read(),
+            TokenKind::Write => self.parse_write(),
             TokenKind::Ellipsis => { self.advance(); Stmt::Pass }
             _ => self.parse_expr_statement(),
         }
@@ -250,6 +252,24 @@ impl Parser {
         }
         self.expect(TokenKind::Dot, "expected '.' at end of import");
         Stmt::Import(paths)
+    }
+
+    fn parse_read(&mut self) -> Stmt {
+        self.advance(); // read
+        let name = self.expect_ident("expected variable name after read");
+        self.expect(TokenKind::From, "expected 'from' after variable name in read");
+        let path = self.parse_expression();
+        self.expect(TokenKind::Dot, "expected '.' at end of read");
+        Stmt::Read { name, path }
+    }
+
+    fn parse_write(&mut self) -> Stmt {
+        self.advance(); // write
+        let content = self.parse_expression();
+        self.expect(TokenKind::To, "expected 'to' after content in write");
+        let path = self.parse_expression();
+        self.expect(TokenKind::Dot, "expected '.' at end of write");
+        Stmt::Write { content, path }
     }
 
     fn parse_module_path(&mut self) -> (String, Span) {
