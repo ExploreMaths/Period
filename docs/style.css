@@ -368,6 +368,17 @@ main {
   gap: 0.5rem;
 }
 
+.platform-buttons {
+  display: inline-flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.platform-icon {
+  margin-right: 0.4rem;
+}
+
 .download-alt {
   font-size: 0.8rem;
   color: var(--muted);
