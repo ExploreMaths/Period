@@ -128,7 +128,7 @@
 
     <section id="conditionals">
       <h2>Conditionals</h2>
-      <p>Use <code>if ... then:</code> to branch. The optional <code>otherwise:</code> block runs when the condition is false.</p>
+      <p>Use <code>if ... then:</code> to branch. The optional <code>otherwise:</code> block runs when the condition is false; <code>else:</code> is an accepted alias.</p>
       <pre><code><span class="keyword">let</span> score <span class="keyword">be</span> <span class="number">85</span><span class="period">.</span>
 <span class="keyword">if</span> score >= <span class="number">60</span> <span class="keyword">then</span><span class="period">:</span>
     <span class="builtin">show</span> <span class="string">"pass"</span><span class="period">.</span>
@@ -313,7 +313,7 @@ Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to 
 statement      := "let" &lt;identifier&gt; "be" &lt;expression&gt; "."
                 | "set" &lt;expression&gt; "to" &lt;expression&gt; "."
                 | "show" &lt;expression&gt; "."
-                | "if" &lt;expression&gt; (",")? "then" ":" &lt;block&gt; ("otherwise" ":" &lt;block&gt;)?
+                | "if" &lt;expression&gt; (",")? "then" ":" &lt;block&gt; (("otherwise" | "else") ":" &lt;block&gt;)?
                 | "while" &lt;expression&gt; "repeat" ":" &lt;block&gt;
                 | "for" &lt;identifier&gt; "in" &lt;expression&gt; "repeat" ":" &lt;block&gt;
                 | "define" &lt;identifier&gt; ("with" &lt;params&gt;)? ("returns" &lt;type&gt;)? ":" &lt;block&gt;

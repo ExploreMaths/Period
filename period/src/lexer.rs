@@ -203,7 +203,7 @@ impl<'a> Lexer<'a> {
                 }
                 let kind = match lower.as_str() {
                     "let" => TokenKind::Let, "set" => TokenKind::Set, "show" => TokenKind::Show,
-                    "if" => TokenKind::If, "then" => TokenKind::Then, "otherwise" => TokenKind::Otherwise,
+                    "if" => TokenKind::If, "then" => TokenKind::Then, "otherwise" | "else" => TokenKind::Otherwise,
                     "while" => TokenKind::While, "repeat" => TokenKind::Repeat,
                     "for" => TokenKind::For, "in" => TokenKind::In,
                     "define" => TokenKind::Define, "with" => TokenKind::With,

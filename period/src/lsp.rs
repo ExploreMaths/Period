@@ -953,6 +953,7 @@ fn keyword_completions() -> Vec<SymbolInfo> {
         ("if", "if <condition>, then:"),
         ("then", "Part of an if statement."),
         ("otherwise", "otherwise:"),
+        ("else", "else:"),
         ("while", "while <condition> repeat:"),
         ("repeat", "Part of a while/for statement."),
         ("for", "for <var> in <iterable> repeat:"),
