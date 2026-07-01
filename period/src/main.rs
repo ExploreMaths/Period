@@ -7,6 +7,7 @@ mod parser;
 
 use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{self, Command};
 
@@ -112,6 +113,13 @@ fn main() {
         }
         if let Err(e) = install_package(&args[2]) {
             eprintln!("install error: {}", e);
+            process::exit(1);
+        }
+        return;
+    }
+    if args.len() == 1 {
+        if let Err(e) = run_repl() {
+            eprintln!("repl error: {}", e);
             process::exit(1);
         }
         return;
@@ -333,4 +341,94 @@ fn find_tcc() -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn parse_source(source: &str) -> Result<ast::Program, String> {
+    let mut lexer = lexer::Lexer::new(source);
+    let mut tokens = Vec::new();
+    loop {
+        let t = lexer.next_token();
+        let eof = matches!(t.kind, lexer::TokenKind::Eof);
+        tokens.push(t);
+        if eof {
+            break;
+        }
+    }
+
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        parser::Parser::new(tokens).parse_program()
+    })) {
+        Ok(p) => Ok(p),
+        Err(e) => {
+            let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "parse error".to_string()
+            };
+            Err(msg)
+        }
+    }
+}
+
+fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Period REPL. Type 'exit.' or 'quit.' to leave, or Ctrl+C.");
+    let stdin = io::stdin();
+    let mut interp = interpreter::Interpreter::new();
+    if let Ok(cwd) = env::current_dir() {
+        interp.set_current_path(cwd);
+    }
+    let mut buffer = String::new();
+
+    loop {
+        let prompt = if buffer.is_empty() { ">>> " } else { "... " };
+        print!("{}", prompt);
+        io::stdout().flush()?;
+
+        let mut line = String::new();
+        if stdin.read_line(&mut line)? == 0 {
+            println!();
+            break;
+        }
+        if line.ends_with('\n') {
+            line.pop();
+        }
+        if line.ends_with('\r') {
+            line.pop();
+        }
+
+        if buffer.is_empty() && (line == "exit." || line == "quit.") {
+            break;
+        }
+
+        if !buffer.is_empty() {
+            buffer.push('\n');
+        }
+        buffer.push_str(&line);
+
+        let trimmed = buffer.trim();
+        if trimmed.is_empty() {
+            buffer.clear();
+            continue;
+        }
+        if !trimmed.ends_with('.') {
+            continue;
+        }
+
+        match parse_source(&buffer) {
+            Ok(program) => {
+                if let Err(ctrl) = interp.interpret(&program) {
+                    eprintln!("runtime error: {:?}", ctrl);
+                }
+                buffer.clear();
+            }
+            Err(msg) => {
+                eprintln!("parse error: {}", msg);
+                buffer.clear();
+            }
+        }
+    }
+
+    Ok(())
 }

@@ -327,14 +327,16 @@ Installed greet -> period_packages/greet.period
 
     <section id="repl">
       <h2>REPL</h2>
-      <p>Running <code>period</code> without arguments starts the interactive Read-Eval-Print Loop. Type statements ending with a period and press Enter.</p>
+      <p>Running <code>period</code> without arguments starts the interactive Read-Eval-Print Loop. Type statements ending with a period and press Enter. Multi-line blocks use the <code>...</code> prompt until the final line ends with a period.</p>
       <pre><code>$ period
-Period programming language REPL.
-Type a statement ending with '.' and press Enter. Use Ctrl+C or type 'exit.' to quit.
+Period REPL. Type 'exit.' or 'quit.' to leave, or Ctrl+C.
 
 >>> <span class="keyword">let</span> x <span class="keyword">be</span> <span class="number">10</span><span class="period">.</span>
 >>> <span class="builtin">show</span> x * <span class="number">2</span><span class="period">.</span>
 20
+>>> <span class="keyword">if</span> x == <span class="number">10</span><span class="period">,</span> <span class="keyword">then</span><span class="period">:</span>
+...   <span class="builtin">show</span> <span class="string">"ten"</span><span class="period">.</span>
+ten
 >>> exit.</code></pre>
       <p>Use <code>exit.</code>, <code>quit.</code>, or <code>Ctrl+C</code> to leave the REPL.</p>
     </section>

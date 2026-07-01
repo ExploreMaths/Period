@@ -32,6 +32,15 @@ Start the REPL:
 period
 ```
 
+```
+Period REPL. Type 'exit.' or 'quit.' to leave, or Ctrl+C.
+
+>>> let x be 10.
+>>> show x * 2.
+20
+>>> exit.
+```
+
 ## Building from Source
 
 The language is implemented in Rust under `period/`. On Windows the release build also produces a small C wrapper (`period.exe`) for extra-fast startup; on Linux and macOS you can use the Rust binary directly.

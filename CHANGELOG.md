@@ -14,6 +14,7 @@
 - Basic package manager: `period install <package-or-url>` with `period_packages/` lookup.
 - Cross-platform build notes for Linux/macOS and PATH-aware TCC lookup.
 - Documentation clarifications for `integer` vs `number` and property access syntax.
+- Interactive REPL: run `period` with no arguments to evaluate statements line-by-line.
 
 ## 1.0.3 (2026-06-28)
 
