@@ -414,11 +414,10 @@ main {
   transform: translateY(-2px);
 }
 
-.download-platform svg {
+.download-platform svg,
+.download-platform .platform-icon {
   width: 48px;
   height: 48px;
-  fill: currentColor;
-  color: var(--accent);
   margin-bottom: 1rem;
 }
 
