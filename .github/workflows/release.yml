@@ -1,4 +1,4 @@
-name: Release Windows Installer
+name: Release
 
 on:
   push:
