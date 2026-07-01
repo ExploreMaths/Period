@@ -1,6 +1,6 @@
 -- Text utilities.
 
-define join with list parts, string sep returns string:
+define join with list of string parts, string sep returns string:
     if (length with parts) == 0, then:
         return "".
     let result be parts[0].

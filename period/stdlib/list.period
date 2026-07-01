@@ -1,19 +1,19 @@
 -- List utilities.
 
-define sum with list values returns number:
+define sum with list of number values returns number:
     let total be 0.
     for x in values repeat:
         set total to total + x.
     return total.
 
-define max with list values returns number:
+define max with list of number values returns number:
     let m be values[0].
     for x in values repeat:
         if x > m, then:
             set m to x.
     return m.
 
-define min with list values returns number:
+define min with list of number values returns number:
     let m be values[0].
     for x in values repeat:
         if x < m, then:
