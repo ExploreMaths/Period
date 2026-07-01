@@ -368,15 +368,61 @@ main {
   gap: 0.5rem;
 }
 
-.platform-buttons {
-  display: inline-flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  justify-content: center;
+.download-dropdown {
+  position: relative;
+  display: inline-block;
 }
 
-.platform-icon {
-  margin-right: 0.4rem;
+.download-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.4rem;
+  min-width: 180px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.download-dropdown:hover .download-menu,
+.download-menu:hover,
+.download-menu.show {
+  display: block;
+}
+
+@media (hover: none) {
+  .download-dropdown:hover .download-menu:not(.show) {
+    display: none;
+  }
+}
+
+.download-menu a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.download-menu a:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.download-menu svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: currentColor;
 }
 
 .download-alt {
