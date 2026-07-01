@@ -435,6 +435,11 @@ impl Parser {
                 // Be careful not to consume a variable in expression context as property
                 let name = self.expect_ident("expected property name");
                 expr = Expr::Property { object: Box::new(expr), name };
+            } else if self.check(&TokenKind::Dot) && matches!(self.peek(1).kind, TokenKind::Ident(_)) {
+                // property access with dot: obj.name
+                self.advance(); // '.'
+                let name = self.expect_ident("expected property name after '.'");
+                expr = Expr::Property { object: Box::new(expr), name };
             } else {
                 break;
             }

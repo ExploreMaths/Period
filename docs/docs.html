@@ -196,7 +196,10 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
 <span class="keyword">let</span> ada <span class="keyword">be</span> new Person <span class="keyword">with</span> <span class="string">"Ada"</span>, <span class="number">42</span><span class="period">.</span>
 tell ada <span class="keyword">to</span> greet <span class="keyword">with</span> <span class="string">"Hello"</span><span class="period">.</span>
 <span class="builtin">show</span> the age <span class="keyword">of</span> ada<span class="period">.</span></code></pre>
-      <p>Create instances with <code>new &lt;ClassName&gt; with &lt;args&gt;</code>, call methods with <code>tell &lt;object&gt; to &lt;method&gt; with &lt;args&gt;</code>, and read properties with <code>the &lt;property&gt; of &lt;object&gt;</code>.</p>
+      <p>Create instances with <code>new &lt;ClassName&gt; with &lt;args&gt;</code>, call methods with <code>tell &lt;object&gt; to &lt;method&gt; with &lt;args&gt;</code>, and read properties with <code>the &lt;property&gt; of &lt;object&gt;</code> or <code>&lt;object&gt;.&lt;property&gt;</code>. Properties can be written with either form.</p>
+      <pre><code><span class="keyword">set</span> the age <span class="keyword">of</span> ada <span class="keyword">to</span> <span class="number">43</span><span class="period">.</span>
+<span class="keyword">set</span> ada.age <span class="keyword">to</span> <span class="number">44</span><span class="period">.</span>
+<span class="builtin">show</span> ada.age<span class="period">.</span></code></pre>
     </section>
 
     <section id="imports">
