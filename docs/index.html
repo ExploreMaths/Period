@@ -82,7 +82,7 @@
       <div class="chart-wrapper">
         <canvas id="perfChart"></canvas>
       </div>
-      <p class="chart-note">Benchmarked with <code>benchmark_long.py</code>. The C column is compiled with an optimizing compiler (MSVC <code>cl /O2</code>, GCC <code>-O2</code>, or Clang <code>-O2</code>) when available, otherwise with the bundled TCC using <code>-O2</code>. Period compiles the loop to a cached DLL and runs it in-process, so both 1M and 5M iterations beat the equivalent C program.</p>
+      <p class="chart-note">Benchmarked with <code>benchmark_long.py</code>. The C column is compiled with an optimizing compiler (MSVC <code>cl /O2</code>, GCC <code>-O2</code>, or Clang <code>-O2</code>) when available, otherwise with the bundled TCC using <code>-O2</code>. The Y-axis uses a logarithmic scale so the fast runtimes remain visible alongside slower languages. Period compiles the loop to a cached DLL and runs it in-process, so both 1M and 5M iterations beat the equivalent C program.</p>
     </section>
 
     <section id="hello-period">
@@ -266,7 +266,7 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['C', 'Period', 'Perl', 'Python', 'Node.js'],
+          labels: ['C (Release)', 'Period', 'Perl', 'Python', 'Node.js'],
           datasets: [
             {
               label: '1,000,000 iterations',
@@ -325,9 +325,10 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
           },
           scales: {
             y: {
-              beginAtZero: true,
-              title: { display: true, text: 'Milliseconds (lower is better)' },
-              grid: { color: 'rgba(0,0,0,0.06)' }
+              type: 'logarithmic',
+              title: { display: true, text: 'Milliseconds, logarithmic scale (lower is better)' },
+              grid: { color: 'rgba(0,0,0,0.06)' },
+              ticks: { callback: (value) => value + ' ms' }
             },
             x: {
               grid: { display: false }
