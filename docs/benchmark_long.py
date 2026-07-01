@@ -20,6 +20,19 @@ TCC_EXE = ROOT / ".tools" / "tcc" / "tcc" / "tcc.exe"
 NS = [1_000_000, 5_000_000]
 
 
+def has_dotnet_sdk() -> bool:
+    try:
+        result = subprocess.run(
+            ["dotnet", "--list-sdks"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return result.returncode == 0 and result.stdout.strip() != ""
+    except Exception:
+        return False
+
+
 def find_release_c_compiler() -> list[str] | None:
     """Return an optimizing C compiler command if one is available.
 
@@ -76,6 +89,78 @@ def source_for(lang: str, n: int) -> str:
             f"    return 0;\n"
             f"}}\n"
         )
+    if lang == "rust":
+        return (
+            f"fn main() {{\n"
+            f"    let n: i64 = {n};\n"
+            f"    let mut s: i64 = 0;\n"
+            f"    for i in 1..=n {{ s += i; }}\n"
+            f"    println!(\"{{}}\", s);\n"
+            f"}}\n"
+        )
+    if lang == "go":
+        return (
+            f"package main\n"
+            f"import \"fmt\"\n"
+            f"func main() {{\n"
+            f"    var s int64 = 0\n"
+            f"    var n int64 = {n}\n"
+            f"    for i := int64(1); i <= n; i++ {{ s += i }}\n"
+            f"    fmt.Println(s)\n"
+            f"}}\n"
+        )
+    if lang == "java":
+        return (
+            f"public class Main {{\n"
+            f"    public static void main(String[] args) {{\n"
+            f"        long s = 0;\n"
+            f"        long n = {n}L;\n"
+            f"        for (long i = 1; i <= n; i++) s += i;\n"
+            f"        System.out.println(s);\n"
+            f"    }}\n"
+            f"}}\n"
+        )
+    if lang == "csharp":
+        return (
+            f"using System;\n"
+            f"class Program {{\n"
+            f"    static void Main() {{\n"
+            f"        long s = 0;\n"
+            f"        long n = {n}L;\n"
+            f"        for (long i = 1; i <= n; i++) s += i;\n"
+            f"        Console.WriteLine(s);\n"
+            f"    }}\n"
+            f"}}\n"
+        )
+    if lang == "ruby":
+        return (
+            f"s = 0\n"
+            f"n = {n}\n"
+            f"(1..n).each {{ |i| s += i }}\n"
+            f"puts s\n"
+        )
+    if lang == "php":
+        return (
+            f"<?php\n"
+            f"$s = 0;\n"
+            f"$n = {n};\n"
+            f"for ($i = 1; $i <= $n; $i++) $s += $i;\n"
+            f"echo $s . \"\\n\";\n"
+        )
+    if lang == "lua":
+        return (
+            f"local s = 0\n"
+            f"local n = {n}\n"
+            f"for i = 1, n do s = s + i end\n"
+            f"print(s)\n"
+        )
+    if lang == "powershell":
+        return (
+            f"$n = {n}\n"
+            f"$s = [long]0\n"
+            f"for ($i = 1; $i -le $n; $i++) {{ $s += $i }}\n"
+            f"Write-Output $s\n"
+        )
     raise ValueError(lang)
 
 
@@ -84,8 +169,10 @@ def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 3) -> float |
         f.write(source)
         src = Path(f.name)
 
+    compiled_exts = {".c", ".rs", ".go"}
+    exe = src.with_suffix(".exe")
+
     if ext == ".c":
-        exe = src.with_suffix(".exe")
         release_cc = find_release_c_compiler()
         if release_cc:
             compile_cmd = release_cc + [str(src), "-o", str(exe)]
@@ -101,6 +188,65 @@ def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 3) -> float |
             print(f"compile failed: {result.stderr}")
             return None
         run_cmd = [str(exe)]
+    elif ext == ".rs":
+        result = subprocess.run(
+            ["rustc", "-O", str(src), "-o", str(exe)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"compile failed: {result.stderr}")
+            return None
+        run_cmd = [str(exe)]
+    elif ext == ".go":
+        result = subprocess.run(
+            ["go", "build", "-o", str(exe), str(src)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"compile failed: {result.stderr}")
+            return None
+        run_cmd = [str(exe)]
+    elif ext == ".java":
+        result = subprocess.run(
+            ["javac", str(src)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"compile failed: {result.stderr}")
+            return None
+        run_cmd = ["java", "-cp", str(src.parent), src.stem]
+    elif ext == ".cs":
+        # Requires the .NET SDK (dotnet new / build).
+        proj_dir = src.parent / src.stem
+        proj_dir.mkdir(exist_ok=True)
+        result = subprocess.run(
+            ["dotnet", "new", "console", "--force", "-o", str(proj_dir)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"dotnet new failed: {result.stderr}")
+            return None
+        (proj_dir / "Program.cs").write_text(source)
+        result = subprocess.run(
+            ["dotnet", "build", "-c", "Release", str(proj_dir)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"dotnet build failed: {result.stderr}")
+            return None
+        run_cmd = [str(proj_dir / "bin" / "Release" / "net*" / f"{proj_dir.name}.exe")]
+    elif ext == ".ps1":
+        run_cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(src)]
     else:
         run_cmd = cmd + [str(src)]
 
@@ -114,7 +260,7 @@ def run(cmd: list[str], source: str, ext: str, n: int, runs: int = 3) -> float |
         times.append(time.perf_counter() - start)
 
     src.unlink(missing_ok=True)
-    if ext == ".c":
+    if ext in compiled_exts:
         exe.unlink(missing_ok=True)
 
     return sum(times) / len(times) * 1000
@@ -131,17 +277,37 @@ def main() -> None:
     languages = [
         ("C (Release)", [str(TCC_EXE)], ".c"),
         ("Period", [str(PERIOD_EXE)], ".period"),
-        ("Python", ["python"], ".py"),
+        ("Rust", ["rustc"], ".rs"),
+        ("Go", ["go"], ".go"),
+        ("Java", ["javac"], ".java"),
+        ("C#", ["dotnet"], ".cs"),
         ("Node.js", ["node"], ".js"),
         ("Perl", ["perl"], ".pl"),
+        ("Ruby", ["ruby"], ".rb"),
+        ("PHP", ["php"], ".php"),
+        ("Lua", ["lua"], ".lua"),
+        ("Python", ["python"], ".py"),
+        ("PowerShell", ["powershell"], ".ps1"),
     ]
+
+    # The dotnet runtime alone is not enough to compile C#; require the SDK.
+    if not has_dotnet_sdk():
+        languages = [entry for entry in languages if entry[0] != "C#"]
 
     lang_key = {
         "C (Release)": "c",
         "Period": "period",
-        "Python": "python",
+        "Rust": "rust",
+        "Go": "go",
+        "Java": "java",
+        "C#": "csharp",
         "Node.js": "node",
         "Perl": "perl",
+        "Ruby": "ruby",
+        "PHP": "php",
+        "Lua": "lua",
+        "Python": "python",
+        "PowerShell": "powershell",
     }
 
     print(f"{'Language':<12}", end="")
