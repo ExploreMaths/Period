@@ -48,7 +48,10 @@
       {
         "language": "period",
         "scopeName": "source.period",
-        "path": "./syntaxes/period.tmLanguage.json"
+        "path": "./syntaxes/period.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.interpolation.period": "period"
+        }
       }
     ],
     "iconThemes": [
