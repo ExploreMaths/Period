@@ -180,7 +180,6 @@
           "match": "\\\\."
         },
         {
-          "name": "meta.interpolation.period",
           "begin": "\\{",
           "beginCaptures": {
             "0": { "name": "punctuation.definition.interpolation.begin.period" }
@@ -189,6 +188,7 @@
           "endCaptures": {
             "0": { "name": "punctuation.definition.interpolation.end.period" }
           },
+          "contentName": "meta.interpolation.period",
           "patterns": [
             { "include": "#identifier" },
             { "include": "#number" },
