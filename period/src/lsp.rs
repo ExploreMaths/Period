@@ -274,19 +274,16 @@ fn interpolated_ident_at(
             crate::lexer::StringPart::Expr(s) => {
                 let part_len = 2 + s.len() as u32;
                 if offset_in_string >= current && offset_in_string < current + part_len {
+                    // Don't show hover on the braces themselves.
+                    if offset_in_string == current || offset_in_string == current + part_len - 1 {
+                        return None;
+                    }
                     let offset_in_expr = offset_in_string.saturating_sub(current + 1);
                     let sub_tokens = lex_tokens(s).ok()?;
-                    // Try the exact token under the cursor first.
                     if let Some(sub_token) = find_token(&sub_tokens, Position {
                         line: 0,
                         character: offset_in_expr,
                     }) {
-                        if let TokenKind::Ident(name) = &sub_token.kind {
-                            return Some(name.clone());
-                        }
-                    }
-                    // Cursor is on a brace or between tokens; show the first identifier in the expression.
-                    for sub_token in sub_tokens {
                         if let TokenKind::Ident(name) = &sub_token.kind {
                             return Some(name.clone());
                         }
