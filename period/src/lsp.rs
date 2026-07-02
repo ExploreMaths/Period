@@ -205,6 +205,13 @@ fn hover(
 
     let name = match &token.kind {
         TokenKind::Ident(n) => n.clone(),
+        TokenKind::Interpolated(parts) => {
+            if let Some(name) = interpolated_ident_at(parts, &token, pos) {
+                name
+            } else {
+                return Ok(None);
+            }
+        }
         _ => return Ok(None),
     };
     eprintln!("hover name={} at {}:{}", name, pos.line, pos.character);
@@ -247,6 +254,39 @@ fn hover(
         }),
         range: None,
     }))
+}
+
+fn interpolated_ident_at(
+    parts: &[crate::lexer::StringPart],
+    token: &crate::lexer::Token,
+    pos: lsp_types::Position,
+) -> Option<String> {
+    let start_col = (token.span.col as u32).saturating_sub(token_len(&token.kind));
+    let offset_in_string = pos.character.saturating_sub(start_col);
+    let mut current = 0u32;
+    for part in parts {
+        match part {
+            crate::lexer::StringPart::Literal(s) => {
+                current += s.len() as u32;
+            }
+            crate::lexer::StringPart::Expr(s) => {
+                let part_len = 2 + s.len() as u32;
+                if offset_in_string >= current && offset_in_string < current + part_len {
+                    let offset_in_expr = offset_in_string.saturating_sub(current + 1);
+                    let sub_tokens = lex_tokens(s).ok()?;
+                    let sub_token = find_token(&sub_tokens, Position {
+                        line: 0,
+                        character: offset_in_expr,
+                    })?;
+                    if let TokenKind::Ident(name) = &sub_token.kind {
+                        return Some(name.clone());
+                    }
+                }
+                current += part_len;
+            }
+        }
+    }
+    None
 }
 
 fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
@@ -668,7 +708,16 @@ fn token_len(kind: &TokenKind) -> u32 {
     match kind {
         TokenKind::Ident(s) => s.len() as u32,
         TokenKind::String(s) => s.len() as u32,
-        TokenKind::Interpolated(_) => 1,
+        TokenKind::Interpolated(parts) => {
+            let mut len = 2; // opening and closing quotes
+            for part in parts {
+                match part {
+                    crate::lexer::StringPart::Literal(s) => len += s.len(),
+                    crate::lexer::StringPart::Expr(s) => len += 2 + s.len(), // braces + expression
+                }
+            }
+            len as u32
+        }
         TokenKind::Number(n) => format!("{}", n).len() as u32,
         TokenKind::Bool(b) => if *b { 4 } else { 5 },
         TokenKind::Nothing => 7,
