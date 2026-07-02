@@ -178,6 +178,27 @@
         {
           "name": "constant.character.escape.period",
           "match": "\\\\."
+        },
+        {
+          "name": "meta.interpolation.period",
+          "begin": "\\{",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.interpolation.begin.period" }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.interpolation.end.period" }
+          },
+          "patterns": [
+            { "include": "#identifier" },
+            { "include": "#number" },
+            { "include": "#constant" },
+            { "include": "#operator" },
+            { "include": "#property-access" },
+            { "include": "#function-call" },
+            { "include": "#method-call" },
+            { "include": "#string" }
+          ]
         }
       ]
     },
