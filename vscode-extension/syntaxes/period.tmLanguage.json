@@ -182,11 +182,11 @@
         {
           "begin": "\\{",
           "beginCaptures": {
-            "0": { "name": "keyword.operator.interpolation.period" }
+            "0": { "name": "punctuation.definition.tag.period" }
           },
           "end": "\\}",
           "endCaptures": {
-            "0": { "name": "keyword.operator.interpolation.period" }
+            "0": { "name": "punctuation.definition.tag.period" }
           },
           "contentName": "meta.interpolation.period",
           "patterns": [
