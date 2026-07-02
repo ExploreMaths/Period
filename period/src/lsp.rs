@@ -263,7 +263,8 @@ fn interpolated_ident_at(
 ) -> Option<String> {
     let start_col = (token.span.col as u32).saturating_sub(token_len(&token.kind));
     let offset_in_string = pos.character.saturating_sub(start_col);
-    let mut current = 0u32;
+    // Skip the opening quote.
+    let mut current = 1u32;
     for part in parts {
         match part {
             crate::lexer::StringPart::Literal(s) => {
