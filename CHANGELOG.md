@@ -15,6 +15,7 @@
 
 - Optional compact syntax that coexists with the English forms: `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
 - New `error` built-in for raising runtime errors with a custom message.
+- New `integer with <value>` and `boolean with <value>` built-in conversion functions, matching the existing `number` and `string` converters.
 - Expanded standard library:
   - `string`: `trim`, `split`, `contains`, `starts_with`, `ends_with`, `replace`, `slice`, `substring`.
   - `list`: `map`, `filter`, `find`, `any`, `all`, `contains`, `reverse`, `slice`, `sort`.

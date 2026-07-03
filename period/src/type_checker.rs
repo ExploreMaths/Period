@@ -31,6 +31,8 @@ impl TypeChecker {
         builtins.insert("length".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::Integer)));
         builtins.insert("string".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::String)));
         builtins.insert("number".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::Number)));
+        builtins.insert("integer".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::Integer)));
+        builtins.insert("boolean".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::Boolean)));
         builtins.insert("type".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::String)));
         // `input` is a zero-arity built-in that is auto-called when used as a value,
         // so its value type is its return type rather than a function type.

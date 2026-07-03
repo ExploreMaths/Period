@@ -303,6 +303,16 @@ ada<span class="period">.</span>greet<span class="period">(</span><span class="s
       <p>Parses a string or converts a value to a number. Booleans become 1 or 0.</p>
       <pre><code><span class="builtin">show</span> number <span class="keyword">with</span> <span class="string">"3.14"</span><span class="period">.</span>  <span class="comment">-- 3.14</span></code></pre>
 
+      <h3><code>integer with &lt;value&gt;</code></h3>
+      <p>Converts a value to an integer. Strings are parsed; numbers are truncated toward zero; booleans become 1 or 0.</p>
+      <pre><code><span class="builtin">show</span> integer <span class="keyword">with</span> <span class="string">"42"</span><span class="period">.</span>  <span class="comment">-- 42</span>
+<span class="builtin">show</span> integer <span class="keyword">with</span> <span class="number">3.14</span><span class="period">.</span>  <span class="comment">-- 3</span></code></pre>
+
+      <h3><code>boolean with &lt;value&gt;</code></h3>
+      <p>Converts a value to a boolean. Zero, empty collections, empty strings, and <code>nothing</code> become <code>false</code>; everything else becomes <code>true</code>. This is an explicit conversion, not an implicit truthiness rule: conditions in <code>if</code> and <code>while</code> still require a boolean.</p>
+      <pre><code><span class="builtin">show</span> boolean <span class="keyword">with</span> <span class="number">1</span><span class="period">.</span>  <span class="comment">-- true</span>
+<span class="builtin">show</span> boolean <span class="keyword">with</span> <span class="string">""</span><span class="period">.</span>  <span class="comment">-- false</span></code></pre>
+
       <h3><code>type with &lt;value&gt;</code></h3>
       <p>Returns the type name as a string: <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, <code>built-in</code>, <code>class</code>, <code>error</code>, or <code>instance of &lt;ClassName&gt;</code>.</p>
       <pre><code><span class="builtin">show</span> type <span class="keyword">with</span> [<span class="number">1</span>, <span class="number">2</span>]<span class="period">.</span>  <span class="comment">-- "list"</span></code></pre>

@@ -121,6 +121,10 @@
           "match": "\\b(define|class|init|if|then|otherwise|while|for|in|repeat|return|returns|import|let|be|set|to|with|this|new|tell|of|the|from|and|or|not|try|catch|export)\\b"
         },
         {
+          "name": "support.function.builtin.period",
+          "match": "\\b(integer|boolean)\\b(?=\\s+with)"
+        },
+        {
           "name": "support.type.builtin.period",
           "match": "\\b(any|never|nothing|boolean|integer|number|string|list|dictionary|function|class|error)\\b"
         },

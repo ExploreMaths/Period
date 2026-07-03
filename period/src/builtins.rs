@@ -14,6 +14,8 @@ pub fn install_builtins(env: &Environment) {
     env.define_untyped("length", Value::BuiltIn { name: "length".to_string(), min_arity: 1, max_arity: 1, func: builtin_length });
     env.define_untyped("string", Value::BuiltIn { name: "string".to_string(), min_arity: 1, max_arity: 1, func: builtin_string });
     env.define_untyped("number", Value::BuiltIn { name: "number".to_string(), min_arity: 1, max_arity: 1, func: builtin_number });
+    env.define_untyped("integer", Value::BuiltIn { name: "integer".to_string(), min_arity: 1, max_arity: 1, func: builtin_integer });
+    env.define_untyped("boolean", Value::BuiltIn { name: "boolean".to_string(), min_arity: 1, max_arity: 1, func: builtin_boolean });
     env.define_untyped("type", Value::BuiltIn { name: "type".to_string(), min_arity: 1, max_arity: 1, func: builtin_type });
     env.define_untyped("input", Value::BuiltIn { name: "input".to_string(), min_arity: 0, max_arity: 0, func: builtin_input });
     env.define_untyped("range", Value::BuiltIn { name: "range".to_string(), min_arity: 1, max_arity: 3, func: builtin_range });
@@ -43,6 +45,32 @@ fn builtin_number(args: &[Value]) -> Result<Value, String> {
         Value::Bool(false) => Ok(Value::Number(0.0)),
         _ => Err("Cannot convert to number".to_string()),
     }
+}
+
+fn builtin_integer(args: &[Value]) -> Result<Value, String> {
+    match &args[0] {
+        Value::Integer(n) => Ok(Value::Integer(n.clone())),
+        Value::Number(n) => Ok(Value::Integer(BigInt::from(*n as i64))),
+        Value::String(s) => s.parse::<BigInt>().map(Value::Integer).map_err(|_| "Cannot convert to integer".to_string()),
+        Value::Bool(true) => Ok(Value::Integer(BigInt::from(1))),
+        Value::Bool(false) => Ok(Value::Integer(BigInt::from(0))),
+        _ => Err("Cannot convert to integer".to_string()),
+    }
+}
+
+fn builtin_boolean(args: &[Value]) -> Result<Value, String> {
+    let b = match &args[0] {
+        Value::Bool(b) => *b,
+        Value::Integer(n) => *n != BigInt::from(0),
+        Value::Number(n) => *n != 0.0,
+        Value::String(s) => !s.is_empty(),
+        Value::Nothing => false,
+        Value::List(l) => !l.borrow().is_empty(),
+        Value::Dict(d) => !d.borrow().is_empty(),
+        Value::Range { start, stop, step } => (*step > 0 && start < stop) || (*step < 0 && start > stop),
+        _ => true,
+    };
+    Ok(Value::Bool(b))
 }
 
 fn builtin_type(args: &[Value]) -> Result<Value, String> {
