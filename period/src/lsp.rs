@@ -459,8 +459,8 @@ fn definition(
 
 fn span_to_range(span: &Span, len: u32) -> Range {
     let line = (span.line as u32).saturating_sub(1);
-    let end_col = (span.col as u32).saturating_sub(1);
-    let start_col = end_col.saturating_sub(len);
+    let start_col = (span.col as u32).saturating_sub(1);
+    let end_col = start_col + len;
     Range {
         start: Position { line, character: start_col },
         end: Position { line, character: end_col },
@@ -1273,8 +1273,8 @@ fn quoted_name(message: &str) -> &str {
 fn make_diagnostic(span: &Span, name: &str, message: &str, severity: DiagnosticSeverity) -> Diagnostic {
     let line = span.line.saturating_sub(1) as u32;
     let len = name.len() as u32;
-    let end_col = span.col.saturating_sub(1) as u32;
-    let start_col = end_col.saturating_sub(len);
+    let start_col = span.col.saturating_sub(1) as u32;
+    let end_col = start_col + len;
     Diagnostic {
         range: Range {
             start: Position { line, character: start_col },
@@ -1288,5 +1288,32 @@ fn make_diagnostic(span: &Span, name: &str, message: &str, severity: DiagnosticS
         related_information: None,
         tags: None,
         data: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Span;
+
+    #[test]
+    fn span_to_range_covers_token() {
+        // Span stores the 1-indexed start column of a token.
+        // For "show abcd." the identifier "abcd" starts at column 6.
+        let span = Span { line: 1, col: 6 };
+        let range = span_to_range(&span, 4);
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 5); // 0-indexed start of "abcd"
+        assert_eq!(range.end.character, 9);   // just past "abcd"
+    }
+
+    #[test]
+    fn diagnostic_range_covers_name() {
+        // For "show abcd." the undefined variable "abcd" starts at column 6.
+        let span = Span { line: 1, col: 6 };
+        let diag = make_diagnostic(&span, "abcd", "undefined variable 'abcd'", DiagnosticSeverity::ERROR);
+        assert_eq!(diag.range.start.line, 0);
+        assert_eq!(diag.range.start.character, 5);
+        assert_eq!(diag.range.end.character, 9);
     }
 }
