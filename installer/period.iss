@@ -30,7 +30,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "..\dist\period.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\period-core.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\stdlib\*"; DestDir: "{app}\stdlib"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\tcc\*"; DestDir: "{app}\tcc"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\period.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\vscode-extension\period-language-{#MyAppVersion}.vsix"; DestDir: "{tmp}"; Flags: ignoreversion
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
