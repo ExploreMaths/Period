@@ -22,11 +22,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "file_version=$VERSION.0" >> "$GITHUB_OUTPUT"
 
-      - name: Apply version to installer script
-        shell: pwsh
-        run: |
-          $ver = "${{ steps.ver.outputs.version }}"
-          (Get-Content installer\period.iss) -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$ver`"" | Set-Content installer\period.iss
+      - name: Synchronise version numbers with git tag
+        run: python scripts/set_version.py
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -49,10 +46,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Set VS Code extension version from tag
-        working-directory: vscode-extension
-        run: npm run set-version
 
       - name: Install vsce and package extension
         working-directory: vscode-extension
@@ -135,6 +128,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Synchronise version numbers with git tag
+        run: python scripts/set_version.py
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -193,6 +189,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Synchronise version numbers with git tag
+        run: python scripts/set_version.py
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable

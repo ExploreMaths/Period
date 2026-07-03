@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PERIOD_DIR = ROOT / "period"
 TCC_EXE = ROOT / ".tools" / "tcc" / "tcc" / "tcc.exe"
 DIST = ROOT / "dist"
+SET_VERSION = ROOT / "scripts" / "set_version.py"
 
 
 def run(cmd: list[str | Path], cwd: Path | None = None) -> None:
@@ -31,6 +32,9 @@ def main() -> None:
     if not TCC_EXE.exists():
         print(f"TCC not found at {TCC_EXE}")
         sys.exit(1)
+
+    print("Synchronising version numbers with git tag...")
+    run(["python", SET_VERSION])
 
     print("Building release Rust binary...")
     run(["cargo", "build", "--release"], cwd=PERIOD_DIR)
