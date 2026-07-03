@@ -11,12 +11,12 @@ class Person:
 
     init with string name, number age:
         "Create a new person.".
-        set this name to name.
-        set this age to age.
+        set the name of this to name.
+        set the age of this to age.
 
     define greet returns string:
         "Return a friendly greeting.".
-        return "Hello, I am " + this name.
+        return "Hello, I am " + the name of this.
 
 let p be new Person with "Alice", 30.
 show p.

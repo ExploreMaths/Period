@@ -10,14 +10,14 @@
 <body>
   <main>
     <h1>About Period</h1>
-    <p>Period is an educational programming language designed to explore what happens when code is forced to look like prose. By requiring every statement to end with a period, Period encourages authors to write programs that feel deliberate and complete.</p>
+    <p>Period is an educational programming language designed to explore how readable code can be when it reads like prose. By requiring every statement to end with a period, Period encourages authors to write programs that feel deliberate and complete. For cases where English-style syntax becomes verbose, Period also accepts a familiar dot-and-parentheses compact syntax.</p>
 
     <section>
       <h2>Goals</h2>
       <ul>
-        <li>Readable, sentence-like syntax</li>
+        <li>Readable, sentence-like syntax with an optional compact form</li>
         <li>Helpful, precise error messages</li>
-        <li>Modern tooling: LSP, formatting, and IDE integration</li>
+        <li>Tooling that supports learning: LSP, diagnostics, and IDE integration</li>
         <li>Full Turing completeness</li>
       </ul>
     </section>
@@ -41,8 +41,8 @@
       <h2>Technology Stack</h2>
       <ul>
         <li><strong>Implementation language:</strong> Rust</li>
-        <li><strong>Execution:</strong> Hand-written lexer, parser, and tree-walking interpreter, with a C-backend JIT for numeric code</li>
-        <li><strong>JIT pipeline:</strong> Period source → C → native DLL via Clang, GCC, MSVC, or bundled TCC</li>
+        <li><strong>Execution:</strong> Hand-written lexer, parser, and single tree-walking interpreter</li>
+        <li><strong>Typing:</strong> Optional runtime type annotations</li>
         <li><strong>LSP server:</strong> JSON-RPC language server served over stdio from the same executable</li>
         <li><strong>VS Code extension:</strong> TypeScript client built on <code>vscode-languageclient</code></li>
         <li><strong>Documentation site:</strong> Static HTML/CSS with no build step</li>

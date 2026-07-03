@@ -62,15 +62,7 @@ def run_file(source, expected_lines=None, should_fail=False):
                 f"Expected success but got exit {result.returncode}.\nOutput:\n{result.stdout}"
             )
         if expected_lines is not None:
-            # Filter out JIT fallback messages; the interpreter still produces correct output.
-            ignored = {
-                "compilation failed; falling back to interpreter.",
-                "no C compiler available; falling back to interpreter.",
-            }
-            output_lines = [
-                line for line in result.stdout.splitlines()
-                if line and line not in ignored
-            ]
+            output_lines = [line for line in result.stdout.splitlines() if line]
             if output_lines != expected_lines:
                 raise AssertionError(
                     f"Output mismatch.\nExpected: {expected_lines}\nGot: {output_lines}\nRaw:\n{result.stdout}"
@@ -95,7 +87,7 @@ class TestLocalModules(unittest.TestCase):
                 """).strip() + "\n")
             with open(main, "w", encoding="utf-8") as f:
                 f.write(textwrap.dedent("""
-                    import .helper.
+                    import ./helper.
                     show add with 2, 3.
                     show sub with 5, 2.
                 """).strip() + "\n")
@@ -105,6 +97,16 @@ class TestLocalModules(unittest.TestCase):
                 [line for line in result.stdout.splitlines() if line],
                 ["5", "3"],
             )
+
+    def test_missing_local_module_has_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            main = os.path.join(tmp, "main.period")
+            with open(main, "w", encoding="utf-8") as f:
+                f.write("import ./foo.\nshow 1.\n")
+            result = run_period([main])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("module not found './foo'", result.stdout)
+            self.assertIn("main.period:1:", result.stdout)
 
     def test_local_module_hidden_name_not_imported(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -120,12 +122,36 @@ class TestLocalModules(unittest.TestCase):
                 """).strip() + "\n")
             with open(main, "w", encoding="utf-8") as f:
                 f.write(textwrap.dedent("""
-                    import .helper.
+                    import ./helper.
                     show hidden with 1.
                 """).strip() + "\n")
             result = run_period([main])
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("undefined function 'hidden'", result.stdout)
+
+    def test_circular_import_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = os.path.join(tmp, "a.period")
+            b = os.path.join(tmp, "b.period")
+            main = os.path.join(tmp, "main.period")
+            with open(a, "w", encoding="utf-8") as f:
+                f.write("import ./b.\nexport f.\n")
+            with open(b, "w", encoding="utf-8") as f:
+                f.write("import ./a.\nexport g.\n")
+            with open(main, "w", encoding="utf-8") as f:
+                f.write("import ./a.\nshow 1.\n")
+            result = run_period([main])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Circular import detected", result.stdout)
+
+    def test_self_import_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "selfmod.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("import ./selfmod.\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Circular import detected", result.stdout)
 
 
 class TestLexerErrors(unittest.TestCase):
@@ -175,6 +201,44 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["4"],
         )
 
+    def test_stdlib_source_module_list(self):
+        run_file(
+            """
+            import list.
+            show sum with [1, 2, 3].
+            """,
+            expected_lines=["6"],
+        )
+
+    def test_stdlib_source_module_text(self):
+        run_file(
+            """
+            import text.
+            show join with ["a", "b"], "-".
+            """,
+            expected_lines=["a-b"],
+        )
+
+    def test_stdlib_function_argument_type_mismatch_is_caught_statically(self):
+        out = run_file(
+            """
+            import text.
+            show join with "-", ["a", "b"].
+            """,
+            should_fail=True,
+        )
+        self.assertIn("argument 1 type mismatch", out)
+
+    def test_stdlib_runtime_error_points_at_call_site(self):
+        out = run_file(
+            """
+            import list.
+            show max with [].
+            """,
+            should_fail=True,
+        )
+        self.assertIn("Index out of range (list is empty)", out)
+
     def test_for_loop_with_range(self):
         run_file(
             """
@@ -212,15 +276,27 @@ class TestLanguageFeatures(unittest.TestCase):
             """
             class Person:
                 init with name, age:
-                    set this name to name.
-                    set this age to age.
+                    set the name of this to name.
+                    set the age of this to age.
                 define greet with greeting:
-                    return greeting + ", " + this name + "!".
+                    return greeting + ", " + the name of this + "!".
             let ada be new Person with "Ada", 37.
             show tell ada to greet with "Hi".
             show the age of ada.
             """,
             expected_lines=["Hi, Ada!", "37"],
+        )
+
+    def test_class_field_initialized_in_init_body(self):
+        run_file(
+            """
+            class A:
+                init:
+                    set the x of this to 0.
+            let a be new A.
+            show the x of a.
+            """,
+            expected_lines=["0"],
         )
 
     def test_list_negative_index(self):
@@ -241,6 +317,140 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["Ada"],
         )
 
+    def test_integer_literals_and_string_repetition(self):
+        run_file(
+            """
+            show type with 5.
+            show type with 5.0.
+            show "ha" * 3.
+            """,
+            expected_lines=["integer", "number", "hahaha"],
+        )
+
+    def test_mixed_integer_number_arithmetic(self):
+        run_file(
+            """
+            show 1 + 2.5.
+            show 2.5 + 1.
+            show 2 * 3.5.
+            show 3.5 * 2.
+            """,
+            expected_lines=["3.5", "3.5", "7", "7"],
+        )
+
+    def test_boolean_operators_require_booleans(self):
+        out = run_file(
+            """
+            show true and 1.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("'and' requires booleans", out)
+
+        out = run_file(
+            """
+            show 1 and true.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("'and' requires booleans", out)
+
+        out = run_file(
+            """
+            show not 1.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("'not' requires a boolean", out)
+
+    def test_arbitrary_precision_integer(self):
+        run_file(
+            """
+            let x be 1000000000000000000000000000000.
+            show x + 1.
+            """,
+            expected_lines=["1000000000000000000000000000001"],
+        )
+
+    def test_zero_to_negative_power_is_division_by_zero(self):
+        out = run_file(
+            """
+            show 0 ** -1.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("Division by zero", out)
+
+    def test_string_brace_escape(self):
+        run_file(
+            """
+            show "\\{not interpolated\\}.".
+            """,
+            expected_lines=["{not interpolated}."],
+        )
+
+    def test_large_integer_number_comparison(self):
+        run_file(
+            """
+            let a be 9223372036854775807.
+            let b be 9223372036854775808.
+            show a == b.
+            show a < b.
+            show a > b.
+            show 9007199254740993 == 9007199254740992.0.
+            show 9007199254740992 == 9007199254740992.0.
+            """,
+            expected_lines=["false", "true", "false", "false", "true"],
+        )
+
+    def test_float_dict_keys(self):
+        run_file(
+            """
+            let d be {1.5: "a", 2.0: "b"}.
+            show d[1.5].
+            show d[2.0].
+            """,
+            expected_lines=["a", "b"],
+        )
+
+    def test_nested_function(self):
+        run_file(
+            """
+            define outer:
+                define inner:
+                    show "inside inner".
+                inner.
+            outer.
+            """,
+            expected_lines=["inside inner"],
+        )
+
+    def test_recursive_function(self):
+        run_file(
+            """
+            define factorial with number n returns number:
+                if n <= 1 then:
+                    return 1.
+                return n * factorial with (n - 1).
+            show factorial with 5.
+            """,
+            expected_lines=["120"],
+        )
+
+    def test_prime_example_outputs_primes(self):
+        # Regression test: integer modulo and equality must agree for the
+        # official prime-number example to produce primes rather than all numbers.
+        import os
+        root = os.path.normpath(os.path.join(os.path.dirname(__file__), "../.."))
+        path = os.path.join(root, "examples", "primes.period")
+        result = run_period([path])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(
+            [line for line in result.stdout.splitlines() if line],
+            ["2", "3", "5", "7", "11", "13", "17", "19", "23", "29",
+             "31", "37", "41", "43", "47", "53", "59", "61", "67", "71"],
+        )
+
     def test_file_io(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = os.path.join(tmp, "data.txt")
@@ -255,8 +465,8 @@ class TestLanguageFeatures(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("hello file", result.stdout)
 
-    def test_numeric_jit(self):
-        # Pure numeric loops are compiled to a cached DLL by the JIT backend.
+    def test_numeric_loop(self):
+        # Pure numeric loops run through the tree-walking interpreter.
         run_file(
             """
             let sum be 0.
@@ -269,6 +479,41 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["5000050000"],
         )
 
+    def test_function_call_argument_contains_binary_operator(self):
+        # "f with a + b" is parsed as "f(a + b)".
+        run_file(
+            """
+            define double with number x returns number:
+                return x * 2.
+            show double with 3 + 4.
+            show 10 - double with 3.
+            """,
+            expected_lines=["14", "4"],
+        )
+
+    def test_multi_argument_call_uses_full_expressions(self):
+        # Each argument to 'with' is parsed as a full expression.
+        run_file(
+            """
+            define add with number a, number b returns number:
+                return a + b.
+            show add with 1 + 2, 3 + 4.
+            show add with (1 + 2), (3 + 4).
+            """,
+            expected_lines=["10", "10"],
+        )
+
+    def test_multi_argument_call_without_parentheses_works(self):
+        # "add with 1 + 2, 3" parses as add(1 + 2, 3).
+        run_file(
+            """
+            define add with number a, number b returns number:
+                return a + b.
+            show add with 1 + 2, 3.
+            """,
+            expected_lines=["6"],
+        )
+
 
 class TestSemanticChecks(unittest.TestCase):
     def test_undefined_variable_caught(self):
@@ -279,6 +524,170 @@ class TestSemanticChecks(unittest.TestCase):
             result = run_period([path])
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("undefined variable 'unknown'", result.stdout)
+
+    def test_property_assignment_type_mismatch_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "prop_type.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    class A:
+                        init with number x:
+                            set the x of this to x.
+                    let a be new A with 5.
+                    set the x of a to "hello".
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("assignment type mismatch", result.stdout)
+
+    def test_missing_return_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "missing_return.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    define f returns number:
+                        show 1.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("may not return a value on all paths", result.stdout)
+
+    def test_method_accessed_as_property_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "method_prop.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    class Person:
+                        init with string name:
+                            set the name of this to name.
+                        define greet returns string:
+                            return "Hi, " + the name of this.
+                    let p be new Person with "Ada".
+                    show the greet of p.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("method 'greet' must be called with 'tell", result.stdout)
+
+    def test_duplicate_definition_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "dup.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    let x be 1.
+                    let x be 2.
+                    show x.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("warning:", result.stdout)
+            self.assertIn("redefinition of 'x'", result.stdout)
+
+    def test_duplicate_function_warning_reported_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "dup.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    define f with n:
+                        return n.
+
+                    define f with n:
+                        return n.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(result.stdout.count("warning:"), 1)
+            self.assertIn("redefinition of 'f'", result.stdout)
+
+    def test_duplicate_class_warning_has_source_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "dup.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    class C:
+                        init with x:
+                            return nothing.
+
+                    class C:
+                        init with x:
+                            return nothing.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("warning:", result.stdout)
+            self.assertIn("redefinition of 'C'", result.stdout)
+            self.assertNotIn(":0:0:", result.stdout)
+
+    def test_duplicate_import_warning_is_per_module(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "dup.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    import math.
+                    import math.
+                    show sin with 0.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(result.stdout.count("warning:"), 1)
+            self.assertIn("duplicate import of 'math'", result.stdout)
+
+    def test_zero_arity_builtin_used_as_value_is_typed_as_return_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "input.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    let name be input.
+                    show "Hello, " + name + "!".
+                """).strip() + "\n")
+            result = run_period([path], input_text="Ada\n")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("Hello, Ada!", result.stdout)
+
+    def test_zero_arity_imported_function_used_as_value_auto_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "random.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    import random.
+                    let n be random.
+                    show n.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            # Should print a number, not a function representation.
+            line = result.stdout.strip().splitlines()[-1]
+            self.assertTrue(line.replace('.', '', 1).isdigit(), f"expected numeric output, got {line!r}")
+
+    def test_zero_arity_function_called_with_args_is_type_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "random.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    import random.
+                    let n be random with nothing.
+                    show n.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("cannot call 'number'", result.stdout)
+
+    def test_mixed_integer_number_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "cmp.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    show (5.5 > 0).
+                    show (0 > 5.5).
+                    show (5.0 == 5).
+                    show (5 == 5.0).
+                    show (2.5 > 2).
+                    show (2 > 2.5).
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertEqual(result.returncode, 0, result.stdout)
+            lines = [line for line in result.stdout.splitlines() if line]
+            self.assertEqual(lines, ["true", "false", "true", "true", "true", "false"])
 
 
 class TestLSP(unittest.TestCase):
@@ -328,6 +737,103 @@ class TestLSP(unittest.TestCase):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+
+
+class TestStandardLibrary(unittest.TestCase):
+    def test_string_module_functions(self):
+        out = run_file("""
+            import string.
+            show upper with "hello".
+            show trim with "  world  ".
+            show contains with "hello", "ell".
+            show starts_with with "hello", "he".
+            show ends_with with "hello", "lo".
+            show replace with "hello world", "world", "period".
+            show slice with "hello", 1.
+            show substring with "hello", 1, 4.
+            show split with "a,b,c", ",".
+        """, expected_lines=[
+            "HELLO",
+            "world",
+            "true",
+            "true",
+            "true",
+            "hello period",
+            "ello",
+            "ell",
+            "[a, b, c]",
+        ])
+
+    def test_list_module_higher_order_functions(self):
+        out = run_file("""
+            import list.
+            define double with x:
+                return x * 2.
+            define is_even with x:
+                return x % 2 == 0.
+            let xs be [1, 2, 3, 4].
+            show map with xs, double.
+            show filter with xs, is_even.
+            show reverse with xs.
+            show sort with [3, 1, 4, 1, 5].
+            show contains with xs, 3.
+        """, expected_lines=[
+            "[2, 4, 6, 8]",
+            "[2, 4]",
+            "[4, 3, 2, 1]",
+            "[1, 1, 3, 4, 5]",
+            "true",
+        ])
+
+    def test_path_module_functions(self):
+        out = run_file("""
+            import path.
+            show join with "a", "b".
+            show join with "a/", "/b".
+            show basename with "/usr/bin/period".
+            show dirname with "/usr/bin/period".
+            show extension with "file.period".
+            show is_absolute with "/usr/bin".
+        """, expected_lines=[
+            "a/b",
+            "a/b",
+            "period",
+            "/usr/bin",
+            "period",
+            "true",
+        ])
+
+    def test_test_module_asserts(self):
+        out = run_file("""
+            import test.
+            assert with 1 + 1 == 2.
+            assert_equal with 4, 2 + 2.
+            define boom with _:
+                error with "boom".
+            assert_raises with boom.
+            show "ok".
+        """, expected_lines=["ok"])
+
+
+class TestCompactSyntax(unittest.TestCase):
+    def test_dot_property_access_and_parenthesized_calls(self):
+        out = run_file("""
+            import math.
+            class Person:
+                init with name, age:
+                    set this.name to name.
+                    set this.age to age.
+                define greet with greeting:
+                    show greeting + ", " + this.name + "!".
+            let p be new Person("Ada", 42).
+            p.greet("Hello").
+            show p.age.
+            show sqrt(16).
+        """, expected_lines=[
+            "Hello, Ada!",
+            "42",
+            "4",
+        ])
 
 
 if __name__ == "__main__":

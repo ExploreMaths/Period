@@ -1,25 +1,35 @@
 use std::collections::HashMap;
-use std::env;
 use std::error::Error;
-use std::fs;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
     CompletionResponse, Diagnostic, DiagnosticSeverity, GotoDefinitionParams, Hover, HoverContents,
-    HoverOptions, HoverParams, HoverProviderCapability, Location, MarkupContent, MarkupKind,
+    HoverParams, HoverProviderCapability, Location, MarkupContent, MarkupKind,
     Position, PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentContentChangeEvent,
     TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
 
 use crate::ast::*;
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::parser::Parser;
+use crate::semantic;
+use crate::type_checker;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
-    std::panic::set_hook(Box::new(|_| {}));
+    std::panic::set_hook(Box::new(|info| {
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        eprintln!("period lsp panic: {}", payload);
+        if let Some(loc) = info.location() {
+            eprintln!("  at {}:{}:{}", loc.file(), loc.line(), loc.column());
+        }
+    }));
     let (connection, io_threads) = Connection::stdio();
     let server_capabilities = serde_json::to_value(&ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
@@ -112,8 +122,10 @@ fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, Str
         "textDocument/didChange" => {
             if let Ok(params) = serde_json::from_value::<DidChangeTextDocumentParams>(not.params) {
                 let uri = params.text_document.uri.clone();
-                if let Some(change) = params.content_changes.into_iter().next() {
-                    documents.lock().unwrap().insert(params.text_document.uri, change.text);
+                let mut docs = documents.lock().unwrap();
+                if let Some(current) = docs.get(&params.text_document.uri).cloned() {
+                    let updated = apply_content_changes(&current, params.content_changes);
+                    docs.insert(params.text_document.uri, updated);
                 }
                 return Some(uri);
             }
@@ -127,6 +139,37 @@ fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, Str
         _ => {}
     }
     None
+}
+
+fn apply_content_changes(current: &str, changes: Vec<TextDocumentContentChangeEvent>) -> String {
+    let mut text = current.to_string();
+    for change in changes {
+        if let Some(range) = change.range {
+            let start = position_to_offset(&text, range.start);
+            let end = position_to_offset(&text, range.end);
+            if start <= end && end <= text.len() {
+                text.replace_range(start..end, &change.text);
+            }
+        } else {
+            text = change.text;
+        }
+    }
+    text
+}
+
+fn position_to_offset(text: &str, pos: Position) -> usize {
+    let mut offset = 0;
+    for (i, line) in text.split('\n').enumerate() {
+        if i == pos.line as usize {
+            let col = pos.character as usize;
+            let line_len = line.chars().count();
+            let take = col.min(line_len);
+            offset += line.chars().take(take).map(|c| c.len_utf8()).sum::<usize>();
+            return offset;
+        }
+        offset += line.len() + 1; // +1 for '\n'
+    }
+    text.len()
 }
 
 // Helper structs to deserialize notifications not re-exported by lsp-types conveniently.
@@ -214,7 +257,6 @@ fn hover(
         }
         _ => return Ok(None),
     };
-    eprintln!("hover name={} at {}:{}", name, pos.line, pos.character);
 
     let program = match try_parse(&text).ok() {
         Some(p) => p,
@@ -283,11 +325,10 @@ fn interpolated_ident_at(
                     if let Some(sub_token) = find_token(&sub_tokens, Position {
                         line: 0,
                         character: offset_in_expr,
-                    }) {
-                        if let TokenKind::Ident(name) = &sub_token.kind {
+                    })
+                        && let TokenKind::Ident(name) = &sub_token.kind {
                             return Some(name.clone());
                         }
-                    }
                 }
                 current += part_len;
             }
@@ -314,7 +355,7 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Return => "```period\nreturn <expression>.\n```\n\nReturn a value from a function.",
         TokenKind::Class => "```period\nclass <Name>:\n    ...\n```\n\nDefine a class.",
         TokenKind::New => "```period\nnew <Class>.\n```\n\nCreate a new instance of a class.",
-        TokenKind::Import => "```period\nimport <module>.\n```\n\nImport a built-in or standard-library module. Use a leading dot (e.g. `.helper`) for local files.",
+        TokenKind::Import => "```period\nimport <module>.\n```\n\nImport a built-in or standard-library module. For local files use a POSIX-style relative path (e.g. `import ./helper.` or `import ../utils/helper.`).",
         TokenKind::From => "```period\n<name> from <module>.\n```\n\nUse or import a specific name from a module.",
         TokenKind::Tell => "```period\ntell <object> to <method> with <args>.\n```\n\nSend a message to an object.",
         TokenKind::Read => "```period\nread <variable> from <path>.\n```\n\nRead the contents of a file into a variable.",
@@ -350,7 +391,7 @@ fn completion(
     symbols.extend(all_builtins());
 
     // If the file parses, also include user-defined symbols and imports.
-    if let Some(program) = try_parse(&text).ok() {
+    if let Ok(program) = try_parse(&text) {
         symbols.extend(index_program(&program));
     }
     dedup_symbols(&mut symbols);
@@ -367,7 +408,7 @@ fn completion(
             label: s.name.clone(),
             kind: Some(s.kind),
             detail: Some(s.detail.clone()),
-            documentation: s.docstring.map(|d| lsp_types::Documentation::String(d)),
+            documentation: s.docstring.map(lsp_types::Documentation::String),
             ..Default::default()
         })
         .collect();
@@ -453,12 +494,9 @@ fn prev_significant(start: usize, tokens: &[Token]) -> Option<usize> {
 }
 
 fn next_significant(start: usize, tokens: &[Token]) -> Option<usize> {
-    for i in start..tokens.len() {
-        if !matches!(tokens[i].kind, TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline) {
-            return Some(i);
-        }
-    }
-    None
+    tokens.iter().enumerate().skip(start).find(|(_, t)| {
+        !matches!(t.kind, TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline)
+    }).map(|(i, _)| i)
 }
 
 fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
@@ -468,56 +506,46 @@ fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
         match &tokens[i].kind {
             TokenKind::Let => {
                 // let [type] name be value.  The identifier just before 'be' is the variable.
-                if let Some(be_idx) = find_keyword_after(i, tokens, &TokenKind::Be) {
-                    if let Some(name_idx) = prev_ident_before(be_idx, tokens) {
-                        if let Some(name) = ident_name(&tokens[name_idx].kind) {
+                if let Some(be_idx) = find_keyword_after(i, tokens, &TokenKind::Be)
+                    && let Some(name_idx) = prev_ident_before(be_idx, tokens)
+                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
                             defs.push((name, tokens[name_idx].span.clone()));
                         }
-                    }
-                }
             }
             TokenKind::Read => {
                 // read name from path.
-                if let Some(from_idx) = find_keyword_after(i, tokens, &TokenKind::From) {
-                    if let Some(name_idx) = prev_ident_before(from_idx, tokens) {
-                        if let Some(name) = ident_name(&tokens[name_idx].kind) {
+                if let Some(from_idx) = find_keyword_after(i, tokens, &TokenKind::From)
+                    && let Some(name_idx) = prev_ident_before(from_idx, tokens)
+                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
                             defs.push((name, tokens[name_idx].span.clone()));
                         }
-                    }
-                }
             }
             TokenKind::Catch => {
                 // catch var:
-                if let Some(colon_idx) = find_keyword_after(i, tokens, &TokenKind::Colon) {
-                    if let Some(name_idx) = prev_ident_before(colon_idx, tokens) {
-                        if let Some(name) = ident_name(&tokens[name_idx].kind) {
+                if let Some(colon_idx) = find_keyword_after(i, tokens, &TokenKind::Colon)
+                    && let Some(name_idx) = prev_ident_before(colon_idx, tokens)
+                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
                             defs.push((name, tokens[name_idx].span.clone()));
                         }
-                    }
-                }
             }
             TokenKind::For => {
                 // for var in iterable
-                if let Some(in_idx) = find_keyword_after(i, tokens, &TokenKind::In) {
-                    if let Some(name_idx) = prev_ident_before(in_idx, tokens) {
-                        if let Some(name) = ident_name(&tokens[name_idx].kind) {
+                if let Some(in_idx) = find_keyword_after(i, tokens, &TokenKind::In)
+                    && let Some(name_idx) = prev_ident_before(in_idx, tokens)
+                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
                             defs.push((name, tokens[name_idx].span.clone()));
                         }
-                    }
-                }
             }
             TokenKind::Define | TokenKind::Class => {
-                if let Some(name_idx) = next_ident(i + 1, tokens) {
-                    if let Some(name) = ident_name(&tokens[name_idx].kind) {
+                if let Some(name_idx) = next_ident(i + 1, tokens)
+                    && let Some(name) = ident_name(&tokens[name_idx].kind) {
                         defs.push((name, tokens[name_idx].span.clone()));
                     }
-                }
             }
-            TokenKind::With => {
-                if is_definition_with(i, tokens) {
+            TokenKind::With
+                if is_definition_with(i, tokens) => {
                     collect_params(i + 1, tokens, &mut defs);
                 }
-            }
             _ => {}
         }
         i += 1;
@@ -526,15 +554,9 @@ fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
 }
 
 fn find_keyword_after(start: usize, tokens: &[Token], target: &TokenKind) -> Option<usize> {
-    for i in start..tokens.len() {
-        if matches!(tokens[i].kind, TokenKind::Eof) {
-            break;
-        }
-        if std::mem::discriminant(&tokens[i].kind) == std::mem::discriminant(target) {
-            return Some(i);
-        }
-    }
-    None
+    tokens.iter().enumerate().skip(start).find(|(_, t)| {
+        !matches!(t.kind, TokenKind::Eof) && std::mem::discriminant(&t.kind) == std::mem::discriminant(target)
+    }).map(|(i, _)| i)
 }
 
 fn prev_ident_before(start: usize, tokens: &[Token]) -> Option<usize> {
@@ -553,11 +575,10 @@ fn is_definition_with(idx: usize, tokens: &[Token]) -> bool {
             return true;
         }
         // define name with ...
-        if let Some(prev2) = prev_significant(prev, tokens) {
-            if matches!(tokens[prev2].kind, TokenKind::Define) {
+        if let Some(prev2) = prev_significant(prev, tokens)
+            && matches!(tokens[prev2].kind, TokenKind::Define) {
                 return true;
             }
-        }
     }
     false
 }
@@ -582,50 +603,21 @@ fn collect_params(start: usize, tokens: &[Token], defs: &mut Vec<(String, Span)>
 }
 
 fn lex_tokens(source: &str) -> Result<Vec<Token>, String> {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut lexer = Lexer::new(source);
-        let mut tokens = Vec::new();
-        loop {
-            let t = lexer.next_token();
-            let eof = matches!(t.kind, TokenKind::Eof);
-            tokens.push(t);
-            if eof { break; }
-        }
-        tokens
-    })) {
-        Ok(t) => Ok(t),
-        Err(e) => {
-            let msg = if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else {
-                "lex error".to_string()
-            };
-            Err(msg)
-        }
+    let mut lexer = Lexer::new(source);
+    let mut tokens = Vec::new();
+    loop {
+        let t = lexer.next_token()?;
+        let eof = matches!(t.kind, TokenKind::Eof);
+        tokens.push(t);
+        if eof { break; }
     }
+    Ok(tokens)
 }
 
 fn try_parse(source: &str) -> Result<Program, Diagnostic> {
-    let tokens = match lex_tokens(source) {
-        Ok(t) => t,
-        Err(msg) => return Err(parse_error_to_diagnostic(&msg)),
-    };
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Parser::new(tokens).parse_program()
-    })) {
+    match semantic::try_parse(source) {
         Ok(p) => Ok(p),
-        Err(e) => {
-            let msg = if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else {
-                "parse error".to_string()
-            };
-            Err(parse_error_to_diagnostic(&msg))
-        }
+        Err(msg) => Err(parse_error_to_diagnostic(&msg)),
     }
 }
 
@@ -696,7 +688,23 @@ fn publish_diagnostics(
     let mut diagnostics = Vec::new();
     let current_path = uri.to_file_path().ok().map(|p| p.as_path().to_path_buf());
     match try_parse(&text) {
-        Ok(program) => diagnostics.extend(check_program(&program, current_path.as_deref())),
+        Ok(program) => {
+            let (errors, warnings) = semantic::program_diagnostics(&program, current_path.as_deref());
+            for (span, msg) in errors {
+                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::ERROR));
+            }
+            for (span, msg) in warnings {
+                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::WARNING));
+            }
+            let mut tc = type_checker::TypeChecker::new();
+            let (type_errors, type_warnings) = tc.check(&program);
+            for (span, msg) in type_warnings {
+                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::WARNING));
+            }
+            for (span, msg) in type_errors {
+                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::ERROR));
+            }
+        }
         Err(d) => diagnostics.push(d),
     }
 
@@ -725,6 +733,7 @@ fn token_len(kind: &TokenKind) -> u32 {
             }
             len as u32
         }
+        TokenKind::Integer(n) => format!("{}", n).len() as u32,
         TokenKind::Number(n) => format!("{}", n).len() as u32,
         TokenKind::Bool(b) => if *b { 4 } else { 5 },
         TokenKind::Nothing => 7,
@@ -825,23 +834,21 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
 
     // First pass: collect function return types.
     for stmt in &program.statements {
-        if let Stmt::Define { name, return_type, .. } = stmt {
-            if let Some(ret) = return_type {
+        if let Stmt::Define { name, return_type, .. } = stmt
+            && let Some(ret) = return_type {
                 func_returns.insert(name.clone(), ret.clone());
             }
-        }
         for method in class_methods(stmt) {
-            if let Stmt::Define { name, return_type, .. } = method {
-                if let Some(ret) = return_type {
+            if let Stmt::Define { name, return_type, .. } = method
+                && let Some(ret) = return_type {
                     func_returns.insert(name.clone(), ret.clone());
                 }
-            }
         }
     }
 
     for stmt in &program.statements {
         match stmt {
-            Stmt::Let { name, value } => {
+            Stmt::Let { name, value, .. } => {
                 let typ = infer_expr_with_funcs(value, &func_returns);
                 symbols.push(SymbolInfo {
                     name: name.clone(),
@@ -858,7 +865,7 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
                     kind: CompletionItemKind::FUNCTION,
                 });
             }
-            Stmt::Class { name, init, methods, docstring } => {
+            Stmt::Class { name, init, methods, docstring, .. } => {
                 symbols.push(SymbolInfo {
                     name: name.clone(),
                     detail: format!("class {}", name),
@@ -887,7 +894,7 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
             Stmt::Import(paths) => {
                 for (path, _) in paths {
                     imports.push(path.clone());
-                    if is_valid_module(path) {
+                    if semantic::is_valid_module(path, None) {
                         let mut exports = module_exports(path);
                         let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
                         symbols.push(SymbolInfo {
@@ -920,17 +927,15 @@ fn index_program_all(program: &Program) -> Vec<SymbolInfo> {
 
     // First pass: collect function return types for inference.
     for stmt in &program.statements {
-        if let Stmt::Define { name, return_type, .. } = stmt {
-            if let Some(ret) = return_type {
+        if let Stmt::Define { name, return_type, .. } = stmt
+            && let Some(ret) = return_type {
                 func_returns.insert(name.clone(), ret.clone());
             }
-        }
         for method in class_methods(stmt) {
-            if let Stmt::Define { name, return_type, .. } = method {
-                if let Some(ret) = return_type {
+            if let Stmt::Define { name, return_type, .. } = method
+                && let Some(ret) = return_type {
                     func_returns.insert(name.clone(), ret.clone());
                 }
-            }
         }
     }
 
@@ -943,7 +948,7 @@ fn index_program_all(program: &Program) -> Vec<SymbolInfo> {
 
 fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols: &mut Vec<SymbolInfo>) {
     match stmt {
-        Stmt::Let { name, value } => {
+        Stmt::Let { name, value, .. } => {
             let typ = infer_expr_with_funcs(value, func_returns);
             symbols.push(SymbolInfo {
                 name: name.clone(),
@@ -952,7 +957,7 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
                 kind: CompletionItemKind::VARIABLE,
             });
         }
-        Stmt::Define { name, params, return_type, docstring, body } => {
+        Stmt::Define { name, params, return_type, docstring, body, .. } => {
             symbols.push(SymbolInfo {
                 name: name.clone(),
                 detail: function_detail(name, params, return_type),
@@ -961,7 +966,7 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
             });
             for s in body { collect_symbols(s, func_returns, symbols); }
         }
-        Stmt::Class { name, init, methods, docstring } => {
+        Stmt::Class { name, init, methods, docstring, .. } => {
             symbols.push(SymbolInfo {
                 name: name.clone(),
                 detail: format!("class {}", name),
@@ -981,7 +986,7 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
         }
         Stmt::Import(paths) => {
             for (path, _) in paths {
-                if is_valid_module(path) {
+                if semantic::is_valid_module(path, None) {
                     let mut exports = module_exports(path);
                     let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
                     symbols.push(SymbolInfo {
@@ -1020,12 +1025,13 @@ fn collect_symbols(stmt: &Stmt, func_returns: &HashMap<String, String>, symbols:
 
 fn infer_expr_with_funcs(expr: &Expr, func_returns: &HashMap<String, String>) -> String {
     match expr {
-        Expr::Number(_) => "number".to_string(),
-        Expr::String(_) => "string".to_string(),
-        Expr::Bool(_) => "boolean".to_string(),
-        Expr::Nothing | Expr::Ellipsis => "nothing".to_string(),
-        Expr::List(_) => "list".to_string(),
-        Expr::Dict(_) => "dictionary".to_string(),
+        Expr::Integer(_, _) => "integer".to_string(),
+        Expr::Number(_, _) => "number".to_string(),
+        Expr::String(_, _) => "string".to_string(),
+        Expr::Bool(_, _) => "boolean".to_string(),
+        Expr::Nothing(_) | Expr::Ellipsis => "nothing".to_string(),
+        Expr::List(_, _) => "list".to_string(),
+        Expr::Dict(_, _) => "dictionary".to_string(),
         Expr::New { class, .. } => {
             if let Expr::Variable { name, .. } = class.as_ref() {
                 format!("instance of {}", name)
@@ -1070,66 +1076,23 @@ fn function_return_type(name: &str) -> String {
     .to_string()
 }
 
-fn stdlib_locations() -> Vec<PathBuf> {
-    let mut locs = Vec::new();
-    if let Ok(v) = env::var("PERIOD_STDLIB") {
-        locs.push(PathBuf::from(v));
-    }
-    if let Ok(exe) = env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            locs.push(parent.join("stdlib"));
-            // FHS-style install layout (e.g. /usr/local/bin/period -> /usr/local/share/period/stdlib)
-            if let Some(grandparent) = parent.parent() {
-                locs.push(grandparent.join("share").join("period").join("stdlib"));
-            }
-        }
-    }
-    if let Ok(cwd) = env::current_dir() {
-        locs.push(cwd.join("stdlib"));
-    }
-    locs
-}
-
-fn find_stdlib_module(module: &str) -> Option<PathBuf> {
-    let file = format!("{}.period", module);
-    for loc in stdlib_locations() {
-        let path = loc.join(&file);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn find_stdlib_interface(module: &str) -> Option<PathBuf> {
-    let file = format!("{}.periodi", module);
-    for loc in stdlib_locations() {
-        let path = loc.join(&file);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 fn stdlib_module_exports(module: &str) -> Option<Vec<SymbolInfo>> {
-    let path = find_stdlib_module(module).or_else(|| find_stdlib_interface(module))?;
-    let source = fs::read_to_string(&path).ok()?;
-    let program = try_parse(&source).ok()?;
+    let path = semantic::find_stdlib_module(module).or_else(|| semantic::find_stdlib_interface(module))?;
+    let source = std::fs::read_to_string(&path).ok()?;
+    let program = semantic::try_parse(&source).ok()?;
 
     let mut func_returns: HashMap<String, String> = HashMap::new();
     for stmt in &program.statements {
-        if let Stmt::Define { name, return_type, .. } = stmt {
-            if let Some(ret) = return_type {
+        if let Stmt::Define { name, return_type, .. } = stmt
+            && let Some(ret) = return_type {
                 func_returns.insert(name.clone(), ret.clone());
             }
-        }
     }
 
     let mut exports = Vec::new();
     for stmt in &program.statements {
         match stmt {
-            Stmt::Let { name, value } => {
+            Stmt::Let { name, value, .. } => {
                 let typ = infer_expr_with_funcs(value, &func_returns);
                 exports.push(SymbolInfo {
                     name: name.clone(),
@@ -1146,7 +1109,7 @@ fn stdlib_module_exports(module: &str) -> Option<Vec<SymbolInfo>> {
                     kind: CompletionItemKind::FUNCTION,
                 });
             }
-            Stmt::Class { name, init, methods, docstring } => {
+            Stmt::Class { name, init, methods, docstring, .. } => {
                 exports.push(SymbolInfo {
                     name: name.clone(),
                     detail: format!("{}::class {}", module, name),
@@ -1176,13 +1139,6 @@ fn stdlib_module_exports(module: &str) -> Option<Vec<SymbolInfo>> {
         }
     }
     Some(exports)
-}
-
-fn is_valid_module(module: &str) -> bool {
-    if module.starts_with('.') {
-        return true; // local file import, validated at runtime
-    }
-    matches!(module, "math" | "string" | "random" | "time")
 }
 
 fn module_exports(module: &str) -> Vec<SymbolInfo> {
@@ -1222,13 +1178,14 @@ fn module_exports(module: &str) -> Vec<SymbolInfo> {
 }
 
 fn all_builtins() -> Vec<SymbolInfo> {
-    let mut out = Vec::new();
-    out.push(builtin_fn("length", "value", "integer", "Return the length of a string or list."));
-    out.push(builtin_fn("string", "value", "string", "Convert a value to a string."));
-    out.push(builtin_fn("number", "value", "number", "Convert a value to a number."));
-    out.push(builtin_fn("type", "value", "string", "Return the type name of a value."));
-    out.push(builtin_fn("input", "", "string", "Read a line of input from the user."));
-    out.push(builtin_fn("range", "stop", "range", "Return a lazy range of integers from 0 to stop-1."));
+    let mut out = vec![
+        builtin_fn("length", "value", "integer", "Return the length of a string or list."),
+        builtin_fn("string", "value", "string", "Convert a value to a string."),
+        builtin_fn("number", "value", "number", "Convert a value to a number."),
+        builtin_fn("type", "value", "string", "Return the type name of a value."),
+        builtin_fn("input", "", "string", "Read a line of input from the user."),
+        builtin_fn("range", "stop", "range", "Return a lazy range of integers from 0 to stop-1."),
+    ];
     out.extend(module_exports("math"));
     out.extend(module_exports("string"));
     out.extend(module_exports("random"));
@@ -1302,289 +1259,18 @@ fn module_from_line(line: &str) -> Option<String> {
     None
 }
 
-pub fn program_diagnostics(program: &Program, current_path: Option<&std::path::Path>) -> Vec<(Span, String)> {
-    check_program(program, current_path)
-        .into_iter()
-        .map(|d| {
-            let span = Span {
-                line: (d.range.start.line + 1) as usize,
-                col: (d.range.end.character + 1) as usize,
-            };
-            (span, d.message)
-        })
-        .collect()
+/// Extract the name inside single quotes from a diagnostic message so the LSP
+/// range can underline the offending token.  Falls back to an empty string when
+/// no quoted name is present.
+fn quoted_name(message: &str) -> &str {
+    if let Some(start) = message.find('\'')
+        && let Some(end) = message[start + 1..].find('\'') {
+            return &message[start + 1..start + 1 + end];
+        }
+    ""
 }
 
-fn check_program(program: &Program, current_path: Option<&std::path::Path>) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    let mut imports: Vec<String> = Vec::new();
-
-    // Pre-collect top-level names so functions/classes/imports can be used before
-    // their definition site (needed for recursion and cross-references).
-    let mut global: Vec<String> = builtin_globals().iter().map(|s| s.to_string()).collect();
-    for stmt in &program.statements {
-        match stmt {
-            Stmt::Define { name, .. } => global.push(name.clone()),
-            Stmt::Class { name, .. } => global.push(name.clone()),
-            Stmt::Import(paths) => {
-                for (path, span) in paths {
-                    imports.push(path.clone());
-                    if !is_valid_module(path) {
-                        diags.push(make_diagnostic(span, path, &format!("module not found '{}'", path)));
-                    } else {
-                        let exposed = path.rsplit('.').next().unwrap_or(path);
-                        global.push(exposed.to_string());
-                        if path.starts_with('.') {
-                            global.extend(local_module_exports_names(path, current_path));
-                        } else {
-                            global.extend(module_exports_names(path));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    check_block(&program.statements, &global, &imports, &mut diags);
-    diags
-}
-
-fn builtin_globals() -> Vec<&'static str> {
-    vec!["length", "string", "number", "type", "input", "range"]
-}
-
-fn check_block(stmts: &[Stmt], scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
-    let mut local = scope.to_vec();
-    for stmt in stmts {
-        check_stmt(stmt, &mut local, imports, diags);
-    }
-}
-
-fn check_stmt(stmt: &Stmt, scope: &mut Vec<String>, imports: &[String], diags: &mut Vec<Diagnostic>) {
-    match stmt {
-        Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => check_expr(expr, scope, imports, diags),
-        Stmt::Read { name, path } => {
-            check_expr(path, scope, imports, diags);
-            scope.push(name.clone());
-        }
-        Stmt::Write { content, path } => {
-            check_expr(content, scope, imports, diags);
-            check_expr(path, scope, imports, diags);
-        }
-        Stmt::Let { name, value } => {
-            check_expr(value, scope, imports, diags);
-            scope.push(name.clone());
-        }
-        Stmt::Set { target, value } => {
-            check_assign_target(target, scope, imports, diags);
-            check_expr(value, scope, imports, diags);
-        }
-        Stmt::If { cond, then_branch, else_branch } => {
-            check_expr(cond, scope, imports, diags);
-            check_block(then_branch, scope, imports, diags);
-            check_block(else_branch, scope, imports, diags);
-        }
-        Stmt::While { cond, body } => {
-            check_expr(cond, scope, imports, diags);
-            check_block(body, scope, imports, diags);
-        }
-        Stmt::For { var, iterable, body } => {
-            check_expr(iterable, scope, imports, diags);
-            let mut for_scope = scope.clone();
-            for_scope.push(var.clone());
-            check_block(body, &for_scope, imports, diags);
-        }
-        Stmt::Try { body, catch_var, catch_body } => {
-            check_block(body, scope, imports, diags);
-            let mut catch_scope = scope.clone();
-            catch_scope.push(catch_var.clone());
-            check_block(catch_body, &catch_scope, imports, diags);
-        }
-        Stmt::Define { params, body, .. } => {
-            let mut func_scope = scope.clone();
-            for (p, _) in params { func_scope.push(p.clone()); }
-            check_block(body, &func_scope, imports, diags);
-        }
-        Stmt::Class { init, methods, .. } => {
-            if let Some(init) = init {
-                let mut init_scope = scope.clone();
-                for (p, _) in &init.params { init_scope.push(p.clone()); }
-                init_scope.push("this".to_string());
-                check_block(&init.body, &init_scope, imports, diags);
-            }
-            for m in methods {
-                if let Stmt::Define { params, body, .. } = m {
-                    let mut method_scope = scope.clone();
-                    for (p, _) in params { method_scope.push(p.clone()); }
-                    method_scope.push("this".to_string());
-                    check_block(body, &method_scope, imports, diags);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn check_assign_target(target: &AssignTarget, scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
-    match target {
-        AssignTarget::Variable { name, span } => {
-            if !is_defined(name, scope) {
-                diags.push(make_diagnostic(span, name, &format!("undefined variable '{}'", name)));
-            }
-        }
-        AssignTarget::Index { object, index } => {
-            check_expr(object, scope, imports, diags);
-            check_expr(index, scope, imports, diags);
-        }
-        AssignTarget::Property { object, .. } => {
-            check_expr(object, scope, imports, diags);
-        }
-    }
-}
-
-fn check_expr(expr: &Expr, scope: &[String], imports: &[String], diags: &mut Vec<Diagnostic>) {
-    match expr {
-        Expr::Variable { name, span } => {
-            if !is_defined(name, scope) {
-                diags.push(make_diagnostic(span, name, &format!("undefined variable '{}'", name)));
-            }
-        }
-        Expr::Call { callee, args } => {
-            if let Expr::Variable { name, span } = callee.as_ref() {
-                if !is_defined(name, scope) {
-                    diags.push(make_diagnostic(span, name, &format!("undefined function '{}'", name)));
-                }
-            } else {
-                check_expr(callee, scope, imports, diags);
-            }
-            for a in args { check_expr(a, scope, imports, diags); }
-        }
-        Expr::Qualified { name, module } => {
-            if imports.contains(module) && !module.starts_with('.') {
-                if !module_exports_names(module).contains(&name.clone()) {
-                    // module export missing; no span available in this variant
-                }
-            }
-            // Local modules are validated at runtime; skip static export checks here.
-        }
-        Expr::New { class, args } => {
-            if let Expr::Variable { name, span } = class.as_ref() {
-                if !is_defined(name, scope) {
-                    diags.push(make_diagnostic(span, name, &format!("undefined class '{}'", name)));
-                }
-            } else {
-                check_expr(class, scope, imports, diags);
-            }
-            for a in args { check_expr(a, scope, imports, diags); }
-        }
-        Expr::Binary { left, right, .. } => {
-            check_expr(left, scope, imports, diags);
-            check_expr(right, scope, imports, diags);
-        }
-        Expr::Unary { operand, .. } => check_expr(operand, scope, imports, diags),
-        Expr::Index { object, index } => {
-            check_expr(object, scope, imports, diags);
-            check_expr(index, scope, imports, diags);
-        }
-        Expr::Property { object, .. } => check_expr(object, scope, imports, diags),
-        Expr::Tell { object, args, .. } => {
-            check_expr(object, scope, imports, diags);
-            for a in args { check_expr(a, scope, imports, diags); }
-        }
-        Expr::List(elems) => {
-            for e in elems { check_expr(e, scope, imports, diags); }
-        }
-        Expr::Dict(pairs) => {
-            for (k, v) in pairs {
-                check_expr(k, scope, imports, diags);
-                check_expr(v, scope, imports, diags);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn is_defined(name: &str, scope: &[String]) -> bool {
-    scope.contains(&name.to_string())
-}
-
-fn module_exports_names(module: &str) -> Vec<String> {
-    module_exports(module).into_iter().map(|s| s.name).collect()
-}
-
-/// Resolve a relative module name (e.g. `.helper` or `..helper`) to a file path
-/// starting from the directory containing `current_path`.
-fn resolve_local_module_path(module: &str, current_path: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
-    let current = current_path?;
-    let dir = if current.is_file() {
-        current.parent().unwrap_or(current)
-    } else {
-        current
-    };
-
-    let dots = module.chars().take_while(|&c| c == '.').count();
-    let rest = &module[dots..];
-    let parts: Vec<&str> = if rest.is_empty() {
-        Vec::new()
-    } else {
-        rest.split('.').collect()
-    };
-
-    // Match interpreter semantics: `.helper` -> current dir, `..helper` -> parent dir, etc.
-    let depth = dots.saturating_sub(1);
-    let mut base = dir.to_path_buf();
-    for _ in 0..depth {
-        base = base.join("..");
-    }
-    let local_path = if parts.is_empty() {
-        base.clone()
-    } else {
-        base.join(parts.join(std::path::MAIN_SEPARATOR_STR))
-    };
-    Some(local_path.with_extension("period"))
-}
-
-/// Collect top-level exported names from a local `.period` file.
-/// Falls back to an empty list if the file cannot be read or parsed.
-fn local_module_exports_names(module: &str, current_path: Option<&std::path::Path>) -> Vec<String> {
-    let path = match resolve_local_module_path(module, current_path) {
-        Some(p) => p,
-        None => return Vec::new(),
-    };
-    let source = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-    let program = match try_parse(&source) {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut names = Vec::new();
-    let mut explicit_exports: Vec<String> = Vec::new();
-    let mut has_export = false;
-    for stmt in &program.statements {
-        match stmt {
-            Stmt::Define { name, .. } => names.push(name.clone()),
-            Stmt::Class { name, .. } => names.push(name.clone()),
-            Stmt::Let { name, .. } => names.push(name.clone()),
-            Stmt::Read { name, .. } => names.push(name.clone()),
-            Stmt::Export(exported) => {
-                has_export = true;
-                explicit_exports.extend(exported.iter().cloned());
-            }
-            _ => {}
-        }
-    }
-    if has_export {
-        explicit_exports
-    } else {
-        names
-    }
-}
-
-fn make_diagnostic(span: &Span, name: &str, message: &str) -> Diagnostic {
+fn make_diagnostic(span: &Span, name: &str, message: &str, severity: DiagnosticSeverity) -> Diagnostic {
     let line = span.line.saturating_sub(1) as u32;
     let len = name.len() as u32;
     let end_col = span.col.saturating_sub(1) as u32;
@@ -1594,7 +1280,7 @@ fn make_diagnostic(span: &Span, name: &str, message: &str) -> Diagnostic {
             start: Position { line, character: start_col },
             end: Position { line, character: end_col },
         },
-        severity: Some(DiagnosticSeverity::ERROR),
+        severity: Some(severity),
         code: None,
         code_description: None,
         source: Some("period".to_string()),

@@ -1,5 +1,7 @@
-let x be 5
-show x.
-let y be .
-set z to 10.
-show undefined_var.
+-- Structured error handling.
+
+try:
+    show 1 / 0.
+catch err:
+    show the message of err.
+    show the line of err.

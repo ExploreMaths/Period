@@ -1,5 +1,10 @@
--- Define and use a simple class.
--- This example shows the compact syntax; English forms still work.
+-- Compact dot-and-parentheses syntax lives alongside the English forms.
+
+import math, string.
+
+show sqrt(16).
+show upper("hello").
+
 class Person:
     init with name, age:
         set this.name to name.
@@ -11,3 +16,7 @@ class Person:
 let ada be new Person("Ada", 42).
 ada.greet("Hello").
 show ada.age.
+
+-- Original English forms still work.
+show the name of ada.
+tell ada to greet with "Hi".

@@ -1,0 +1,12 @@
+-- Simple tests using the test module.
+
+import test.
+
+assert with 1 + 1 == 2.
+assert_equal with "hello", "he" + "llo".
+
+define explode with _:
+    error with "boom".
+
+assert_raises with explode.
+show "all tests passed".

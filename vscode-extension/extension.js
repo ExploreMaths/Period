@@ -82,6 +82,11 @@ function findStringBraces(document) {
         const content = match[0].slice(1, -1);
         for (let i = 0; i < content.length; i++) {
             const ch = content[i];
+            const next = content[i + 1];
+            if (ch === '\\' && i + 1 < content.length) {
+                i++; // skip the escaped character
+                continue;
+            }
             if (ch === '{' || ch === '}') {
                 braces.push({
                     offset: strStart + i,
@@ -185,8 +190,15 @@ function findServerExecutable(context) {
     const isWindows = process.platform === 'win32';
     const commandName = isWindows ? 'period.exe' : 'period';
 
-    // Prefer the sibling compiler executable installed by the Windows installer.
     const extRoot = context.extensionPath;
+
+    // Prefer a bundled compiler executable inside the extension folder (development layout).
+    const bundled = path.join(extRoot, commandName);
+    if (fs.existsSync(bundled)) {
+        return bundled;
+    }
+
+    // Prefer the sibling compiler executable installed by the Windows installer.
     const sibling = path.join(extRoot, '..', commandName);
     if (fs.existsSync(sibling)) {
         return sibling;
@@ -222,10 +234,7 @@ function runCurrentFile(context) {
     }
 
     const filePath = editor.document.fileName;
-    let executable = findServerExecutable(context);
-    if (process.platform === 'win32') {
-        executable = executable.replace(/\.exe$/i, '');
-    }
+    const executable = findServerExecutable(context);
 
     const fileArg = JSON.stringify(filePath);
     const command = executable.includes(' ')

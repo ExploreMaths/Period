@@ -1,5 +1,7 @@
 use std::fmt;
 
+use num_bigint::BigInt;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
     pub line: usize,
@@ -8,22 +10,47 @@ pub struct Span {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Number(f64),
-    String(String),
-    Bool(bool),
-    Nothing,
+    Integer(BigInt, Span),
+    Number(f64, Span),
+    String(String, Span),
+    Bool(bool, Span),
+    Nothing(Span),
     Variable { name: String, span: Span },
     Binary { op: BinOp, left: Box<Expr>, right: Box<Expr>, span: Span },
-    Unary { op: UnaryOp, operand: Box<Expr> },
-    Call { callee: Box<Expr>, args: Vec<Expr> },
-    Index { object: Box<Expr>, index: Box<Expr> },
-    Property { object: Box<Expr>, name: String },
-    New { class: Box<Expr>, args: Vec<Expr> },
-    Tell { object: Box<Expr>, method: String, args: Vec<Expr> },
-    Qualified { name: String, module: String },
-    List(Vec<Expr>),
-    Dict(Vec<(Expr, Expr)>),
+    Unary { op: UnaryOp, operand: Box<Expr>, span: Span },
+    Call { callee: Box<Expr>, args: Vec<Expr>, span: Span },
+    Index { object: Box<Expr>, index: Box<Expr>, span: Span },
+    Property { object: Box<Expr>, name: String, span: Span },
+    New { class: Box<Expr>, args: Vec<Expr>, span: Span },
+    Tell { object: Box<Expr>, method: String, args: Vec<Expr>, span: Span },
+    Qualified { name: String, module: String, span: Span },
+    List(Vec<Expr>, Span),
+    Dict(Vec<(Expr, Expr)>, Span),
     Ellipsis,
+}
+
+impl Expr {
+    /// Return the source span attached to this expression, if any.
+    pub fn span(&self) -> Option<&Span> {
+        match self {
+            Expr::Integer(_, span)
+            | Expr::Number(_, span)
+            | Expr::String(_, span)
+            | Expr::Bool(_, span)
+            | Expr::Nothing(span)
+            | Expr::Variable { span, .. }
+            | Expr::Binary { span, .. }
+            | Expr::Unary { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Property { span, .. }
+            | Expr::New { span, .. }
+            | Expr::Tell { span, .. }
+            | Expr::Qualified { span, .. } => Some(span),
+            Expr::List(_, span) | Expr::Dict(_, span) => Some(span),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,22 +90,22 @@ impl fmt::Display for UnaryOp {
 #[derive(Debug, Clone)]
 pub enum AssignTarget {
     Variable { name: String, span: Span },
-    Index { object: Box<Expr>, index: Box<Expr> },
-    Property { object: Box<Expr>, name: String },
+    Index { object: Box<Expr>, index: Box<Expr>, span: Span },
+    Property { object: Box<Expr>, name: String, span: Span },
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Let { name: String, value: Expr },
+    Let { name: String, type_ann: Option<String>, value: Expr, span: Span },
     Set { target: AssignTarget, value: Expr },
     Show(Expr),
     If { cond: Expr, then_branch: Vec<Stmt>, else_branch: Vec<Stmt> },
     While { cond: Expr, body: Vec<Stmt> },
     For { var: String, iterable: Expr, body: Vec<Stmt> },
-    Return(Option<Expr>),
-    Define { name: String, params: Vec<(String, Option<String>)>, return_type: Option<String>, docstring: Option<String>, body: Vec<Stmt> },
+    Return { value: Option<Expr>, span: Span },
+    Define { name: String, params: Vec<(String, Option<String>)>, return_type: Option<String>, docstring: Option<String>, body: Vec<Stmt>, span: Span },
     Init(Init),
-    Class { name: String, init: Option<Init>, methods: Vec<Stmt>, docstring: Option<String> },
+    Class { name: String, init: Option<Init>, methods: Vec<Stmt>, docstring: Option<String>, span: Span },
     Import(Vec<(String, Span)>),
     Read { name: String, path: Expr },
     Write { content: Expr, path: Expr },

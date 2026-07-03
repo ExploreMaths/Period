@@ -1,0 +1,13 @@
+-- Higher-order list functions.
+import list.
+
+define double with x:
+    return x * 2.
+
+define is_even with x:
+    return x % 2 == 0.
+
+let xs be [1, 2, 3, 4].
+show map(xs, double).
+show filter(xs, is_even).
+show reverse(xs).

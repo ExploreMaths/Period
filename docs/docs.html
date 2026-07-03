@@ -21,6 +21,7 @@
         <li><a href="#conditionals">Conditionals</a></li>
         <li><a href="#loops">Loops</a></li>
         <li><a href="#functions">Functions</a></li>
+        <li><a href="#compact">Compact Syntax</a></li>
         <li><a href="#types">Type Annotations</a></li>
         <li><a href="#classes">Classes</a></li>
         <li><a href="#imports">Imports</a></li>
@@ -52,7 +53,7 @@
       <pre><code>cd period
 cargo build --release
 sudo cp target/release/period /usr/local/bin/period</code></pre>
-      <p>For the JIT numeric backend, Period uses any available optimizing C compiler (Clang, GCC, or MSVC) and falls back to the bundled <a href="https://bellard.org/tcc/">TCC</a> if none are found. If no compiler is available, it falls back to the tree-walking interpreter.</p>
+      <p>Period uses a single tree-walking interpreter for all programs, so the semantics you see in the REPL are exactly the semantics you get in a file.</p>
       <p>After installation, verify it works:</p>
       <pre><code>period --version</code></pre>
       <p>Run your first program:</p>
@@ -67,7 +68,7 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
       <pre><code><span class="comment">-- This is a comment.</span>
 <span class="keyword">let</span> x <span class="keyword">be</span> <span class="number">10</span><span class="period">.</span>
 <span class="builtin">show</span> x<span class="period">.</span></code></pre>
-      <p>Keywords and reserved words (<code>let</code>, <code>if</code>, <code>true</code>, <code>nothing</code>, etc.) must be lowercase. <code>Let</code>, <code>LET</code>, and <code>lEt</code> are all errors. Variable and function names are case-sensitive.</p>
+      <p>Keywords and reserved words (<code>let</code>, <code>if</code>, <code>true</code>, <code>nothing</code>, etc.) are case-insensitive: <code>let</code>, <code>Let</code>, and <code>LET</code> all mean the same thing. Variable and function names remain case-sensitive.</p>
     </section>
 
     <section id="variables">
@@ -85,13 +86,14 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
       <h2>Data Types</h2>
 
       <h3>Numbers</h3>
-      <p>Integers and floating-point numbers are supported. Arithmetic follows standard precedence rules.</p>
+      <p>Integers and floating-point numbers are supported. Arithmetic follows standard precedence rules. <code>integer</code> values use arbitrary-precision integers, so they are not limited to 64 bits and do not silently overflow. Literals containing a decimal point produce <code>number</code> (floating-point) values instead. Comparisons between integers and numbers use exact arithmetic whenever possible, so a large integer is not silently considered equal to a nearby floating-point value.</p>
       <pre><code><span class="keyword">let</span> count <span class="keyword">be</span> <span class="number">42</span><span class="period">.</span>
 <span class="keyword">let</span> pi <span class="keyword">be</span> <span class="number">3.14</span><span class="period">.</span>
-<span class="keyword">let</span> result <span class="keyword">be</span> <span class="number">2</span> ** <span class="number">10</span> + <span class="number">5</span><span class="period">.</span></code></pre>
+<span class="keyword">let</span> result <span class="keyword">be</span> <span class="number">2</span> ** <span class="number">100</span><span class="period">.</span>  <span class="comment">-- arbitrary-precision integer</span>
+<span class="builtin">show</span> result<span class="period">.</span></code></pre>
 
       <h3>Strings</h3>
-      <p>Strings are enclosed in double quotes and support <code>\n</code>, <code>\t</code>, <code>\"</code>, and <code>\\</code> escapes. You can interpolate expressions inside <code>{ }</code>; each expression is automatically converted to its string representation.</p>
+      <p>Strings are enclosed in double quotes and support <code>\n</code>, <code>\t</code>, <code>\"</code>, and <code>\\</code> escapes. You can interpolate expressions inside <code>{ }</code>; each expression is automatically converted to its string representation. To include a literal brace, escape it as <code>\{</code> or <code>\}</code>.</p>
       <pre><code><span class="keyword">let</span> name <span class="keyword">be</span> <span class="string">"Period"</span><span class="period">.</span>
 <span class="keyword">let</span> lines <span class="keyword">be</span> <span class="string">"First line\nSecond line"</span><span class="period">.</span>
 <span class="builtin">show</span> <span class="string">"Hello, {name}!"</span><span class="period">.</span>
@@ -134,12 +136,12 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
       <h3>Logical</h3>
       <p><code>and</code>, <code>or</code>, <code>not</code></p>
       <h3>Operator Precedence</h3>
-      <p>From highest to lowest: parentheses, indexing, function calls, unary <code>not</code> and <code>-</code>, <code>**</code>, <code>*</code> <code>/</code> <code>%</code>, <code>+</code> <code>-</code>, comparisons, <code>and</code>, <code>or</code>.</p>
+      <p>From highest to lowest: parentheses, indexing, unary <code>not</code> and <code>-</code>, <code>**</code>, <code>*</code> <code>/</code> <code>%</code>, <code>+</code> <code>-</code>, comparisons, <code>and</code>, <code>or</code>. The comma separating function-call arguments has the lowest precedence, so operators inside arguments are always evaluated first.</p>
     </section>
 
     <section id="conditionals">
       <h2>Conditionals</h2>
-      <p>Use <code>if ... then:</code> to branch. The optional <code>otherwise:</code> block runs when the condition is false; <code>else:</code> is an accepted alias.</p>
+      <p>Use <code>if ... then:</code> to branch. The condition must be a boolean; Period has no implicit truthiness, so strings, numbers, lists, and dictionaries cannot be used directly as conditions. The optional <code>otherwise:</code> block runs when the condition is false; <code>else:</code> is an accepted alias.</p>
       <pre><code><span class="keyword">let</span> score <span class="keyword">be</span> <span class="number">85</span><span class="period">.</span>
 <span class="keyword">if</span> score >= <span class="number">60</span> <span class="keyword">then</span><span class="period">:</span>
     <span class="builtin">show</span> <span class="string">"pass"</span><span class="period">.</span>
@@ -155,7 +157,7 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
 <span class="keyword">while</span> i < <span class="number">10</span> <span class="keyword">repeat</span><span class="period">:</span>
     <span class="builtin">show</span> i<span class="period">.</span>
     <span class="keyword">set</span> i <span class="keyword">to</span> i + <span class="number">1</span><span class="period">.</span></code></pre>
-      <p>Use <code>for ... in ... repeat:</code> to iterate over a list, string, dictionary keys, or a <code>range</code>. The <code>range</code> built-in accepts one, two, or three integer arguments: <code>range with &lt;stop&gt;</code>, <code>range with &lt;start&gt;, &lt;stop&gt;</code>, or <code>range with &lt;start&gt;, &lt;stop&gt;, &lt;step&gt;</code>.</p>
+      <p>Use <code>for ... in ... repeat:</code> to iterate over a list, string, dictionary keys, or a <code>range</code>. The <code>range</code> built-in accepts one, two, or three integer arguments: <code>range with &lt;stop&gt;</code>, <code>range with &lt;start&gt;, &lt;stop&gt;</code>, or <code>range with &lt;start&gt;, &lt;stop&gt;, &lt;step&gt;</code>. Because ranges are iterated eagerly, their arguments must currently fit in a 64-bit signed integer; this is an implementation limit of <code>range</code>, not of the <code>integer</code> type itself.</p>
       <pre><code><span class="keyword">for</span> i <span class="keyword">in</span> range <span class="keyword">with</span> <span class="number">5</span> <span class="keyword">repeat</span><span class="period">:</span>
     <span class="builtin">show</span> i<span class="period">.</span>
 
@@ -178,12 +180,37 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
     <span class="keyword">if</span> n <= <span class="number">1</span> <span class="keyword">then</span><span class="period">:</span>
         <span class="keyword">return</span> <span class="number">1</span><span class="period">.</span>
     <span class="keyword">return</span> n * factorial <span class="keyword">with</span> (n - <span class="number">1</span>)<span class="period">.</span></code></pre>
+      <p>Function call arguments are full expressions separated by commas, so <code>double with 3 + 4</code> means <code>double(3 + 4)</code> and <code>add with 1 + 2, 3 + 4</code> means <code>add(1 + 2, 3 + 4)</code>. Parentheses are only needed to group expressions differently or to disambiguate nested calls.</p>
       <p>Parameters are passed by value. Functions close over the environment in which they are defined.</p>
+    </section>
+
+    <section id="compact">
+      <h2>Compact Syntax</h2>
+      <p>Period's English-style forms are great for readability, but they can become verbose for nested data or frequent calls. You can use the compact forms below wherever you prefer; they are fully equivalent to the English forms and can be mixed in the same program.</p>
+      <ul>
+        <li><code>&lt;expr&gt;.&lt;name&gt;</code> is the same as <code>the &lt;name&gt; of &lt;expr&gt;</code>.</li>
+        <li><code>&lt;expr&gt;.&lt;method&gt;(&lt;args&gt;)</code> is the same as <code>tell &lt;expr&gt; to &lt;method&gt; with &lt;args&gt;</code>.</li>
+        <li><code>&lt;expr&gt;(&lt;args&gt;)</code> is the same as <code>&lt;expr&gt; with &lt;args&gt;</code>.</li>
+        <li><code>new &lt;Class&gt;(&lt;args&gt;)</code> is the same as <code>new &lt;Class&gt; with &lt;args&gt;</code>.</li>
+      </ul>
+      <pre><code><span class="keyword">show</span> sqrt<span class="period">(</span><span class="number">16</span><span class="period">)</span><span class="period">.</span>  <span class="comment">-- same as: show sqrt with 16.</span>
+
+<span class="keyword">class</span> Person<span class="period">:</span>
+    <span class="keyword">init</span> <span class="keyword">with</span> name, age<span class="period">:</span>
+        <span class="keyword">set</span> this<span class="period">.</span>name <span class="keyword">to</span> name<span class="period">.</span>
+        <span class="keyword">set</span> this<span class="period">.</span>age <span class="keyword">to</span> age<span class="period">.</span>
+
+    <span class="keyword">define</span> greet <span class="keyword">with</span> greeting<span class="period">:</span>
+        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this<span class="period">.</span>name + <span class="string">"!"</span><span class="period">.</span>
+
+<span class="keyword">let</span> ada <span class="keyword">be</span> new Person<span class="period">(</span><span class="string">"Ada"</span>, <span class="number">42</span><span class="period">)</span><span class="period">.</span>
+ada<span class="period">.</span>greet<span class="period">(</span><span class="string">"Hello"</span><span class="period">)</span><span class="period">.</span>  <span class="comment">-- same as: tell ada to greet with "Hello".</span>
+<span class="builtin">show</span> ada<span class="period">.</span>age<span class="period">.</span>          <span class="comment">-- same as: show the age of ada.</span></code></pre>
     </section>
 
     <section id="types">
       <h2>Type Annotations</h2>
-      <p>Type annotations are optional. Use them on parameters and return values to get runtime type checks. You can also annotate variables, either before the name or after <code>be</code>.</p>
+      <p>Type annotations are optional, but when present they are enforced at runtime. Use them on parameters, return values, and variables. Function parameters read most naturally with the type first (<code>number a</code>); variable declarations read most naturally with the type after <code>be</code> (<code>let count be integer 0</code>).</p>
       <pre><code><span class="keyword">define</span> add <span class="keyword">with</span> number a, number b <span class="keyword">returns</span> number<span class="period">:</span>
     <span class="keyword">return</span> a + b<span class="period">.</span>
 
@@ -192,28 +219,28 @@ greet <span class="keyword">with</span> <span class="string">"World"</span><span
 
 <span class="keyword">let</span> numbers <span class="keyword">be</span> list <span class="keyword">of</span> integer [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]<span class="period">.</span>
 <span class="keyword">let</span> scores <span class="keyword">be</span> dictionary <span class="keyword">of</span> string <span class="keyword">to</span> number {<span class="string">"Ada"</span>: <span class="number">90</span>}<span class="period">.</span>
-<span class="keyword">let</span> list <span class="keyword">of</span> string names <span class="keyword">be</span> [<span class="string">"Ada"</span>, <span class="string">"Grace"</span>]<span class="period">.</span></code></pre>
+<span class="keyword">let</span> names <span class="keyword">be</span> list <span class="keyword">of</span> string [<span class="string">"Ada"</span>, <span class="string">"Grace"</span>]<span class="period">.</span></code></pre>
       <p>Built-in type names are <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, and <code>class</code>. <code>integer</code> values are a subset of <code>number</code>; an annotation of <code>number</code> accepts both integers and floating-point values. <code>type with</code> reports the more specific <code>integer</code> for whole-number literals. Compound types use <code>list of &lt;type&gt;</code> and <code>dictionary of &lt;key&gt; to &lt;value&gt;</code>. You can also use a class name or a generic type variable such as <code>T</code> to match instances of that class.</p>
     </section>
 
     <section id="classes">
       <h2>Classes</h2>
-      <p>Define a class with <code>class</code>, an optional <code>init</code> constructor, and <code>define</code> methods. Inside methods, <code>this</code> refers to the current instance.</p>
+      <p>Define a class with <code>class</code>, an optional <code>init</code> constructor, and <code>define</code> methods. Inside methods, <code>this</code> refers to the current instance. You can use either the English-style forms or the compact dot forms for property access and method calls.</p>
       <pre><code><span class="keyword">class</span> Person<span class="period">:</span>
     <span class="keyword">init</span> <span class="keyword">with</span> name, age<span class="period">:</span>
-        <span class="keyword">set</span> this.name <span class="keyword">to</span> name<span class="period">.</span>
-        <span class="keyword">set</span> this.age <span class="keyword">to</span> age<span class="period">.</span>
+        <span class="keyword">set</span> this<span class="period">.</span>name <span class="keyword">to</span> name<span class="period">.</span>
+        <span class="keyword">set</span> this<span class="period">.</span>age <span class="keyword">to</span> age<span class="period">.</span>
 
     <span class="keyword">define</span> greet <span class="keyword">with</span> greeting<span class="period">:</span>
-        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this.name + <span class="string">"!"</span><span class="period">.</span>
+        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this<span class="period">.</span>name + <span class="string">"!"</span><span class="period">.</span>
 
-<span class="keyword">let</span> ada <span class="keyword">be</span> new Person <span class="keyword">with</span> <span class="string">"Ada"</span>, <span class="number">42</span><span class="period">.</span>
-tell ada <span class="keyword">to</span> greet <span class="keyword">with</span> <span class="string">"Hello"</span><span class="period">.</span>
-<span class="builtin">show</span> ada.age<span class="period">.</span></code></pre>
-      <p>Create instances with <code>new &lt;ClassName&gt; with &lt;args&gt;</code>, call methods with <code>tell &lt;object&gt; to &lt;method&gt; with &lt;args&gt;</code>, and access properties with dot syntax (<code>ada.age</code>, <code>this.name</code>). The English-style form <code>the &lt;property&gt; of &lt;object&gt;</code> is also accepted for both reading and writing.</p>
-      <pre><code><span class="keyword">set</span> the age <span class="keyword">of</span> ada <span class="keyword">to</span> <span class="number">43</span><span class="period">.</span>
-<span class="keyword">set</span> ada.age <span class="keyword">to</span> <span class="number">44</span><span class="period">.</span>
-<span class="builtin">show</span> the age <span class="keyword">of</span> ada<span class="period">.</span></code></pre>
+<span class="keyword">let</span> ada <span class="keyword">be</span> new Person<span class="period">(</span><span class="string">"Ada"</span>, <span class="number">42</span><span class="period">)</span><span class="period">.</span>
+ada<span class="period">.</span>greet<span class="period">(</span><span class="string">"Hello"</span><span class="period">)</span><span class="period">.</span>
+<span class="builtin">show</span> ada<span class="period">.</span>age<span class="period">.</span></code></pre>
+      <p>Create instances with <code>new &lt;ClassName&gt; with &lt;args&gt;</code> or <code>new &lt;ClassName&gt;(&lt;args&gt;)</code>, call methods with <code>tell &lt;object&gt; to &lt;method&gt; with &lt;args&gt;</code> or <code>&lt;object&gt;.&lt;method&gt;(&lt;args&gt;)</code>, and access properties with <code>the &lt;property&gt; of &lt;object&gt;</code> or <code>&lt;object&gt;.&lt;property&gt;</code>.</p>
+      <pre><code><span class="keyword">set</span> ada<span class="period">.</span>age <span class="keyword">to</span> <span class="number">43</span><span class="period">.</span>
+<span class="builtin">show</span> the age <span class="keyword">of</span> ada<span class="period">.</span>  <span class="comment">-- English form still works</span></code></pre>
+      <p>Fields can be declared either as <code>init</code> parameters or by assigning to <code>the &lt;name&gt; of this</code> or <code>this.&lt;name&gt;</code> inside <code>init</code>. The static type checker infers types for body-initialized fields and checks later property assignments; assigning a value of the wrong type is a static error. Methods are <strong>not</strong> properties: you cannot read a method with <code>the &lt;method&gt; of &lt;object&gt;</code> or <code>&lt;object&gt;.&lt;method&gt;</code>; doing so produces an error. Always call methods with <code>tell</code> or the compact <code>&lt;object&gt;.&lt;method&gt;(...)</code> form.</p>
     </section>
 
     <section id="imports">
@@ -225,7 +252,7 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       <p>After importing, call the exported functions directly by name:</p>
       <pre><code><span class="keyword">import</span> math, random <span class="keyword">and</span> string<span class="period">.</span>
 
-<span class="keyword">let</span> n <span class="keyword">be</span> random <span class="keyword">with</span> nothing<span class="period">.</span>
+<span class="keyword">let</span> n <span class="keyword">be</span> random<span class="period">.</span>
 <span class="keyword">let</span> greeting <span class="keyword">be</span> upper <span class="keyword">with</span> <span class="string">"hello"</span><span class="period">.</span>
 <span class="builtin">show</span> sqrt <span class="keyword">with</span> <span class="number">2</span><span class="period">.</span></code></pre>
       <p>If two imported modules export the same name, you must qualify it with <code>from</code>:</p>
@@ -234,27 +261,34 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
 <span class="builtin">show</span> sin <span class="keyword">from</span> math <span class="keyword">with</span> <span class="number">5</span><span class="period">.</span>
 <span class="keyword">let</span> joined <span class="keyword">be</span> join <span class="keyword">from</span> string <span class="keyword">with</span> <span class="string">"-"</span>, [<span class="string">"a"</span>, <span class="string">"b"</span>]<span class="period">.</span></code></pre>
       <p>Using an unqualified name that is exported by more than one imported module is an error.</p>
-      <p>Period ships with the following modules. The native modules have <code>.periodi</code> stub files in <code>period/stdlib/</code> for documentation and IDE support, while their implementations are provided by the runtime:</p>
+      <p>Period ships with the following modules. They are imported by plain name, e.g. <code>import list.</code>, and their exported signatures are checked statically:</p>
       <ul>
-        <li><code>math</code> &mdash; trigonometry, roots, and rounding</li>
-        <li><code>random</code> &mdash; random numbers</li>
-        <li><code>string</code> &mdash; case conversion</li>
-        <li><code>time</code> &mdash; timestamps</li>
-        <li><code>list</code> &mdash; list utilities (source in <code>period/stdlib/list.period</code>)</li>
-        <li><code>text</code> &mdash; text utilities (source in <code>period/stdlib/text.period</code>)</li>
+        <li><code>math</code> &mdash; trigonometry, roots, and rounding (native, <code>.periodi</code> stub)</li>
+        <li><code>random</code> &mdash; random numbers (native, <code>.periodi</code> stub)</li>
+        <li><code>string</code> &mdash; case conversion, trim, split, search, replace, and slicing (native, <code>.periodi</code> stub)</li>
+        <li><code>time</code> &mdash; timestamps (native, <code>.periodi</code> stub)</li>
+        <li><code>list</code> &mdash; sum, max, min, map, filter, find, any, all, contains, reverse, slice, and sort (Period source)</li>
+        <li><code>text</code> &mdash; text utilities (Period source)</li>
+        <li><code>path</code> &mdash; minimal string path manipulation (Period source)</li>
+        <li><code>test</code> &mdash; tiny assertion helpers for writing tests (Period source)</li>
       </ul>
-      <p>If a <code>.period</code> source file is missing, the native built-in implementation is used as a fallback. You can also write <code>.periodi</code> interface files (like Python <code>.pyi</code> stubs) that declare exports without implementation; the LSP reads them for completions and hover, while the runtime ignores them. Use <code>...</code> as a placeholder expression or body. A leading string literal in a block is treated as a docstring and does not need a trailing <code>.</code>:</p>
+      <p>You can also write <code>.periodi</code> interface files (like Python <code>.pyi</code> stubs) that declare exports without implementation; the LSP reads them for completions and hover, while the runtime ignores them. Use <code>...</code> as a placeholder expression or body. A leading string literal in a block is treated as a docstring and does not need a trailing <code>.</code>:</p>
       <pre><code><span class="keyword">define</span> sin <span class="keyword">with</span> value <span class="keyword">returns</span> number<span class="period">:</span>
     <span class="string">"Return the sine of a value."</span>
     <span class="keyword">...</span>
 
 <span class="keyword">let</span> pi <span class="keyword">be</span> <span class="keyword">...</span><span class="period">.</span></code></pre>
-      <p>Local modules must be imported with a relative path: <code>.helper</code> loads <code>helper.period</code> from the same directory as the importing file, and <code>..helper</code> loads it from the parent directory. A project <code>lib/</code> folder is also checked for relative imports. Plain module names such as <code>helper</code> only resolve to built-in or standard-library modules.</p>
+      <p>Local modules must be imported with a POSIX-style relative path: <code>./helper</code> loads <code>helper.period</code> from the same directory as the importing file, and <code>../utils/helper</code> loads it from the parent directory's <code>utils</code> folder. A project <code>lib/</code> folder is also checked for relative imports. Plain module names such as <code>helper</code> only resolve to built-in or standard-library modules.</p>
     </section>
 
     <section id="builtins">
       <h2>Built-in Functions</h2>
       <p>Period provides a small set of built-in functions. They are called like any other function using <code>with</code>.</p>
+
+      <h3><code>show &lt;value&gt;</code></h3>
+      <p>Prints a value followed by a newline. Showing an empty string prints a blank line.</p>
+      <pre><code><span class="builtin">show</span> <span class="string">"hello"</span><span class="period">.</span>  <span class="comment">-- hello</span>
+<span class="builtin">show</span> <span class="string">""</span><span class="period">.</span>       <span class="comment">-- (blank line)</span></code></pre>
 
       <h3><code>length with &lt;value&gt;</code></h3>
       <p>Returns the number of characters in a string, elements in a list, or keys in a dictionary.</p>
@@ -270,7 +304,7 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       <pre><code><span class="builtin">show</span> number <span class="keyword">with</span> <span class="string">"3.14"</span><span class="period">.</span>  <span class="comment">-- 3.14</span></code></pre>
 
       <h3><code>type with &lt;value&gt;</code></h3>
-      <p>Returns the type name as a string: <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, <code>built-in</code>, <code>class</code>, or <code>instance of &lt;ClassName&gt;</code>.</p>
+      <p>Returns the type name as a string: <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, <code>built-in</code>, <code>class</code>, <code>error</code>, or <code>instance of &lt;ClassName&gt;</code>.</p>
       <pre><code><span class="builtin">show</span> type <span class="keyword">with</span> [<span class="number">1</span>, <span class="number">2</span>]<span class="period">.</span>  <span class="comment">-- "list"</span></code></pre>
 
       <h3><code>input</code></h3>
@@ -278,6 +312,12 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
       <pre><code><span class="builtin">show</span> <span class="string">"What is your name?"</span><span class="period">.</span>
 <span class="keyword">let</span> name <span class="keyword">be</span> input<span class="period">.</span>
 <span class="builtin">show</span> <span class="string">"Nice to meet you, "</span> + name + <span class="string">"."</span><span class="period">.</span></code></pre>
+
+      <h3><code>error with &lt;message&gt;</code></h3>
+      <p>Raises a runtime error with the given message. Useful inside the <code>test</code> module or for explicit precondition checks.</p>
+      <pre><code><span class="keyword">define</span> require with boolean condition<span class="period">:</span>
+    <span class="keyword">if</span> <span class="keyword">not</span> condition, <span class="keyword">then</span><span class="period">:</span>
+        <span class="builtin">error</span> <span class="keyword">with</span> <span class="string">"precondition failed"</span><span class="period">.</span></code></pre>
     </section>
 
     <section id="files">
@@ -290,11 +330,12 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
 
     <section id="exceptions">
       <h2>Exceptions</h2>
-      <p>Use <code>try</code> and <code>catch</code> to handle runtime errors without crashing. The catch variable receives the error message as a string.</p>
+      <p>Use <code>try</code> and <code>catch</code> to handle runtime errors without crashing. The catch variable receives an error object with <code>message</code>, <code>line</code>, and <code>col</code> properties.</p>
       <pre><code><span class="keyword">try</span><span class="period">:</span>
     <span class="keyword">let</span> x <span class="keyword">be</span> <span class="number">1</span> / <span class="number">0</span><span class="period">.</span>
 <span class="keyword">catch</span> err<span class="period">:</span>
-    <span class="builtin">show</span> <span class="string">"caught: "</span> + err<span class="period">.</span></code></pre>
+    <span class="builtin">show</span> the message <span class="keyword">of</span> err<span class="period">.</span>
+    <span class="builtin">show</span> the line <span class="keyword">of</span> err<span class="period">.</span></code></pre>
       <p>Only runtime errors are caught; normal <code>return</code> statements still propagate out of the try block.</p>
     </section>
 
@@ -344,18 +385,23 @@ ten
 
     <section id="errors">
       <h2>Error Messages</h2>
-      <p>Period reports errors with the exact line and column range. The parser recovers from errors so multiple problems can be reported in a single pass.</p>
+      <p>Period reports errors with the exact line and column range. Semantic and type errors are collected and reported together; parse errors currently stop at the first problem.</p>
       <pre><code>example.period:1:11: error: Expected '.' at the end of a 'let' statement.
        1 | let x be 5
          |           ^</code></pre>
+      <p>The static checker also verifies that functions and methods with a declared return type return a value on every control-flow path, and that imported local modules actually exist:</p>
+      <pre><code>example.period:3:1: error: function 'f' may not return a value on all paths
+    3 | define f returns number:
+      | ^
+
+main.period:1:1: error: module not found './helper'
+    1 | import ./helper.
+      |       ^</code></pre>
       <p>Runtime errors, such as division by zero or undefined variables, also print the offending source line with a caret pointing to the error, similar to Python:</p>
       <pre><code>example.period:2:8: runtime error: Division by zero.
     2 | show 0 / 0.
       |        ^</code></pre>
-      <p>Even compile-time diagnostics from the C/JIT backend are mapped back to the original Period source, so you see the same caret style instead of raw C compiler output:</p>
-      <pre><code>example.period:1:7: error: 'x' undeclared
-    1 | show x.
-      |       ^</code></pre>
+      <p>All diagnostics come from the single Period frontend, so error locations and messages are consistent whether you run a file or use the LSP.</p>
     </section>
 
     <section id="grammar">
@@ -381,7 +427,8 @@ block          := &lt;indent&gt; &lt;statement&gt;+ &lt;dedent&gt;
 class-body     := &lt;indent&gt; (&lt;init&gt; | &lt;method&gt;)+ &lt;dedent&gt;
 init           := "init" ("with" &lt;params&gt;)? ":" &lt;block&gt;
 method         := "define" &lt;identifier&gt; ("with" &lt;params&gt;)? ("returns" &lt;type&gt;)? ":" &lt;block&gt;
-module-path    := "."* &lt;identifier&gt; ("." &lt;identifier&gt;)*
+module-path    := &lt;identifier&gt; | "./" &lt;path&gt; | "../" &lt;path&gt;
+arguments      := &lt;expression&gt; ("," &lt;expression&gt;)*
 type           := &lt;type-name&gt; | "list" "of" &lt;type&gt; | "dictionary" "of" &lt;type&gt; "to" &lt;type&gt;
 type-name      := "nothing" | "boolean" | "integer" | "number" | "string" | "list" | "dictionary" | "function" | "class" | &lt;identifier&gt;
 expression     := &lt;or-expr&gt;
@@ -398,8 +445,7 @@ primary        := &lt;number&gt; | &lt;string&gt; | &lt;bool&gt; | "nothing" | "
                 | &lt;identifier&gt; | "(" &lt;expression&gt; ")" | "[" &lt;arguments&gt;? "]" | "{" &lt;pairs&gt;? "}"
                 | "new" &lt;primary&gt; ("with" &lt;arguments&gt;)?
                 | "tell" &lt;expression&gt; "to" &lt;identifier&gt; ("with" &lt;arguments&gt;)?
-                | "the" &lt;identifier&gt; "of" &lt;expression&gt;
-property       := &lt;primary&gt; &lt;identifier&gt; | &lt;primary&gt; "." &lt;identifier&gt;</code></pre>
+                | "the" &lt;identifier&gt; "of" &lt;primary&gt;</code></pre>
     </section>
 
     <section id="tips">

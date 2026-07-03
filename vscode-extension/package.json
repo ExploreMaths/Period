@@ -93,7 +93,8 @@
   },
   "scripts": {
     "set-version": "node set-version.js",
-    "package": "npm run set-version && vsce package"
+    "package": "npm run set-version && vsce package",
+    "test": "vscode-tmgrammar-test -g syntaxes/period.tmLanguage.json tests/*.period"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

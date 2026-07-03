@@ -1,6 +1,67 @@
 # Changelog
 
-## Unreleased
+## 2.0.0-beta.1 (2026-07-03)
+
+### Breaking redesign
+
+- Unified syntax and runtime semantics under a single tree-walking Rust interpreter; removed the C/JIT backend, cached DLL generation, and bundled TCC.
+- Restored case-insensitive keywords (`let`, `Let`, and `LET` are equivalent).
+- Unified property access and method call syntax to `the <property> of <object>` and `tell <object> to <method>`.
+- Relative imports now require POSIX-style paths (`./helper`, `../utils/helper`).
+- Added a static type checker that validates annotated parameters, return values, and variables before execution.
+- Structured error values expose `message`, `line`, and `col` properties.
+
+### Added
+
+- Optional compact syntax that coexists with the English forms: `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
+- New `error` built-in for raising runtime errors with a custom message.
+- Expanded standard library:
+  - `string`: `trim`, `split`, `contains`, `starts_with`, `ends_with`, `replace`, `slice`, `substring`.
+  - `list`: `map`, `filter`, `find`, `any`, `all`, `contains`, `reverse`, `slice`, `sort`.
+  - `path`: `join`, `basename`, `dirname`, `extension`, `is_absolute`.
+  - `test`: `assert`, `assert_equal`, `assert_raises`.
+- Static type-checker signatures for `math`, `string`, `random`, `time`, `path`, and `test` modules.
+- Simple return-type inference for functions without an explicit `returns` annotation.
+- Source spans attached to list, dictionary, call, index, property, `new`, `tell`, `qualified`, unary, and literal expressions so runtime and static errors point to the offending code.
+- New examples: `examples/compact.period` and `examples/tests.period`.
+- Rust cargo development layout support: the binary can find `stdlib/` at the repository root when run from `period/target/<profile>`.
+- Arbitrary-precision integer support using `num-bigint`; integer literals and arithmetic no longer overflow at 64 bits.
+
+### Fixed
+
+- Lexer, parser, and interpreter no longer panic on invalid input; parse and runtime errors are reported once with source locations.
+- Function and method call arguments are parsed as full expressions separated by commas, so `f with a + b, c > d` parses as expected.
+- Integer arithmetic (`+`, `-`, `*`, `%`, `**` with non-negative exponent) uses `BigInt` and no longer overflows.
+- Mixed `integer`/`number` equality and comparisons now use exact integer arithmetic when possible; `0 == 0.0` is `true` while very large integers compare correctly.
+- `0 ** -1` and equivalent operations report `Division by zero` instead of returning `inf`.
+- Unannotated list and dictionary literals allow heterogeneous elements; annotated literals enforce the declared element types.
+- Runtime errors for indexing, calls, properties, and messages now include source locations; literal spans eliminate remaining `0:0` type-checker fallbacks.
+- Circular imports (including self-imports) are detected and reported as a runtime error with a source location.
+- Class fields assigned via `set the <name> of this to ...` or `this.<name> = ...` inside `init` are visible to the static type checker, and property assignments are checked against the inferred or declared field type.
+- Accessing a method as a property (`the <method> of <object>` or `obj.method` without calling it) is now a static and runtime error.
+- Local module imports (`./foo`, `../bar`) are validated statically when the source file's directory is known; missing files and import cycles report a source location.
+- Standard-library source and interface modules are recognized by both the runtime and the static checker; errors raised inside stdlib functions are reported at the user's call site.
+- Functions and methods with an explicit return type are checked to ensure they return on every control-flow path, with support for `if`/`otherwise`, `while true`, and `try`/`catch`.
+- Static type checker correctly types zero-arity functions used as values and rejects `random with nothing.` as a type error.
+- String lexer gives a clear error for unescaped `{{` and documents the `\{` / `\}` escape syntax.
+- REPL runs the same lexer/parser/semantic/type-check pipeline as file mode and reports errors with source locations.
+- LSP `textDocument/didChange` applies all content changes in order; diagnostics include static type errors; completion no longer triggers on `.` statement terminators.
+- Duplicate-definition warnings are emitted once per symbol; duplicate class warnings and duplicate imports point to the correct source locations.
+- `cargo clippy` now runs clean (remaining `result_large_err` lints are allowed at crate root).
+
+### Quality
+
+- Codebase modularized into focused modules: `value`, `types`, `environment`, `builtins`, `reporting`, `semantic`, and `type_checker`.
+- Full test suite: 49 Rust unit tests, 55 Python integration tests, 13 example programs, and VS Code grammar tests.
+
+### Documentation
+
+- Rewrote `docs/docs.html`, `docs/examples.html`, and `docs/about.html` to match the redesigned language.
+- Added a Compact Syntax section to `docs/docs.html` documenting `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
+- Corrected `README.md` and `docs/docs.html` to describe arbitrary-precision integers, exact `integer`/`number` comparison, boolean-only conditions, and first-error-only parsing.
+- Updated `docs/about.html` and `README.md` to present Period as an educational language with optional compact syntax and tooling that supports learning.
+- Removed the misleading performance chart from `docs/index.html` and reframed `docs/benchmark_long.py` as regression tracking rather than competition with compiled languages.
+- Updated the VS Code extension README and LSP hover docs to use POSIX-style relative imports.
 
 ## 1.0.6 (2026-07-01)
 
@@ -27,6 +88,8 @@
 
 ## 1.0.4 (2026-07-01)
 
+> **Note:** The C/JIT backend, bundled TCC, and numeric fast-path described in this release were removed in the Unreleased redesign. The current implementation uses a single Rust interpreter for all programs.
+
 ### What's new
 
 - Added Linux `.deb` (`period-{version}-amd64.deb`) and macOS `.pkg` (`period-{version}-macos.pkg`) installers to GitHub Releases.
@@ -41,6 +104,8 @@
 
 ## 1.0.3 (2026-06-28)
 
+> **Note:** The C/JIT backend mentioned in this release was removed in the Unreleased redesign.
+
 ### What's new
 
 - Runtime and compile-time errors now print the offending source line with a caret (`^`), similar to Python.
@@ -49,6 +114,8 @@
 - Updated `docs/index.html` performance chart to use `benchmark_long.py` results with 1M and 5M iteration bars.
 
 ## 1.0.2 (2026-06-27)
+
+> **Note:** Keyword case enforcement mentioned in this release was later reverted; the current implementation treats keywords as case-insensitive.
 
 ### What's new
 
@@ -64,6 +131,8 @@
 - Fixed lexer panic on Windows CRLF line endings.
 
 ## 1.0.1 (2026-06-27)
+
+> **Note:** The C/JIT numeric fast-path and keyword case enforcement mentioned in this release were removed in the Unreleased redesign.
 
 ### What's new
 
@@ -101,6 +170,8 @@
 `760a43e`
 
 ## 1.0.0 (2026-06-27)
+
+> **Note:** The numeric fast-path compiler was removed in the Unreleased redesign; all programs now run through the single Rust interpreter.
 
 ### What's new
 

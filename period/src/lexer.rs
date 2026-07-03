@@ -1,4 +1,5 @@
 use crate::ast::Span;
+use num_bigint::BigInt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringPart {
@@ -14,7 +15,7 @@ pub enum TokenKind {
     Class, Init, New, Tell, The, Of, Import, From, Returns,
     Read, Write, Try, Catch, Export,
     // Literals
-    Number(f64), String(String), Interpolated(Vec<StringPart>), Ident(String), Bool(bool), Nothing,
+    Integer(BigInt), Number(f64), String(String), Interpolated(Vec<StringPart>), Ident(String), Bool(bool), Nothing,
     // Operators
     Plus, Minus, Star, Slash, Percent, Power,
     EqEq, NotEq, Less, Greater, LessEq, GreaterEq,
@@ -53,32 +54,37 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Result<Token, String> {
         if let Some(t) = self.pending.pop() {
-            return t;
+            return Ok(t);
         }
         loop {
-            if let Some(kind) = self.lex_token() {
-                return Token { kind, span: self.span() };
+            let start = self.span();
+            if let Some(kind) = self.lex_token()? {
+                return Ok(Token { kind, span: start });
             }
             if self.peek_char().is_none() {
                 break;
             }
         }
-        while self.indent_stack.len() > 1 {
+        if self.indent_stack.len() > 1 {
             self.indent_stack.pop();
-            return Token { kind: TokenKind::Dedent, span: self.span() };
+            return Ok(Token { kind: TokenKind::Dedent, span: self.span() });
         }
-        Token { kind: TokenKind::Eof, span: self.span() }
+        Ok(Token { kind: TokenKind::Eof, span: self.span() })
     }
 
     fn span(&self) -> Span { Span { line: self.line, col: self.col } }
 
-    fn error(&self, msg: &str) -> ! {
-        panic!("lexer error at {}:{}: {}", self.line, self.col, msg);
+    fn error(&self, msg: &str) -> String {
+        format!("lexer error at {}:{}: {}", self.line, self.col, msg)
     }
 
     fn peek_char(&mut self) -> Option<char> { self.chars.peek().map(|(_, c)| *c) }
+
+    fn peek_char_at(&mut self, offset: usize) -> Option<char> {
+        self.chars.clone().nth(offset).map(|(_, c)| c)
+    }
 
     fn advance(&mut self) -> Option<char> {
         let (_, c) = self.chars.next()?;
@@ -87,11 +93,11 @@ impl<'a> Lexer<'a> {
         Some(c)
     }
 
-    fn lex_token(&mut self) -> Option<TokenKind> {
+    fn lex_token(&mut self) -> Result<Option<TokenKind>, String> {
         if self.at_line_start {
             self.at_line_start = false;
             if self.peek_char().is_none() {
-                return None;
+                return Ok(None);
             }
             let mut spaces = 0usize;
             while let Some(c) = self.peek_char() {
@@ -130,85 +136,96 @@ impl<'a> Lexer<'a> {
             return self.handle_indent(spaces);
         }
 
-        let c = self.peek_char()?;
+        let c = match self.peek_char() {
+            Some(c) => c,
+            None => return Ok(None),
+        };
         match c {
             ' ' | '\t' | '\r' => { self.advance(); self.lex_token() }
-            '\n' => { self.advance(); self.at_line_start = true; Some(TokenKind::Newline) }
+            '\n' => { self.advance(); self.at_line_start = true; Ok(Some(TokenKind::Newline)) }
             '-' => {
                 self.advance();
                 if self.peek_char() == Some('-') {
                     self.skip_comment();
                     self.lex_token()
                 } else {
-                    Some(TokenKind::Minus)
+                    Ok(Some(TokenKind::Minus))
                 }
             }
             '.' => {
                 self.advance();
-                if self.peek_char() == Some('.') {
+                // Relative import paths: ./foo or ../foo. Read the whole path as one identifier.
+                if self.peek_char() == Some('/') {
+                    let mut path = String::from("./");
+                    self.advance(); // consume '/'
+                    while let Some(c) = self.peek_char() {
+                        if c.is_alphanumeric() || c == '_' || c == '/' { path.push(c); self.advance(); }
+                        else { break; }
+                    }
+                    Ok(Some(TokenKind::Ident(path)))
+                } else if self.peek_char() == Some('.') {
                     self.advance();
-                    if self.peek_char() == Some('.') {
+                    if self.peek_char() == Some('/') {
+                        let mut path = String::from("../");
+                        self.advance(); // consume '/'
+                        while let Some(c) = self.peek_char() {
+                            if c.is_alphanumeric() || c == '_' || c == '/' { path.push(c); self.advance(); }
+                            else { break; }
+                        }
+                        Ok(Some(TokenKind::Ident(path)))
+                    } else if self.peek_char() == Some('.') {
                         self.advance();
-                        Some(TokenKind::Ellipsis)
+                        Ok(Some(TokenKind::Ellipsis))
                     } else {
-                        self.error("unexpected '..'")
+                        Err(self.error("unexpected '..'"))
                     }
                 } else {
-                    Some(TokenKind::Dot)
+                    Ok(Some(TokenKind::Dot))
                 }
             }
-            ',' => { self.advance(); Some(TokenKind::Comma) }
-            ':' => { self.advance(); Some(TokenKind::Colon) }
-            '(' => { self.advance(); Some(TokenKind::LParen) }
-            ')' => { self.advance(); Some(TokenKind::RParen) }
-            '[' => { self.advance(); Some(TokenKind::LBracket) }
-            ']' => { self.advance(); Some(TokenKind::RBracket) }
-            '{' => { self.advance(); Some(TokenKind::LBrace) }
-            '}' => { self.advance(); Some(TokenKind::RBrace) }
-            '+' => { self.advance(); Some(TokenKind::Plus) }
+            ',' => { self.advance(); Ok(Some(TokenKind::Comma)) }
+            ':' => { self.advance(); Ok(Some(TokenKind::Colon)) }
+            '(' => { self.advance(); Ok(Some(TokenKind::LParen)) }
+            ')' => { self.advance(); Ok(Some(TokenKind::RParen)) }
+            '[' => { self.advance(); Ok(Some(TokenKind::LBracket)) }
+            ']' => { self.advance(); Ok(Some(TokenKind::RBracket)) }
+            '{' => { self.advance(); Ok(Some(TokenKind::LBrace)) }
+            '}' => { self.advance(); Ok(Some(TokenKind::RBrace)) }
+            '+' => { self.advance(); Ok(Some(TokenKind::Plus)) }
             '*' => {
                 self.advance();
-                if self.peek_char() == Some('*') { self.advance(); Some(TokenKind::Power) }
-                else { Some(TokenKind::Star) }
+                if self.peek_char() == Some('*') { self.advance(); Ok(Some(TokenKind::Power)) }
+                else { Ok(Some(TokenKind::Star)) }
             }
-            '/' => { self.advance(); Some(TokenKind::Slash) }
-            '%' => { self.advance(); Some(TokenKind::Percent) }
+            '/' => { self.advance(); Ok(Some(TokenKind::Slash)) }
+            '%' => { self.advance(); Ok(Some(TokenKind::Percent)) }
             '<' => {
                 self.advance();
-                if self.peek_char() == Some('=') { self.advance(); Some(TokenKind::LessEq) }
-                else { Some(TokenKind::Less) }
+                if self.peek_char() == Some('=') { self.advance(); Ok(Some(TokenKind::LessEq)) }
+                else { Ok(Some(TokenKind::Less)) }
             }
             '>' => {
                 self.advance();
-                if self.peek_char() == Some('=') { self.advance(); Some(TokenKind::GreaterEq) }
-                else { Some(TokenKind::Greater) }
+                if self.peek_char() == Some('=') { self.advance(); Ok(Some(TokenKind::GreaterEq)) }
+                else { Ok(Some(TokenKind::Greater)) }
             }
             '=' => {
                 self.advance();
-                if self.peek_char() == Some('=') { self.advance(); Some(TokenKind::EqEq) }
-                else { self.error("unexpected '='") }
+                if self.peek_char() == Some('=') { self.advance(); Ok(Some(TokenKind::EqEq)) }
+                else { Err(self.error("unexpected '='")) }
             }
             '!' => {
                 self.advance();
-                if self.peek_char() == Some('=') { self.advance(); Some(TokenKind::NotEq) }
-                else { self.error("unexpected '!'") }
+                if self.peek_char() == Some('=') { self.advance(); Ok(Some(TokenKind::NotEq)) }
+                else { Err(self.error("unexpected '!'")) }
             }
-            '"' => Some(self.read_string_token()),
-            d if d.is_ascii_digit() => Some(TokenKind::Number(self.read_number())),
+            '"' => Ok(Some(self.read_string_token()?)),
+            d if d.is_ascii_digit() => Ok(Some(self.read_number()?)),
             a if a.is_alphabetic() || a == '_' => {
                 let name = self.read_identifier();
                 let lower = name.to_ascii_lowercase();
-                let reserved = matches!(
-                    lower.as_str(),
-                    "let" | "set" | "show" | "if" | "then" | "otherwise" | "while" | "repeat"
-                    | "for" | "in" | "define" | "with" | "return" | "be" | "to" | "and" | "or"
-                    | "not" | "class" | "init" | "new" | "tell" | "the" | "of" | "import"
-                    | "from" | "returns" | "read" | "write" | "try" | "catch" | "export"
-                    | "true" | "false" | "nothing"
-                );
-                if reserved && name != lower {
-                    self.error(&format!("keyword '{}' must be lowercase", name));
-                }
+                // Keywords are case-insensitive: Let, LET, let all mean the same thing.
+                // Identifiers (variables, functions, classes) keep their original case.
                 let kind = match lower.as_str() {
                     "let" => TokenKind::Let, "set" => TokenKind::Set, "show" => TokenKind::Show,
                     "if" => TokenKind::If, "then" => TokenKind::Then, "otherwise" | "else" => TokenKind::Otherwise,
@@ -230,26 +247,26 @@ impl<'a> Lexer<'a> {
                     "nothing" => TokenKind::Nothing,
                     _ => TokenKind::Ident(name),
                 };
-                Some(kind)
+                Ok(Some(kind))
             }
-            _ => self.error(&format!("unexpected character '{}'", c)),
+            _ => Err(self.error(&format!("unexpected character '{}'", c))),
         }
     }
 
-    fn handle_indent(&mut self, spaces: usize) -> Option<TokenKind> {
+    fn handle_indent(&mut self, spaces: usize) -> Result<Option<TokenKind>, String> {
         let top = *self.indent_stack.last().unwrap();
         if spaces > top {
             self.indent_stack.push(spaces);
-            Some(TokenKind::Indent)
+            Ok(Some(TokenKind::Indent))
         } else if spaces < top {
             while spaces < *self.indent_stack.last().unwrap() {
                 self.indent_stack.pop();
                 self.pending.push(Token { kind: TokenKind::Dedent, span: self.span() });
             }
             if spaces != *self.indent_stack.last().unwrap() {
-                self.error("inconsistent indentation");
+                return Err(self.error("inconsistent indentation"));
             }
-            self.pending.pop().map(|t| t.kind).or_else(|| self.lex_token())
+            self.pending.pop().map(|t| Ok(Some(t.kind))).unwrap_or_else(|| self.lex_token())
         } else {
             self.lex_token()
         }
@@ -262,7 +279,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_string_token(&mut self) -> TokenKind {
+    fn read_string_token(&mut self) -> Result<TokenKind, String> {
         self.advance(); // opening quote
         let mut literal = String::new();
         let mut parts: Vec<StringPart> = Vec::new();
@@ -274,8 +291,9 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        let mut closed = false;
         while let Some(c) = self.peek_char() {
-            if c == '"' { self.advance(); break; }
+            if c == '"' { self.advance(); closed = true; break; }
             if c == '\\' {
                 self.advance();
                 match self.advance() {
@@ -286,13 +304,16 @@ impl<'a> Lexer<'a> {
                     Some('{') => literal.push('{'),
                     Some('}') => literal.push('}'),
                     Some(other) => literal.push(other),
-                    None => self.error("unterminated string"),
+                    None => return Err(self.error("unterminated string")),
                 }
             } else if c == '{' {
+                if self.peek_char_at(1) == Some('{') {
+                    return Err(self.error("unexpected '{{'; use \\{ to escape a literal brace"));
+                }
                 has_interp = true;
                 flush(&mut literal, &mut parts);
                 self.advance(); // '{'
-                let expr = self.read_interpolation_expr();
+                let expr = self.read_interpolation_expr()?;
                 parts.push(StringPart::Expr(expr));
             } else {
                 literal.push(c);
@@ -300,19 +321,23 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        if !closed {
+            return Err(self.error("unterminated string"));
+        }
+
         if has_interp {
             flush(&mut literal, &mut parts);
-            TokenKind::Interpolated(parts)
+            Ok(TokenKind::Interpolated(parts))
         } else {
-            TokenKind::String(literal)
+            Ok(TokenKind::String(literal))
         }
     }
 
-    fn read_interpolation_expr(&mut self) -> String {
+    fn read_interpolation_expr(&mut self) -> Result<String, String> {
         let mut expr = String::new();
         let mut depth = 1;
         while let Some(c) = self.peek_char() {
-            if c == '"' { self.error("unterminated interpolation expression"); }
+            if c == '"' { return Err(self.error("unterminated interpolation expression")); }
             if c == '{' {
                 depth += 1;
                 expr.push(c);
@@ -333,35 +358,35 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
         }
-        expr
+        Ok(expr)
     }
 
-    pub fn lex_string(source: &str) -> Vec<Token> {
+    pub fn lex_string(source: &str) -> Result<Vec<Token>, String> {
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
         loop {
-            let t = lexer.next_token();
+            let t = lexer.next_token()?;
             let eof = matches!(t.kind, TokenKind::Eof);
             tokens.push(t);
             if eof { break; }
         }
-        tokens
+        Ok(tokens)
     }
 
-    fn read_number(&mut self) -> f64 {
+    fn read_number(&mut self) -> Result<TokenKind, String> {
         let start = self.col;
         let mut saw_dot = false;
         while let Some(c) = self.peek_char() {
             if c.is_ascii_digit() || c == '_' { self.advance(); }
             else if c == '.' && !saw_dot {
-                // Make sure it's a decimal point, not statement terminator at EOL
-                if let Some((_, next)) = self.chars.clone().next() {
-                    if next.is_ascii_digit() {
+                // Make sure the character after the dot is a digit (decimal point)
+                // rather than the end of the number / statement terminator.
+                if let Some((_, next)) = self.chars.clone().nth(1)
+                    && next.is_ascii_digit() {
                         saw_dot = true;
                         self.advance();
                         continue;
                     }
-                }
                 break;
             }
             else { break; }
@@ -369,7 +394,17 @@ impl<'a> Lexer<'a> {
         let end = self.col;
         let line = self.source.lines().nth(self.line - 1).unwrap();
         let text: String = line[start - 1..end - 1].chars().filter(|c| *c != '_').collect();
-        text.parse().unwrap_or_else(|_| self.error("invalid number"))
+        if saw_dot {
+            match text.parse() {
+                Ok(n) => Ok(TokenKind::Number(n)),
+                Err(_) => Err(self.error("invalid number")),
+            }
+        } else {
+            match text.parse::<BigInt>() {
+                Ok(n) => Ok(TokenKind::Integer(n)),
+                Err(_) => Err(self.error("invalid number")),
+            }
+        }
     }
 
     fn read_identifier(&mut self) -> String {
@@ -388,5 +423,56 @@ impl<'a> Lexer<'a> {
         } else {
             chars.into_iter().collect()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokens(source: &str) -> Vec<TokenKind> {
+        let mut lexer = Lexer::new(source);
+        let mut out = Vec::new();
+        loop {
+            let t = lexer.next_token().unwrap();
+            let eof = matches!(t.kind, TokenKind::Eof);
+            out.push(t.kind);
+            if eof { break; }
+        }
+        out
+    }
+
+    #[test]
+    fn tokenize_let_statement() {
+        assert_eq!(
+            tokens("let x be 10."),
+            vec![
+                TokenKind::Let,
+                TokenKind::Ident("x".to_string()),
+                TokenKind::Be,
+                TokenKind::Integer(BigInt::from(10)),
+                TokenKind::Dot,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_string_literal() {
+        let toks = tokens("show \"hello\".");
+        assert!(matches!(toks[1], TokenKind::String(ref s) if s == "hello"));
+    }
+
+    #[test]
+    fn integer_vs_number_literals() {
+        let toks = tokens("5 5.0");
+        assert!(matches!(toks[0], TokenKind::Integer(ref n) if *n == BigInt::from(5)));
+        assert!(matches!(toks[1], TokenKind::Number(n) if n == 5.0));
+    }
+
+    #[test]
+    fn lex_error_unterminated_string() {
+        let mut lexer = Lexer::new("\"hello");
+        assert!(lexer.next_token().is_err());
     }
 }

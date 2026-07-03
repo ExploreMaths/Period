@@ -1,6 +1,10 @@
-"""Longer-running execution-speed benchmark across languages.
+"""Longer-running execution-speed benchmark for Period.
 
-This compares raw interpreter/compiled performance, not startup time.
+Period is a single tree-walking interpreter, so it is not intended to compete
+with compiled languages on numeric loops. This script tracks Period's own
+performance over time and shows where it stands relative to common compiled
+and JIT implementations for reference only.
+
 Run with:
     python docs/benchmark_long.py
 """

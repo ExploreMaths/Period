@@ -1,0 +1,10 @@
+-- Minimal testing helpers.
+
+define assert with boolean condition:
+    ...
+
+define assert_equal with expected, actual:
+    ...
+
+define assert_raises with f:
+    ...

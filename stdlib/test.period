@@ -1,0 +1,18 @@
+-- Minimal testing helpers.
+-- assert_raises expects a one-argument "thunk" function; the argument is ignored.
+-- This avoids Period's auto-call behavior for zero-argument functions.
+
+define assert with condition:
+    if not condition, then:
+        error with "assertion failed".
+
+define assert_equal with expected, actual:
+    if expected != actual, then:
+        error with "expected " + string with expected + ", got " + string with actual.
+
+define assert_raises with f:
+    try:
+        f with nothing.
+    catch err:
+        return nothing.
+    error with "expected an error but none was raised".

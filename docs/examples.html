@@ -110,11 +110,11 @@
       <pre><code><span class="comment">-- Define a class with init and methods.</span>
 <span class="keyword">class</span> Person<span class="period">:</span>
     <span class="keyword">init</span> <span class="keyword">with</span> name, age<span class="period">:</span>
-        <span class="keyword">set</span> this name <span class="keyword">to</span> name<span class="period">.</span>
-        <span class="keyword">set</span> this age <span class="keyword">to</span> age<span class="period">.</span>
+        <span class="keyword">set</span> the name <span class="keyword">of</span> this <span class="keyword">to</span> name<span class="period">.</span>
+        <span class="keyword">set</span> the age <span class="keyword">of</span> this <span class="keyword">to</span> age<span class="period">.</span>
 
     <span class="keyword">define</span> greet <span class="keyword">with</span> greeting<span class="period">:</span>
-        <span class="builtin">show</span> greeting + <span class="string">", "</span> + this name + <span class="string">"!"</span><span class="period">.</span>
+        <span class="builtin">show</span> greeting + <span class="string">", "</span> + the name <span class="keyword">of</span> this + <span class="string">"!"</span><span class="period">.</span>
 
 <span class="keyword">let</span> ada <span class="keyword">be</span> new Person <span class="keyword">with</span> <span class="string">"Ada"</span>, <span class="number">42</span><span class="period">.</span>
 tell ada <span class="keyword">to</span> greet <span class="keyword">with</span> <span class="string">"Hello"</span><span class="period">.</span>

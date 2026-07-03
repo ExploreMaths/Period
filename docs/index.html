@@ -40,13 +40,13 @@
         </div>
         <div class="feature">
           <div class="feature-icon">⚡</div>
-          <h4>Native JIT</h4>
-          <p>Pure numeric code is compiled to C, then to a native DLL using the best available compiler (Clang, GCC, or MSVC). Loop unrolling and caching make repeated runs fast.</p>
+          <h4>Single Interpreter</h4>
+          <p>One consistent execution path for every program: what you see in the REPL is exactly what runs in a file.</p>
         </div>
         <div class="feature">
           <div class="feature-icon">📦</div>
           <h4>Modules &amp; Standard Library</h4>
-          <p>Import built-in modules such as math, string, random, time, json, and os. Local modules and relative imports are supported too.</p>
+          <p>Import built-in modules such as math, string, random, and time. Local modules and relative imports are supported too.</p>
         </div>
         <div class="feature">
           <div class="feature-icon">🧠</div>
@@ -76,13 +76,9 @@
     </section>
 
     <section id="performance">
-      <span class="section-label">Performance</span>
-      <h2>Long-running loop runtime.</h2>
-      <p>Two numeric workloads, 5,000,000 iterations each. Lower is better.</p>
-      <div class="chart-wrapper">
-        <canvas id="perfChart"></canvas>
-      </div>
-      <p class="chart-note">Benchmarked with <a href="https://github.com/ExploreMaths/Period/blob/main/docs/benchmark_long.py"><code>benchmark_long.py</code></a> (5,000,000 iterations, averaged over 10 runs). Two workloads are shown: summing 1..N, and counting numbers divisible by 3 or 5. C is compiled with the best available optimizing compiler (MSVC, GCC, Clang) and falls back to the bundled TCC if none are installed; Rust, Go, C# and Java use their normal release builds. Period compiles the program to a cached DLL using the same best-available C compiler, runs it in-process, and applies loop unrolling for pure numeric <code>while</code> loops.</p>
+      <span class="section-label">Design</span>
+      <h2>Clarity over speed.</h2>
+      <p>Period uses a single tree-walking interpreter so that semantics are uniform across the REPL, files, and LSP. It is designed for readability and learning, not for outperforming compiled languages on numeric loops. The compact syntax and expanded standard library make everyday scripting pleasant; performance is acceptable for teaching, prototyping, and small utilities.</p>
     </section>
 
     <section id="hello-period">
@@ -225,124 +221,6 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
     <p>&copy; 2026 Period Language. Released under the MIT License.</p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const ctx = document.getElementById('perfChart');
-      if (!ctx) return;
-
-      const relativeLabels = {
-        id: 'relativeLabels',
-        afterDatasetsDraw(chart) {
-          const { ctx } = chart;
-          const baseIndex = 0; // C
-
-          function drawText(text, tx, ty, color, align = 'center') {
-            ctx.textAlign = align;
-            ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-            ctx.lineJoin = 'round';
-            ctx.setLineDash([]);
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'white';
-            ctx.strokeText(text, tx, ty);
-            ctx.fillStyle = color;
-            ctx.fillText(text, tx, ty);
-          }
-
-          ctx.save();
-          chart.data.datasets.forEach((dataset, dsIndex) => {
-            const base = dataset.data[baseIndex];
-            const meta = chart.getDatasetMeta(dsIndex);
-            meta.data.forEach((bar, i) => {
-              const ratio = dataset.data[i] / base;
-              const label = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
-              drawText(label, bar.x, bar.y - 6, '#78716c');
-            });
-          });
-          ctx.restore();
-        }
-      };
-
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: ['Period', 'C (Release)', 'Rust', 'Go', 'C#', 'Java'],
-          datasets: [
-            {
-              label: 'Sum 1..N',
-              data: [6.6, 9.1, 13.6, 19.0, 32.9, 64.3],
-              backgroundColor: [
-                'rgba(217, 119, 6, 0.9)',
-                'rgba(59, 130, 246, 0.9)',
-                'rgba(180, 83, 9, 0.9)',
-                'rgba(20, 184, 166, 0.9)',
-                'rgba(168, 85, 247, 0.9)',
-                'rgba(239, 68, 68, 0.9)'
-              ],
-              borderColor: [
-                'rgba(217, 119, 6, 1)',
-                'rgba(59, 130, 246, 1)',
-                'rgba(180, 83, 9, 1)',
-                'rgba(20, 184, 166, 1)',
-                'rgba(168, 85, 247, 1)',
-                'rgba(239, 68, 68, 1)'
-              ],
-              borderWidth: 1,
-              borderRadius: 6,
-              barPercentage: 0.7
-            },
-            {
-              label: 'Divisible by 3 or 5',
-              data: [8.9, 9.8, 11.8, 19.4, 43.9, 64.1],
-              backgroundColor: [
-                'rgba(217, 119, 6, 0.5)',
-                'rgba(59, 130, 246, 0.5)',
-                'rgba(180, 83, 9, 0.5)',
-                'rgba(20, 184, 166, 0.5)',
-                'rgba(168, 85, 247, 0.5)',
-                'rgba(239, 68, 68, 0.5)'
-              ],
-              borderColor: [
-                'rgba(217, 119, 6, 1)',
-                'rgba(59, 130, 246, 1)',
-                'rgba(180, 83, 9, 1)',
-                'rgba(20, 184, 166, 1)',
-                'rgba(168, 85, 247, 1)',
-                'rgba(239, 68, 68, 1)'
-              ],
-              borderWidth: 1,
-              borderRadius: 6,
-              barPercentage: 0.7
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, position: 'top' },
-            tooltip: {
-              callbacks: {
-                label: (item) => `${item.raw} ms`
-              }
-            }
-          },
-          scales: {
-            y: {
-              type: 'logarithmic',
-              title: { display: true, text: 'Milliseconds, logarithmic scale (lower is better)' },
-              grid: { color: 'rgba(0,0,0,0.06)' },
-              ticks: { callback: (value) => value + ' ms' }
-            },
-            x: {
-              grid: { display: false }
-            }
-          }
-        },
-        plugins: [relativeLabels]
-      });
-    });
-  </script>
   <script type="module">
     import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js";
     import { ScrollTrigger } from "https://cdn.jsdelivr.net/npm/gsap@3.15.0/ScrollTrigger.js";
@@ -487,7 +365,7 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
         scrollTrigger: { trigger: "#stats", start: "top 82%" }
       });
 
-      gsap.from("#performance .section-label, #performance h2, #performance > p, #performance .chart-wrapper", {
+      gsap.from("#performance .section-label, #performance h2, #performance > p", {
         ...reveal,
         stagger: 0.1,
         scrollTrigger: { trigger: "#performance", start: "top 80%" }

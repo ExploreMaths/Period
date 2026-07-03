@@ -1,0 +1,17 @@
+-- Optional type annotations are enforced at runtime.
+
+define add with number a, number b returns number:
+    return a + b.
+
+show add with 3, 4.
+
+let count be integer 0.
+set count to 10.
+show count.
+
+let words be list of string ["hello", "world"].
+show words.
+
+-- Uncomment to see a type error:
+-- define bad with number x returns number:
+--     return "not a number".

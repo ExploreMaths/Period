@@ -34,7 +34,7 @@
             { "include": "#comment" },
             { "name": "keyword.control.period", "match": "\\b(and)\\b" },
             { "name": "punctuation.separator.comma.period", "match": "," },
-            { "name": "support.class.period", "match": "\\.?[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*" }
+            { "name": "support.class.period", "match": "(?:\\./|\\.\\./)?[a-zA-Z_][a-zA-Z0-9_]*(?:/[a-zA-Z_][a-zA-Z0-9_]*)*" }
           ]
         }
       ]
@@ -84,14 +84,6 @@
     "property-access": {
       "patterns": [
         {
-          "name": "meta.this.property.period",
-          "match": "\\b(this)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
-          "captures": {
-            "1": { "name": "keyword.control.period" },
-            "2": { "name": "variable.other.property.period" }
-          }
-        },
-        {
           "name": "meta.the.property.period",
           "match": "\\b(the)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+\\b(of)\\b",
           "captures": {
@@ -126,11 +118,11 @@
       "patterns": [
         {
           "name": "keyword.control.period",
-          "match": "\\b(define|class|init|if|then|otherwise|while|for|in|repeat|return|returns|import|let|be|set|to|with|this|new|tell|of|the|from|and|or|not)\\b"
+          "match": "\\b(define|class|init|if|then|otherwise|while|for|in|repeat|return|returns|import|let|be|set|to|with|this|new|tell|of|the|from|and|or|not|try|catch|export)\\b"
         },
         {
           "name": "support.type.builtin.period",
-          "match": "\\b(any|never|nothing|boolean|integer|number|string|list|dictionary|function|class)\\b"
+          "match": "\\b(any|never|nothing|boolean|integer|number|string|list|dictionary|function|class|error)\\b"
         },
         {
           "name": "support.function.builtin.period",
@@ -184,10 +176,10 @@
           "begin": "\\{",
           "end": "\\}",
           "beginCaptures": {
-            "0": { "name": "punctuation.definition.template-expression.begin" }
+            "0": { "name": "punctuation.definition.template-expression.begin.period" }
           },
           "endCaptures": {
-            "0": { "name": "punctuation.definition.template-expression.end" }
+            "0": { "name": "punctuation.definition.template-expression.end.period" }
           },
           "contentName": "meta.embedded.period",
           "patterns": [

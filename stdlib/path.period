@@ -1,0 +1,49 @@
+-- Minimal string path utilities (no OS dependencies).
+
+import string.
+
+define join with string a, string b returns string:
+    let sep be "/".
+    if a == "" or b == "", then:
+        return a + b.
+    let a_ends be ends_with with a, sep.
+    let b_starts be starts_with with b, sep.
+    if a_ends and b_starts, then:
+        return substring(a, 0, length(a) - 1) + b.
+    if not a_ends and not b_starts, then:
+        return a + sep + b.
+    return a + b.
+
+define basename with string path returns string:
+    let parts be split with path, "/".
+    return parts[-1].
+
+define dirname with string path returns string:
+    let len be length with path.
+    if len == 0, then:
+        return "".
+    let last be len - 1.
+    while last > 0 and path[last] == "/" repeat:
+        set last to last - 1.
+    while last > 0 and path[last] != "/" repeat:
+        set last to last - 1.
+    if last == 0, then:
+        if path[0] == "/", then:
+            return "/".
+        return "".
+    return substring with path, 0, last.
+
+define extension with string path returns string:
+    let base be basename with path.
+    let len be length with base.
+    let i be len - 1.
+    while i >= 0 repeat:
+        if base[i] == ".", then:
+            return substring with base, i + 1, len.
+        set i to i - 1.
+    return "".
+
+define is_absolute with string path returns boolean:
+    if length(path) == 0, then:
+        return false.
+    return path[0] == "/".

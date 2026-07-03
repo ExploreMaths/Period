@@ -3,14 +3,7 @@
  *
  * For trivial programs such as `show "Hello, World!".` this executable
  * prints the output directly and exits without loading the full Rust
- * interpreter.
- *
- * For other inputs it looks for a cached JIT DLL in %TEMP%\period_c_cache\.
- * If found, the DLL is loaded in-process and its exported period_run()
- * function is called, avoiding the cost of spawning the Rust binary and
- * another child process. If no cached DLL exists, the wrapper falls back
- * to period-core.exe, which will compile and run the program and create
- * the cache for next time.
+ * interpreter. All other programs are forwarded to period-core.exe.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -18,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 static char core_path[MAX_PATH];
 
@@ -91,43 +83,6 @@ static int try_fast_show(const char *src) {
     return 1;
 }
 
-static uint64_t fnv1a_64(const unsigned char *data, size_t len) {
-    uint64_t hash = 0xcbf29ce484222325ULL;
-    for (size_t i = 0; i < len; i++) {
-        hash ^= (uint64_t)data[i];
-        hash *= 0x100000001b3ULL;
-    }
-    return hash;
-}
-
-static int run_cached_dll(const unsigned char *data, size_t len, int *out_code) {
-    uint64_t hash = fnv1a_64(data, len);
-
-    char temp[MAX_PATH];
-    DWORD temp_len = GetTempPathA(MAX_PATH, temp);
-    if (temp_len == 0 || temp_len >= MAX_PATH) return 0;
-
-    char dll_path[MAX_PATH];
-    snprintf(dll_path, sizeof(dll_path), "%speriod_c_cache\\period_%016llx.dll", temp, hash);
-
-    DWORD attribs = GetFileAttributesA(dll_path);
-    if (attribs == INVALID_FILE_ATTRIBUTES || (attribs & FILE_ATTRIBUTE_DIRECTORY)) return 0;
-
-    HMODULE h = LoadLibraryA(dll_path);
-    if (!h) return 0;
-
-    typedef int (*period_run_t)(void);
-    period_run_t run = (period_run_t)GetProcAddress(h, "period_run");
-    if (!run) {
-        FreeLibrary(h);
-        return 0;
-    }
-
-    *out_code = run();
-    FreeLibrary(h);
-    return 1;
-}
-
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         return run_core(argc, argv);
@@ -169,11 +124,8 @@ int main(int argc, char *argv[]) {
     buf[read] = '\0';
 
     int result;
-    int cached_code = 0;
     if (try_fast_show((const char *)buf)) {
         result = 0;
-    } else if (run_cached_dll(buf, read, &cached_code)) {
-        result = cached_code;
     } else {
         result = run_core(argc, argv);
     }

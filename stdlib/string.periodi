@@ -1,0 +1,41 @@
+-- String utilities.
+
+define upper with string value returns string:
+    "Convert a string to uppercase."
+    ...
+
+define lower with string value returns string:
+    "Convert a string to lowercase."
+    ...
+
+define trim with string value returns string:
+    "Remove leading and trailing whitespace."
+    ...
+
+define split with string value, string delimiter returns list of string:
+    "Split a string into a list of substrings separated by delimiter."
+    ...
+
+define contains with string value, string substring returns boolean:
+    "Return true if value contains substring."
+    ...
+
+define starts_with with string value, string prefix returns boolean:
+    "Return true if value starts with prefix."
+    ...
+
+define ends_with with string value, string suffix returns boolean:
+    "Return true if value ends with suffix."
+    ...
+
+define replace with string value, string from, string to returns string:
+    "Replace all occurrences of from with to."
+    ...
+
+define slice with string value, integer start returns string:
+    "Return the substring from start to the end of value."
+    ...
+
+define substring with string value, integer start, integer end returns string:
+    "Return the substring from start up to but not including end."
+    ...
