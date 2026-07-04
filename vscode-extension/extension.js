@@ -228,6 +228,15 @@ function findExecutable(context, preferWrapper) {
         return sibling;
     }
 
+    // Prefer a compiler in the current workspace root (development / source layout).
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        const local = path.join(workspaceFolders[0].uri.fsPath, wrapperName);
+        if (fs.existsSync(local)) {
+            return local;
+        }
+    }
+
     // Fallback: look for the executable on PATH.
     return wrapperName;
 }
