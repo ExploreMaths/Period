@@ -1,0 +1,3 @@
+export triple.
+define triple with x:
+    return x * 3.
