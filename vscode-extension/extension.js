@@ -187,25 +187,49 @@ function findServerExecutable(context) {
         return configured;
     }
 
+    return findExecutable(context, false);
+}
+
+function findRunExecutable(context) {
+    // Running a file should always go through the wrapper (period / period.exe),
+    // even if the language server was configured to use period-core directly.
+    return findExecutable(context, true);
+}
+
+function findExecutable(context, preferWrapper) {
     const isWindows = process.platform === 'win32';
-    const commandName = isWindows ? 'period.exe' : 'period';
+    const wrapperName = isWindows ? 'period.exe' : 'period';
+    const coreName = isWindows ? 'period-core.exe' : 'period-core';
+
+    const config = vscode.workspace.getConfiguration('period');
+    const configured = config.get('languageServerPath');
+    if (configured && fs.existsSync(configured)) {
+        const base = path.basename(configured);
+        if (preferWrapper && base.toLowerCase() === coreName.toLowerCase()) {
+            const wrapper = path.join(path.dirname(configured), wrapperName);
+            if (fs.existsSync(wrapper)) {
+                return wrapper;
+            }
+        }
+        return configured;
+    }
 
     const extRoot = context.extensionPath;
 
     // Prefer a bundled compiler executable inside the extension folder (development layout).
-    const bundled = path.join(extRoot, commandName);
+    const bundled = path.join(extRoot, wrapperName);
     if (fs.existsSync(bundled)) {
         return bundled;
     }
 
     // Prefer the sibling compiler executable installed by the Windows installer.
-    const sibling = path.join(extRoot, '..', commandName);
+    const sibling = path.join(extRoot, '..', wrapperName);
     if (fs.existsSync(sibling)) {
         return sibling;
     }
 
     // Fallback: look for the executable on PATH.
-    return commandName;
+    return wrapperName;
 }
 
 async function startClient(context) {
@@ -234,7 +258,7 @@ function runCurrentFile(context) {
     }
 
     const filePath = editor.document.fileName;
-    const executable = findServerExecutable(context);
+    const executable = findRunExecutable(context);
 
     const fileArg = JSON.stringify(filePath);
     const command = executable.includes(' ')
