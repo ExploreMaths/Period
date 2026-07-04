@@ -195,21 +195,18 @@ impl TypeChecker {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
                     if lt == Type::String || rt == Type::String { Type::String }
-                    else if lt == Type::Integer && rt == Type::Integer { Type::Integer }
+                    else if (lt == Type::Integer || lt == Type::Unknown) && (rt == Type::Integer || rt == Type::Unknown) { Type::Integer }
                     else { Type::Number }
                 }
                 BinOp::Sub | BinOp::Mul | BinOp::Mod => {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
-                    if lt == Type::Integer && rt == Type::Integer { Type::Integer } else { Type::Number }
+                    if (lt == Type::Integer || lt == Type::Unknown) && (rt == Type::Integer || rt == Type::Unknown) { Type::Integer } else { Type::Number }
                 }
                 BinOp::Pow => {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
-                    if lt == Type::Integer
-                        && rt == Type::Integer
-                        && matches!(right.as_ref(), Expr::Integer(n, _) if n >= &BigInt::from(0))
-                    {
+                    if lt == Type::Integer && (rt == Type::Integer || rt == Type::Unknown) {
                         Type::Integer
                     } else {
                         Type::Number
@@ -237,6 +234,7 @@ impl TypeChecker {
                 ("abs".to_string(), Type::Function(vec![Type::Number], Box::new(Type::Number))),
                 ("floor".to_string(), Type::Function(vec![Type::Number], Box::new(Type::Number))),
                 ("ceil".to_string(), Type::Function(vec![Type::Number], Box::new(Type::Number))),
+                ("pi".to_string(), Type::Number),
             ],
             "random" => vec![("random".to_string(), Type::Function(vec![], Box::new(Type::Number)))],
             "string" => vec![
@@ -813,7 +811,7 @@ impl TypeChecker {
                 if (left == &Type::Integer || left == &Type::Number || left == &Type::Unknown || left == &Type::Error)
                     && (right == &Type::Integer || right == &Type::Number || right == &Type::Unknown || right == &Type::Error)
                 {
-                    if left == &Type::Integer && right == &Type::Integer { Type::Integer } else { Type::Number }
+                    if (left == &Type::Integer || left == &Type::Unknown) && (right == &Type::Integer || right == &Type::Unknown) { Type::Integer } else { Type::Number }
                 } else if (left == &Type::String || left == &Type::Unknown || left == &Type::Error)
                     && (right == &Type::String || right == &Type::Unknown || right == &Type::Error)
                 {
@@ -839,7 +837,7 @@ impl TypeChecker {
                 } else if (left == &Type::Integer || left == &Type::Number || left == &Type::Unknown || left == &Type::Error)
                     && (right == &Type::Integer || right == &Type::Number || right == &Type::Unknown || right == &Type::Error)
                 {
-                    if left == &Type::Integer && right == &Type::Integer { Type::Integer } else { Type::Number }
+                    if (left == &Type::Integer || left == &Type::Unknown) && (right == &Type::Integer || right == &Type::Unknown) { Type::Integer } else { Type::Number }
                 } else {
                     self.error(span, format!("invalid operands for '*': '{}' and '{}'", left.name(), right.name()));
                     Type::Error
@@ -849,8 +847,8 @@ impl TypeChecker {
                 if (left == &Type::Integer || left == &Type::Number || left == &Type::Unknown || left == &Type::Error)
                     && (right == &Type::Integer || right == &Type::Number || right == &Type::Unknown || right == &Type::Error)
                 {
-                    if op == &BinOp::Sub || op == &BinOp::Mod {
-                        if left == &Type::Integer && right == &Type::Integer { Type::Integer } else { Type::Number }
+                    if op == &BinOp::Sub || op == &BinOp::Mod || op == &BinOp::Pow {
+                        if (left == &Type::Integer || left == &Type::Unknown) && (right == &Type::Integer || right == &Type::Unknown) { Type::Integer } else { Type::Number }
                     } else {
                         Type::Number
                     }
@@ -930,11 +928,11 @@ impl TypeChecker {
     }
 }
 
-fn parse_module_source(source: &str) -> Result<Program, String> {
+fn parse_module_source(source: &str) -> Result<Program, Vec<String>> {
     let mut lexer = Lexer::new(source);
     let mut tokens = Vec::new();
     loop {
-        let t = lexer.next_token()?;
+        let t = lexer.next_token().map_err(|e| vec![e])?;
         let eof = matches!(t.kind, crate::lexer::TokenKind::Eof);
         tokens.push(t);
         if eof {

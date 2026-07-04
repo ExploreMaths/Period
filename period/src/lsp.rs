@@ -614,10 +614,10 @@ fn lex_tokens(source: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
-fn try_parse(source: &str) -> Result<Program, Diagnostic> {
+fn try_parse(source: &str) -> Result<Program, Vec<Diagnostic>> {
     match semantic::try_parse(source) {
         Ok(p) => Ok(p),
-        Err(msg) => Err(parse_error_to_diagnostic(&msg)),
+        Err(errors) => Err(errors.iter().map(|e| parse_error_to_diagnostic(e)).collect()),
     }
 }
 
@@ -705,7 +705,7 @@ fn publish_diagnostics(
                 diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::ERROR));
             }
         }
-        Err(d) => diagnostics.push(d),
+        Err(ds) => diagnostics.extend(ds),
     }
 
     connection.sender.send(Message::Notification(Notification::new(

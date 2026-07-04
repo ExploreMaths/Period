@@ -51,15 +51,25 @@ pub fn report_runtime_error(path: &str, source: &str, msg: &str, span: Option<&S
 
 /// Parse a "lexer/parse error at L:C: reason" string and report it.
 pub fn report_parse_error(path: &str, source: &str, msg: &str) {
-    let (line, col, reason) = if let Some(rest) = msg.strip_prefix("parse error at ") {
+    let (line, col, reason) = parse_error_location_or_fallback(msg);
+    report_source_error(path, source, &Span { line, col }, &reason);
+}
+
+/// Report a collection of lexer/parse errors.
+pub fn report_parse_errors(path: &str, source: &str, errors: &[String]) {
+    for msg in errors {
+        report_parse_error(path, source, msg);
+    }
+}
+
+fn parse_error_location_or_fallback(msg: &str) -> (usize, usize, String) {
+    if let Some(rest) = msg.strip_prefix("parse error at ") {
         parse_error_location(rest, msg)
     } else if let Some(rest) = msg.strip_prefix("lexer error at ") {
         parse_error_location(rest, msg)
     } else {
         (1, 1, msg.to_string())
-    };
-
-    report_source_error(path, source, &Span { line, col }, &reason);
+    }
 }
 
 fn parse_error_location(rest: &str, fallback: &str) -> (usize, usize, String) {

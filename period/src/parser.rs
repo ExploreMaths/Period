@@ -4,19 +4,30 @@ use crate::lexer::{StringPart, Token, TokenKind};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    errors: Vec<String>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self { Self { tokens, pos: 0 } }
+    pub fn new(tokens: Vec<Token>) -> Self { Self { tokens, pos: 0, errors: Vec::new() } }
 
-    pub fn parse_program(&mut self) -> Result<Program, String> {
+    pub fn parse_program(&mut self) -> Result<Program, Vec<String>> {
         let mut stmts = Vec::new();
         self.skip_newlines();
         while !self.check(&TokenKind::Eof) {
-            stmts.push(self.parse_statement()?);
+            match self.parse_statement() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize(false);
+                }
+            }
             self.skip_newlines();
         }
-        Ok(Program { statements: stmts })
+        if self.errors.is_empty() {
+            Ok(Program { statements: stmts })
+        } else {
+            Err(self.errors.clone())
+        }
     }
 
     fn peek(&self, offset: usize) -> &Token {
@@ -45,6 +56,41 @@ impl Parser {
 
     fn skip_newlines(&mut self) {
         while self.check(&TokenKind::Newline) { self.advance(); }
+    }
+
+    fn is_statement_start_token(kind: &TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::Let | TokenKind::Set | TokenKind::Show | TokenKind::If
+                | TokenKind::While | TokenKind::For | TokenKind::Return | TokenKind::Define
+                | TokenKind::Init | TokenKind::Class | TokenKind::Import | TokenKind::Read
+                | TokenKind::Write | TokenKind::Try | TokenKind::Export | TokenKind::Ellipsis
+        )
+    }
+
+    fn is_statement_start(&self) -> bool {
+        Self::is_statement_start_token(&self.peek(0).kind)
+    }
+
+    /// Skip tokens until we reach a likely statement boundary.
+    /// If `in_block` is true, also stop at Dedent/Eof; otherwise stop at Eof
+    /// or the start of the next top-level statement.
+    fn synchronize(&mut self, in_block: bool) {
+        loop {
+            if self.check(&TokenKind::Eof) { break; }
+            if in_block && self.check(&TokenKind::Dedent) { break; }
+            if self.is_statement_start() { break; }
+            if self.check(&TokenKind::Newline) {
+                let next = &self.peek(1).kind;
+                if matches!(next, TokenKind::Eof)
+                    || (in_block && matches!(next, TokenKind::Dedent))
+                    || Self::is_statement_start_token(next) {
+                    self.advance(); // consume the newline
+                    break;
+                }
+            }
+            self.advance();
+        }
     }
 
     fn parse_statement(&mut self) -> Result<Stmt, String> {
@@ -338,7 +384,13 @@ impl Parser {
         loop {
             self.skip_newlines();
             if self.check(&TokenKind::Dedent) || self.check(&TokenKind::Eof) { break; }
-            stmts.push(self.parse_statement()?);
+            match self.parse_statement() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize(true);
+                }
+            }
         }
         if self.check(&TokenKind::Dedent) { self.advance(); }
         Ok(stmts)
@@ -827,7 +879,8 @@ mod tests {
         }
         let result = Parser::new(tokens).parse_program();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected 'be'"));
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("expected 'be'")));
     }
 
     fn expr_to_string(expr: &Expr) -> String {

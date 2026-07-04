@@ -437,11 +437,11 @@ fn stdlib_module_export_names(module: &str) -> Option<Vec<String>> {
 }
 
 /// Parse source text into a Program.
-pub(crate) fn try_parse(source: &str) -> Result<Program, String> {
+pub(crate) fn try_parse(source: &str) -> Result<Program, Vec<String>> {
     let mut lexer = Lexer::new(source);
     let mut tokens = Vec::new();
     loop {
-        let t = lexer.next_token()?;
+        let t = lexer.next_token().map_err(|e| vec![e])?;
         let eof = matches!(t.kind, TokenKind::Eof);
         tokens.push(t);
         if eof {

@@ -570,15 +570,17 @@ code {
 }
 
 pre {
+  position: relative;
   background: var(--code-bg);
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  overflow-x: auto;
   border: 1px solid var(--border);
   margin: 1rem 0;
 }
 
 pre code {
+  display: block;
+  overflow-x: auto;
   background: transparent;
   padding: 0;
   font-size: 0.98rem;
@@ -1284,10 +1286,6 @@ footer {
 }
 
 /* Code block copy button */
-pre {
-  position: relative;
-}
-
 .copy-code-button {
   position: absolute;
   top: 0.5rem;

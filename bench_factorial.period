@@ -1,0 +1,9 @@
+-- Factorial benchmark: compute 1000! via an iterative loop.
+define factorial with n:
+    let result be 1.
+    while n > 1 repeat:
+        set result to result * n.
+        set n to n - 1.
+    return result.
+
+show factorial with 1000.

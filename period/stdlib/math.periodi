@@ -1,38 +1,31 @@
 -- Math functions.
 
-define sin with value returns number:
+define sin with number value returns number:
     "Return the sine of a value.".
-
     ...
 
-define cos with value returns number:
+define cos with number value returns number:
     "Return the cosine of a value.".
-
     ...
 
-define tan with value returns number:
+define tan with number value returns number:
     "Return the tangent of a value.".
-
     ...
 
-define sqrt with value returns number:
+define sqrt with number value returns number:
     "Return the square root of a value.".
-
     ...
 
-define abs with value returns number:
+define abs with number value returns number:
     "Return the absolute value.".
-
     ...
 
-define floor with value returns number:
+define floor with number value returns number:
     "Round down to the nearest integer.".
-
     ...
 
-define ceil with value returns number:
+define ceil with number value returns number:
     "Round up to the nearest integer.".
-
     ...
 
-let pi be ... .
+let pi be number ... .

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.0.0-beta.4 (2026-07-04)
+
+### Fixed
+
+- Website code-block copy buttons no longer scroll away when the code content overflows horizontally; the button stays fixed in the top-right corner.
+- `bench_iter.period` now runs as an honest iteration benchmark (10M integer additions) instead of failing with a type error.
+- Standard-library `.periodi` interface files (`math`, `string`, `random`, `time`) now include parameter type annotations and match the native implementations.
+- The static type checker now knows about `math.pi`, so `show pi from math.` type-checks correctly.
+- The parser now recovers from statement-level errors and reports multiple parse errors in one pass (e.g. `examples/multi_errors.period` reports all 3 parse errors instead of stopping at the first).
+
+### Added
+
+- Full bytecode compiler and VM: all supported language constructs are now compiled to a compact instruction set and executed on a stack machine. This includes nested functions with upvalues, classes (`new`, `tell`, property get/set), general `for`-in iteration, `try`/`catch`, `import`/`export`, `qualified` module access, and `read`/`write` file I/O.
+- `examples/factorial.period` and `bench_factorial.period` demonstrate and benchmark iterative factorial.
+
+### Changed
+
+- `Value::Integer` is now split into a tagged small-integer variant (`i64`) and a `BigInt` fallback. Hot loops that stay inside the 64-bit range no longer allocate arbitrary-precision integers on every arithmetic operation; this improves `bench_iter.period` from ~7 s to ~1.6 s.
+- VM local-variable slots moved from `Rc<RefCell<Value>>` to plain `Vec<Value>`; only variables captured by closures are promoted to `Value::Box(Rc<RefCell<Value>>)`. Large `Value` variants (`Function`, `Class`, `VMFunction`, `BuiltIn`, `Module`, `Error`) are now boxed, reducing stack/local copy overhead. Arithmetic hot paths (`IncrementLocal`, `AddLocals`) mutate small integers in place. Later, all call-frame locals were moved onto a single flat `locals` stack, eliminating per-call `Vec` allocation and further cutting `bench_iter.period` to ~0.65 s in release builds.
+- Static type inference for unannotated integer arithmetic: `integer + unknown`, `integer * unknown`, `integer - unknown`, etc. now infer `integer` instead of `number`, so functions like an unannotated iterative `factorial` no longer fail with "expected 'integer', got 'number'".
+- `period publish` no longer supports `--push`/`--remote`/`--message`; it only writes files to the local registry directory and prints manual git steps. This removes the risky auto-`git commit/push` behavior and leaves registry updates to the user's normal PR/push workflow.
+- `Value::Class` methods are now stored as first-class callable values so the bytecode VM and tree-walking interpreter can share the same class representation.
+
 ## 2.0.0-beta.3 (2026-07-04)
 
 ### Added

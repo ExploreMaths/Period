@@ -10,10 +10,12 @@ use num_traits::cast::{FromPrimitive, ToPrimitive};
 
 use crate::ast::*;
 use crate::builtins::{install_builtins, make_math_module, make_random_module, make_string_module, make_time_module};
+use crate::compiler;
 use crate::environment::Environment;
 use crate::lexer::{Lexer, TokenKind};
 use crate::parser::Parser;
-use crate::value::{range_len, Value};
+use crate::value::{range_len, ClassValue, ErrorValue, FunctionValue, ModuleValue, Value};
+use crate::vm;
 
 #[derive(Debug)]
 pub enum Control {
@@ -23,17 +25,17 @@ pub enum Control {
 }
 
 pub struct Interpreter {
-    env: Rc<RefCell<Environment>>,
+    pub(crate) env: Rc<RefCell<Environment>>,
     pub output: Vec<String>,
-    modules: RefCell<HashMap<String, Rc<RefCell<Environment>>>>,
+    pub(crate) modules: RefCell<HashMap<String, Rc<RefCell<Environment>>>>,
     /// Modules currently being loaded; used to detect circular imports.
     loading_modules: RefCell<HashSet<String>>,
-    silent: bool,
+    pub(crate) silent: bool,
     current_path: Option<PathBuf>,
     /// True while interpreting a module file; marks top-level functions/classes
     /// as originating from a module so their runtime errors can be mapped to
     /// the user's call site.
-    loading_module: bool,
+    pub(crate) loading_module: bool,
 }
 
 impl Interpreter {
@@ -47,7 +49,7 @@ impl Interpreter {
         self.current_path = Some(path.into());
     }
 
-    fn resolve_path(&self, path: &str) -> PathBuf {
+    pub(crate) fn resolve_path(&self, path: &str) -> PathBuf {
         let p = PathBuf::from(path);
         if p.is_absolute() { return p; }
         if let Some(current) = &self.current_path {
@@ -58,6 +60,18 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, program: &Program) -> Result<(), Control> {
+        // Attempt to compile the program to bytecode and run it on the VM.  If the
+        // compiler cannot handle the program (e.g. it uses classes, imports, or
+        // try/catch), fall back to the original tree-walking interpreter so that
+        // all existing semantics are preserved.
+        if let Ok(main) = compiler::Compiler::compile_program(&program.statements) {
+            let main = std::rc::Rc::new(main);
+            return vm::Vm::new(self, main).run();
+        }
+        self.interpret_tree_walk(program)
+    }
+
+    fn interpret_tree_walk(&mut self, program: &Program) -> Result<(), Control> {
         for stmt in &program.statements {
             self.execute(stmt)?;
         }
@@ -67,7 +81,7 @@ impl Interpreter {
     /// Check that `value` satisfies the given type annotation. `integer` is a
     /// subset of `number`; class names match instances of that class; compound
     /// types are checked recursively.
-    fn check_type(&self, value: &Value, ann: &str, span: &Span) -> Result<(), Control> {
+    pub(crate) fn check_type(&self, value: &Value, ann: &str, span: &Span) -> Result<(), Control> {
         let parts: Vec<&str> = ann.split_whitespace().collect();
         if parts.is_empty() { return Ok(()); }
         let ok = match parts[0] {
@@ -96,11 +110,11 @@ impl Interpreter {
                     } else { true }
                 } else { false }
             }
-            "function" => matches!(value, Value::Function { .. } | Value::BuiltIn { .. }),
-            "class" => matches!(value, Value::Class { .. }),
+            "function" => matches!(value, Value::Function(_) | Value::VMFunction(_) | Value::BuiltIn(_)),
+            "class" => matches!(value, Value::Class(_)),
             class_name => {
                 if let Value::Instance { class, .. } = value {
-                    if let Value::Class { name, .. } = class.as_ref() { name == class_name } else { false }
+                    if let Value::Class(cv) = class.as_ref() { &cv.name == class_name } else { false }
                 } else { false }
             }
         };
@@ -159,7 +173,7 @@ impl Interpreter {
                 match self.execute_block(body) {
                     Ok(()) => {}
                     Err(Control::Error(msg)) => {
-                        let err = Value::Error { message: msg, line: 0, col: 0 };
+                        let err = Value::Error(Box::new(ErrorValue { message: msg, line: 0, col: 0 }));
                         let env = Environment::with_parent(self.env.clone());
                         env.borrow().define_untyped(catch_var, err);
                         let old = self.env.clone();
@@ -169,7 +183,7 @@ impl Interpreter {
                         result?;
                     }
                     Err(Control::RuntimeError(msg, span)) => {
-                        let err = Value::Error { message: msg, line: span.line as i64, col: span.col as i64 };
+                        let err = Value::Error(Box::new(ErrorValue { message: msg, line: span.line as i64, col: span.col as i64 }));
                         let env = Environment::with_parent(self.env.clone());
                         env.borrow().define_untyped(catch_var, err);
                         let old = self.env.clone();
@@ -203,7 +217,7 @@ impl Interpreter {
                         let mut i = start;
                         while (step > 0 && i < stop) || (step < 0 && i > stop) {
                             let env = Environment::with_parent(self.env.clone());
-                            env.borrow().define_untyped(var, Value::Integer(BigInt::from(i)));
+                            env.borrow().define_untyped(var, Value::integer(i));
                             let old = self.env.clone();
                             self.env = env;
                             let result = self.execute_block(body);
@@ -231,7 +245,7 @@ impl Interpreter {
                 return Err(Control::Return(v, span.clone()));
             }
             Stmt::Define { name, params, return_type, body, span, .. } => {
-                let func = Value::Function {
+                let func = Value::Function(Box::new(FunctionValue {
                     name: name.clone(),
                     params: params.clone(),
                     return_type: return_type.clone(),
@@ -239,7 +253,7 @@ impl Interpreter {
                     closure: self.env.clone(),
                     span: span.clone(),
                     from_module: self.loading_module,
-                };
+                }));
                 self.env.borrow().define_untyped(name, func);
             }
             Stmt::Init(_) => {}
@@ -247,10 +261,19 @@ impl Interpreter {
                 let mut method_map = HashMap::new();
                 for m in methods {
                     if let Stmt::Define { name: mname, params, return_type, body, span, .. } = m {
-                        method_map.insert(mname.clone(), Stmt::Define { name: mname.clone(), params: params.clone(), return_type: return_type.clone(), docstring: None, body: body.clone(), span: span.clone() });
+                        let func = Value::Function(Box::new(FunctionValue {
+                            name: mname.clone(),
+                            params: params.clone(),
+                            return_type: return_type.clone(),
+                            body: body.clone(),
+                            closure: self.env.clone(),
+                            span: span.clone(),
+                            from_module: self.loading_module,
+                        }));
+                        method_map.insert(mname.clone(), func);
                     }
                 }
-                self.env.borrow().define_untyped(name, Value::Class { name: name.clone(), init: init.clone(), methods: method_map, from_module: self.loading_module });
+                self.env.borrow().define_untyped(name, Value::Class(Box::new(ClassValue { name: name.clone(), init: init.clone(), methods: method_map, from_module: self.loading_module })));
             }
             Stmt::Import(paths) => {
                 for (path, span) in paths { self.import_module(path, span)?; }
@@ -312,7 +335,7 @@ impl Interpreter {
 
     fn evaluate(&mut self, expr: &Expr) -> Result<Value, Control> {
         match expr {
-            Expr::Integer(n, _) => Ok(Value::Integer(n.clone())),
+            Expr::Integer(n, _) => Ok(Value::big_integer(n.clone())),
             Expr::Number(n, _) => Ok(Value::Number(*n)),
             Expr::String(s, _) => Ok(Value::String(s.clone())),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
@@ -321,11 +344,13 @@ impl Interpreter {
             Expr::Variable { name, span } => {
                 let value = self.env.borrow().get(name).ok_or_else(|| Control::RuntimeError(format!("Undefined variable '{}'", name), span.clone()))?;
                 // Zero-argument functions (like input or random) are called automatically when used as a value.
-                if let Value::BuiltIn { min_arity: 0, max_arity: 0, .. } = &value {
-                    return self.call_value(&value, vec![], span);
+                if let Value::BuiltIn(bv) = &value {
+                    if bv.min_arity == 0 && bv.max_arity == 0 {
+                        return self.call_value(&value, vec![], span);
+                    }
                 }
-                if let Value::Function { params, .. } = &value
-                    && params.is_empty() {
+                if let Value::Function(fv) = &value
+                    && fv.params.is_empty() {
                         return self.call_value(&value, vec![], span);
                     }
                 Ok(value)
@@ -402,7 +427,7 @@ impl Interpreter {
                     Value::Range { start, stop, step } => {
                         let len = range_len(start, stop, step);
                         let i = self.as_index(&idx, len as usize, span)?;
-                        Ok(Value::Integer(BigInt::from(start + step * (i as i64))))
+                        Ok(Value::integer(start + step * (i as i64)))
                     }
                     _ => Err(Control::RuntimeError(format!("Cannot index into {}", obj.type_name()), span.clone())),
                 }
@@ -414,8 +439,8 @@ impl Interpreter {
                         if let Some(v) = fields.borrow().get(name).cloned() {
                             return Ok(v);
                         }
-                        if let Value::Class { methods, .. } = class.as_ref()
-                            && methods.contains_key(name) {
+                        if let Value::Class(cv) = class.as_ref()
+                            && cv.methods.contains_key(name) {
                                 return Err(Control::RuntimeError(
                                     format!("method '{}' must be called with 'tell <object> to {}'", name, name),
                                     span.clone(),
@@ -423,14 +448,14 @@ impl Interpreter {
                             }
                         Err(Control::RuntimeError(format!("Instance has no property '{}'", name), span.clone()))
                     }
-                    Value::Module { env, .. } => {
-                        env.borrow().get(name).ok_or_else(|| Control::RuntimeError(format!("Module has no property '{}'", name), span.clone()))
+                    Value::Module(mv) => {
+                        mv.env.borrow().get(name).ok_or_else(|| Control::RuntimeError(format!("Module has no property '{}'", name), span.clone()))
                     }
-                    Value::Error { message, line, col } => {
+                    Value::Error(ev) => {
                         match name.as_str() {
-                            "message" => Ok(Value::String(message.clone())),
-                            "line" => Ok(Value::Integer(BigInt::from(*line))),
-                            "col" => Ok(Value::Integer(BigInt::from(*col))),
+                            "message" => Ok(Value::String(ev.message.clone())),
+                            "line" => Ok(Value::integer(ev.line)),
+                            "col" => Ok(Value::integer(ev.col)),
                             _ => Err(Control::RuntimeError(format!("Error has no property '{}'", name), span.clone())),
                         }
                     }
@@ -453,11 +478,13 @@ impl Interpreter {
                 let value = mod_env.borrow().get(name).ok_or_else(|| Control::RuntimeError(format!("'{}' not found in module '{}'", name, module), span.clone()))?;
                 // Zero-argument functions are auto-called when used as values, just like
                 // unqualified variable references.
-                if let Value::BuiltIn { min_arity: 0, max_arity: 0, .. } = &value {
-                    return self.call_value(&value, vec![], span);
+                if let Value::BuiltIn(bv) = &value {
+                    if bv.min_arity == 0 && bv.max_arity == 0 {
+                        return self.call_value(&value, vec![], span);
+                    }
                 }
-                if let Value::Function { params, .. } = &value
-                    && params.is_empty() {
+                if let Value::Function(fv) = &value
+                    && fv.params.is_empty() {
                         return self.call_value(&value, vec![], span);
                     }
                 Ok(value)
@@ -479,12 +506,13 @@ impl Interpreter {
     }
 
     fn eval_binary(&self, op: &BinOp, left: Value, right: Value, span: &Span) -> Result<Value, Control> {
+        use crate::value::Integer;
         match op {
             BinOp::Add => match (&left, &right) {
-                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.add(b))),
                 (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
-                (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(a.to_f64().unwrap_or(0.0) + b)),
-                (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(a + b.to_f64().unwrap_or(0.0))),
+                (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(a.to_f64() + b)),
+                (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(a + b.to_f64())),
                 (Value::String(a), Value::String(b)) => Ok(Value::String(format!("{}{}", a, b))),
                 (Value::List(a), Value::List(b)) => {
                     let mut items = a.borrow().clone();
@@ -494,19 +522,19 @@ impl Interpreter {
                 _ => Err(Control::RuntimeError("Invalid operands for +".to_string(), span.clone())),
             },
             BinOp::Sub => match (&left, &right) {
-                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a - b)),
-                _ => self.numeric_op(&left, &right, |a,b| a - b, |a,b| a.to_f64().unwrap_or(0.0) - b.to_f64().unwrap_or(0.0), span),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.sub(b))),
+                _ => self.numeric_op(&left, &right, |a,b| a - b, |a,b| a.to_f64() - b.to_f64(), span),
             },
             BinOp::Mul => match (&left, &right) {
-                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.mul(b))),
                 (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
-                (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(a.to_f64().unwrap_or(0.0) * b)),
-                (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(a * b.to_f64().unwrap_or(0.0))),
+                (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(a.to_f64() * b)),
+                (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(a * b.to_f64())),
                 (Value::String(s), Value::Integer(n)) | (Value::Integer(n), Value::String(s)) => {
-                    if *n < BigInt::from(0) {
+                    if n.to_bigint() < BigInt::from(0) {
                         return Err(Control::RuntimeError("Cannot repeat string a negative number of times".to_string(), span.clone()));
                     }
-                    let count = n.to_usize().ok_or_else(|| Control::RuntimeError("Cannot repeat string: count is too large".to_string(), span.clone()))?;
+                    let count = n.to_bigint().to_usize().ok_or_else(|| Control::RuntimeError("Cannot repeat string: count is too large".to_string(), span.clone()))?;
                     Ok(Value::String(s.repeat(count)))
                 }
                 _ => Err(Control::RuntimeError("Invalid operands for *".to_string(), span.clone())),
@@ -515,29 +543,26 @@ impl Interpreter {
                 if self.is_zero(&right) {
                     return Err(Control::RuntimeError("Division by zero.".to_string(), span.clone()));
                 }
-                self.numeric_op(&left, &right, |a,b| a / b, |a,b| a.to_f64().unwrap_or(0.0) / b.to_f64().unwrap_or(0.0), span)
+                self.numeric_op(&left, &right, |a,b| a / b, |a,b| a.to_f64() / b.to_f64(), span)
             }
             BinOp::Mod => {
                 if self.is_zero(&right) {
                     return Err(Control::RuntimeError("Modulo by zero.".to_string(), span.clone()));
                 }
                 match (&left, &right) {
-                    (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a % b)),
-                    _ => self.numeric_op(&left, &right, |a,b| a % b, |a,b| a.to_f64().unwrap_or(0.0) % b.to_f64().unwrap_or(0.0), span),
+                    (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.modulo(b).unwrap())),
+                    _ => self.numeric_op(&left, &right, |a,b| a % b, |a,b| a.to_f64() % b.to_f64(), span),
                 }
             }
             BinOp::Pow => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => {
-                    if *b < BigInt::from(0) {
-                        if *a == BigInt::from(0) {
-                            return Err(Control::RuntimeError("Division by zero.".to_string(), span.clone()));
-                        }
-                        return Ok(Value::Number(a.to_f64().unwrap_or(0.0).powf(b.to_f64().unwrap_or(0.0))));
+                    match a.pow(b) {
+                        Ok(result) => Ok(Value::Integer(result)),
+                        Err("Division by zero") => return Err(Control::RuntimeError("Division by zero.".to_string(), span.clone())),
+                        Err(_) => return Err(Control::RuntimeError("Exponent too large".to_string(), span.clone())),
                     }
-                    let exp = b.to_u32().ok_or_else(|| Control::RuntimeError("Exponent too large".to_string(), span.clone()))?;
-                    Ok(Value::Integer(a.pow(exp)))
                 }
-                _ => self.numeric_op(&left, &right, |a,b| a.powf(b), |a,b| a.to_f64().unwrap_or(0.0).powf(b.to_f64().unwrap_or(0.0)), span),
+                _ => self.numeric_op(&left, &right, |a,b| a.powf(b), |a,b| a.to_f64().powf(b.to_f64()), span),
             },
             BinOp::Eq => Ok(Value::Bool(left == right)),
             BinOp::Ne => Ok(Value::Bool(left != right)),
@@ -551,42 +576,25 @@ impl Interpreter {
 
     fn is_zero(&self, value: &Value) -> bool {
         match value {
-            Value::Integer(n) => *n == BigInt::from(0),
+            Value::Integer(n) => n.is_zero(),
             Value::Number(n) => *n == 0.0,
             _ => false,
         }
     }
 
     fn numeric_op<FN, FI>(&self, left: &Value, right: &Value, float_op: FN, int_to_float: FI, span: &Span) -> Result<Value, Control>
-    where FN: Fn(f64, f64) -> f64, FI: Fn(&BigInt, &BigInt) -> f64 {
+    where FN: Fn(f64, f64) -> f64, FI: Fn(&crate::value::Integer, &crate::value::Integer) -> f64 {
         match (left, right) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Number(int_to_float(a, b))),
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(float_op(*a, *b))),
-            (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(float_op(a.to_f64().unwrap_or(0.0), *b))),
-            (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(float_op(*a, b.to_f64().unwrap_or(0.0)))),
+            (Value::Integer(a), Value::Number(b)) => Ok(Value::Number(float_op(a.to_f64(), *b))),
+            (Value::Number(a), Value::Integer(b)) => Ok(Value::Number(float_op(*a, b.to_f64()))),
             _ => Err(Control::RuntimeError("Operands must be numbers".to_string(), span.clone())),
         }
     }
 
     fn compare<F>(&self, left: &Value, right: &Value, op: F, span: &Span) -> Result<Value, Control>
     where F: Fn(f64, f64) -> bool {
-        // Compare an integer and a finite float, returning the ordering of
-        // `integer` relative to `number`.
-        fn cmp_integer_number(integer: &BigInt, number: f64) -> std::cmp::Ordering {
-            if number.fract() == 0.0
-                && let Some(i) = BigInt::from_f64(number) {
-                    return integer.cmp(&i);
-                }
-            // Non-integer or out-of-range float: compare via f64. If precision
-            // makes them appear equal, decide by the sign of the fractional part.
-            let ord = integer.to_f64().and_then(|f| f.partial_cmp(&number)).unwrap_or(std::cmp::Ordering::Equal);
-            if ord == std::cmp::Ordering::Equal {
-                if number.fract() > 0.0 { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater }
-            } else {
-                ord
-            }
-        }
-
         let ord = match (left, right) {
             (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
             (Value::Number(a), Value::Number(b)) => {
@@ -598,13 +606,13 @@ impl Interpreter {
                 if !b.is_finite() {
                     return Err(Control::RuntimeError("Cannot compare these values".to_string(), span.clone()));
                 }
-                cmp_integer_number(a, *b)
+                a.cmp_integer_f64(*b).unwrap_or(std::cmp::Ordering::Equal)
             }
             (Value::Number(a), Value::Integer(b)) => {
                 if !a.is_finite() {
                     return Err(Control::RuntimeError("Cannot compare these values".to_string(), span.clone()));
                 }
-                cmp_integer_number(b, *a).reverse()
+                b.cmp_integer_f64(*a).map(|o| o.reverse()).unwrap_or(std::cmp::Ordering::Equal)
             }
             (Value::String(a), Value::String(b)) => a.cmp(b),
             _ => return Err(Control::RuntimeError("Cannot compare these values".to_string(), span.clone())),
@@ -619,15 +627,16 @@ impl Interpreter {
 
     fn eval_neg(&self, v: Value, span: &Span) -> Result<Value, Control> {
         match v {
-            Value::Integer(n) => Ok(Value::Integer(-n)),
+            Value::Integer(n) => Ok(Value::Integer(n.neg())),
             Value::Number(n) => Ok(Value::Number(-n)),
             _ => Err(Control::RuntimeError("Cannot negate this value".to_string(), span.clone())),
         }
     }
 
     fn as_index(&self, value: &Value, len: usize, span: &Span) -> Result<usize, Control> {
+        use num_traits::Signed;
         let n = match value {
-            Value::Integer(n) => n.clone(),
+            Value::Integer(n) => n.to_bigint(),
             Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n).unwrap_or_else(|| BigInt::from(0)),
             _ => return Err(Control::RuntimeError("Index must be integer".to_string(), span.clone())),
         };
@@ -642,39 +651,39 @@ impl Interpreter {
         else { Ok(i) }
     }
 
-    fn call_value(&mut self, callee: &Value, args: Vec<Value>, span: &Span) -> Result<Value, Control> {
+    pub(crate) fn call_value(&mut self, callee: &Value, args: Vec<Value>, span: &Span) -> Result<Value, Control> {
         match callee {
-            Value::BuiltIn { min_arity, max_arity, func, .. } => {
-                if args.len() < *min_arity || args.len() > *max_arity {
+            Value::BuiltIn(bv) => {
+                if args.len() < bv.min_arity || args.len() > bv.max_arity {
                     return Err(Control::RuntimeError("Wrong arity".to_string(), span.clone()));
                 }
-                func(&args).map_err(|m| Control::RuntimeError(m, span.clone()))
+                (bv.func)(&args).map_err(|m| Control::RuntimeError(m, span.clone()))
             }
-            Value::Function { name, params, return_type, body, closure, span: func_span, from_module } => {
-                if params.len() != args.len() {
-                    return Err(Control::RuntimeError(format!("Function {} expects {} args, got {}", name, params.len(), args.len()), func_span.clone()));
+            Value::Function(fv) => {
+                if fv.params.len() != args.len() {
+                    return Err(Control::RuntimeError(format!("Function {} expects {} args, got {}", fv.name, fv.params.len(), args.len()), fv.span.clone()));
                 }
-                let env = Environment::with_parent(closure.clone());
-                for ((p, ann), a) in params.iter().zip(args) {
+                let env = Environment::with_parent(fv.closure.clone());
+                for ((p, ann), a) in fv.params.iter().zip(args) {
                     if let Some(ann) = ann {
-                        self.check_type(&a, ann, func_span)?;
+                        self.check_type(&a, ann, &fv.span)?;
                     }
                     env.borrow().define(p, a, ann.clone());
                 }
                 let old = self.env.clone();
                 self.env = env;
                 let result = Value::Nothing;
-                for stmt in body {
+                for stmt in &fv.body {
                     if let Err(ctrl) = self.execute(stmt) {
                         self.env = old;
                         return match ctrl {
                             Control::Return(v, span) => {
-                                if let Some(ann) = return_type {
+                                if let Some(ann) = &fv.return_type {
                                     self.check_type(&v, ann, &span)?;
                                 }
                                 Ok(v)
                             }
-                            Control::RuntimeError(msg, _) if *from_module => {
+                            Control::RuntimeError(msg, _) if fv.from_module => {
                                 Err(Control::RuntimeError(msg, span.clone()))
                             }
                             e => Err(e),
@@ -682,23 +691,30 @@ impl Interpreter {
                     }
                 }
                 self.env = old;
-                if let Some(ann) = return_type {
-                    self.check_type(&result, ann, func_span)?;
+                if let Some(ann) = &fv.return_type {
+                    self.check_type(&result, ann, &fv.span)?;
                 }
                 Ok(result)
             }
-            Value::Class { .. } => self.new_instance(callee, args, span),
+            Value::Class(_) => self.new_instance(callee, args, span),
+            Value::VMFunction(_fv) => {
+                let dummy = crate::bytecode::CompiledFunction::new("<call>", Vec::new(), None, span.clone());
+                let mut vm = crate::vm::Vm::new(self, std::rc::Rc::new(dummy));
+                vm.call_value(callee.clone(), args, span)?;
+                vm.run()?;
+                Ok(vm.stack_top().unwrap_or(Value::Nothing))
+            }
             _ => Err(Control::RuntimeError(format!("Cannot call {}", callee.type_name()), span.clone())),
         }
     }
 
     fn new_instance(&mut self, cls: &Value, args: Vec<Value>, span: &Span) -> Result<Value, Control> {
-        if let Value::Class { init, methods: _, from_module, .. } = cls {
+        if let Value::Class(cv) = cls {
             let instance = Value::Instance {
                 class: Box::new(cls.clone()),
                 fields: Rc::new(RefCell::new(HashMap::new())),
             };
-            if let Some(init_stmt) = init {
+            if let Some(init_stmt) = &cv.init {
                 let env = Environment::with_parent(self.env.clone());
                 env.borrow().define_untyped("this", instance.clone());
                 for ((p, ann), a) in init_stmt.params.iter().zip(args) {
@@ -714,7 +730,7 @@ impl Interpreter {
                         self.env = old;
                         return match ctrl {
                             Control::Return(_, _) => Ok(instance),
-                            Control::RuntimeError(msg, _) if *from_module => {
+                            Control::RuntimeError(msg, _) if cv.from_module => {
                                 Err(Control::RuntimeError(msg, span.clone()))
                             }
                             e => Err(e),
@@ -730,45 +746,60 @@ impl Interpreter {
     }
 
     fn call_method(&mut self, obj: &Value, method: &str, args: Vec<Value>, span: &Span) -> Result<Value, Control> {
-        if let Value::Instance { class, .. } = obj
-            && let Value::Class { methods, from_module, .. } = class.as_ref()
-                && let Some(Stmt::Define { params, return_type, body, span, .. }) = methods.get(method) {
-                    let method_span = span.clone();
-                    let env = Environment::with_parent(self.env.clone());
-                    env.borrow().define_untyped("this", obj.clone());
-                    for ((p, ann), a) in params.iter().zip(args) {
-                        if let Some(ann) = ann {
-                            self.check_type(&a, ann, &method_span)?;
-                        }
-                        env.borrow().define(p, a, ann.clone());
-                    }
-                    let old = self.env.clone();
-                    self.env = env;
-                    for stmt in body {
-                        if let Err(ctrl) = self.execute(stmt) {
-                            self.env = old;
-                            return match ctrl {
-                                Control::Return(v, span) => {
-                                    if let Some(ann) = return_type {
-                                        self.check_type(&v, ann, &span)?;
-                                    }
-                                    Ok(v)
-                                }
-                                Control::RuntimeError(msg, _) if *from_module => {
-                                    Err(Control::RuntimeError(msg, span.clone()))
-                                }
-                                e => Err(e),
-                            };
-                        }
-                    }
-                    self.env = old;
-                    let result = Value::Nothing;
-                    if let Some(ann) = return_type {
-                        self.check_type(&result, ann, &method_span)?;
-                    }
-                    return Ok(result);
+        if let Value::Instance { class, .. } = obj {
+            let methods_opt = match class.as_ref() {
+                Value::Class(cv) => Some(cv.methods.clone()),
+                _ => None,
+            };
+            if let Some(methods) = methods_opt {
+                if let Some(func) = methods.get(method).cloned() {
+                    return self.call_function_with_this(&func, obj, args, span);
                 }
+            }
+        }
         Err(Control::RuntimeError(format!("Cannot send message to {}", obj.type_name()), span.clone()))
+    }
+
+    fn call_function_with_this(&mut self, func: &Value, this: &Value, args: Vec<Value>, call_span: &Span) -> Result<Value, Control> {
+        match func {
+            Value::Function(fv) => {
+                let method_span = fv.span.clone();
+                let env = Environment::with_parent(fv.closure.clone());
+                env.borrow().define_untyped("this", this.clone());
+                for ((p, ann), a) in fv.params.iter().zip(args) {
+                    if let Some(ann) = ann {
+                        self.check_type(&a, ann, &method_span)?;
+                    }
+                    env.borrow().define(p, a, ann.clone());
+                }
+                let old = self.env.clone();
+                self.env = env;
+                for stmt in &fv.body {
+                    if let Err(ctrl) = self.execute(stmt) {
+                        self.env = old;
+                        return match ctrl {
+                            Control::Return(v, span) => {
+                                if let Some(ann) = &fv.return_type {
+                                    self.check_type(&v, ann, &span)?;
+                                }
+                                Ok(v)
+                            }
+                            Control::RuntimeError(msg, _) if fv.from_module => {
+                                Err(Control::RuntimeError(msg, call_span.clone()))
+                            }
+                            e => Err(e),
+                        };
+                    }
+                }
+                self.env = old;
+                let result = Value::Nothing;
+                if let Some(ann) = &fv.return_type {
+                    self.check_type(&result, ann, &method_span)?;
+                }
+                Ok(result)
+            }
+            _ => Err(Control::RuntimeError("method is not a function".to_string(), call_span.clone())),
+        }
     }
 
     fn iterable_items(&self, value: &Value) -> Result<Vec<Value>, Control> {
@@ -784,7 +815,7 @@ impl Interpreter {
         match value {
             Value::Nothing => false,
             Value::Bool(b) => *b,
-            Value::Integer(n) => *n != BigInt::from(0),
+            Value::Integer(n) => !n.is_zero(),
             Value::Number(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::List(l) => !l.borrow().is_empty(),
@@ -793,7 +824,7 @@ impl Interpreter {
         }
     }
 
-    fn import_module(&mut self, path: &str, span: &Span) -> Result<(), Control> {
+    pub(crate) fn import_module(&mut self, path: &str, span: &Span) -> Result<(), Control> {
         if self.modules.borrow().contains_key(path) {
             return Ok(());
         }
@@ -821,7 +852,7 @@ impl Interpreter {
 
         self.modules.borrow_mut().insert(path.to_string(), env.clone());
         let exposed_name = path.rsplit('/').next().unwrap_or(path);
-        self.env.borrow().define_untyped(exposed_name, Value::Module { name: path.to_string(), env: env.clone() });
+        self.env.borrow().define_untyped(exposed_name, Value::Module(Box::new(ModuleValue { name: path.to_string(), env: env.clone() })));
         let exports = env.borrow().exported_names();
         let filter = !exports.is_empty();
         for (name, value, type_ann) in env.borrow().entries() {
@@ -836,7 +867,7 @@ impl Interpreter {
         let source = fs::read_to_string(path)
             .map_err(|e| Control::Error(format!("Cannot read module '{}': {}", name, e)))?;
         let program = parse_module(&source)
-            .map_err(|e| Control::Error(format!("Module '{}': {}", name, e)))?;
+            .map_err(|errors| Control::Error(format!("Module '{}':\n{}", name, errors.join("\n"))))?;
 
         let builtins = Environment::new();
         install_builtins(&builtins.borrow());
@@ -848,7 +879,7 @@ impl Interpreter {
         self.env = module_env.clone();
         self.silent = true;
         self.loading_module = true;
-        let result = self.interpret(&program);
+        let result = self.interpret_tree_walk(&program);
         self.env = old_env;
         self.silent = old_silent;
         self.loading_module = old_loading;
@@ -929,11 +960,11 @@ fn module_file_candidates(module: &str, current_path: Option<&std::path::Path>) 
     candidates
 }
 
-fn parse_module(source: &str) -> Result<Program, String> {
+fn parse_module(source: &str) -> Result<Program, Vec<String>> {
     let mut lexer = Lexer::new(source);
     let mut tokens = Vec::new();
     loop {
-        let t = lexer.next_token()?;
+        let t = lexer.next_token().map_err(|e| vec![e])?;
         let eof = matches!(t.kind, TokenKind::Eof);
         tokens.push(t);
         if eof { break; }

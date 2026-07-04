@@ -2,6 +2,8 @@
 
 mod ast;
 mod builtins;
+mod bytecode;
+mod compiler;
 mod environment;
 mod interpreter;
 mod lexer;
@@ -13,6 +15,7 @@ mod semantic;
 mod type_checker;
 mod types;
 mod value;
+mod vm;
 
 use std::env;
 use std::fs;
@@ -84,16 +87,13 @@ fn main() {
         let mut name: Option<String> = None;
         let mut registry: Option<String> = None;
         let mut base_url: Option<String> = None;
-        let mut message: Option<String> = None;
-        let mut remote: Option<String> = None;
-        let mut push = false;
         let mut i = 2;
         while i < args.len() {
             match args[i].as_str() {
                 "--version" => {
                     i += 1;
                     if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
+                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
                         process::exit(1);
                     }
                     version = Some(args[i].clone());
@@ -101,7 +101,7 @@ fn main() {
                 "--name" | "-n" => {
                     i += 1;
                     if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
+                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
                         process::exit(1);
                     }
                     name = Some(args[i].clone());
@@ -109,7 +109,7 @@ fn main() {
                 "--registry" | "-r" => {
                     i += 1;
                     if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
+                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
                         process::exit(1);
                     }
                     registry = Some(args[i].clone());
@@ -117,33 +117,14 @@ fn main() {
                 "--base-url" | "-u" => {
                     i += 1;
                     if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
+                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
                         process::exit(1);
                     }
                     base_url = Some(args[i].clone());
                 }
-                "--message" | "-m" => {
-                    i += 1;
-                    if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
-                        process::exit(1);
-                    }
-                    message = Some(args[i].clone());
-                }
-                "--remote" => {
-                    i += 1;
-                    if i >= args.len() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
-                        process::exit(1);
-                    }
-                    remote = Some(args[i].clone());
-                }
-                "--push" | "-p" => {
-                    push = true;
-                }
                 other => {
                     if file.is_some() {
-                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--remote <remote>] [--message <msg>]");
+                        eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
                         process::exit(1);
                     }
                     file = Some(other.to_string());
@@ -152,7 +133,7 @@ fn main() {
             i += 1;
         }
         let Some(file) = file else {
-            eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>] [--push] [--message <msg>]");
+            eprintln!("usage: period publish <file.period> [--version <version>] [--name <name>] [--registry <dir>] [--base-url <url>]");
             process::exit(1);
         };
         let file_path = PathBuf::from(&file);
@@ -163,9 +144,6 @@ fn main() {
             version: version.as_deref(),
             registry_dir: registry_path.as_deref(),
             base_url: base_url.as_deref(),
-            push,
-            remote: remote.as_deref(),
-            message: message.as_deref(),
         };
         if let Err(e) = package_manager::publish(options) {
             eprintln!("publish error: {}", e);
@@ -192,8 +170,8 @@ fn main() {
 
     let program = match parse_source(&source) {
         Ok(p) => p,
-        Err(msg) => {
-            reporting::report_parse_error(path, &source, &msg);
+        Err(errors) => {
+            reporting::report_parse_errors(path, &source, &errors);
             process::exit(1);
         }
     };
@@ -248,11 +226,11 @@ fn run_interpreter(program: &ast::Program, path: PathBuf, source: &str) -> ! {
     process::exit(0);
 }
 
-fn parse_source(source: &str) -> Result<ast::Program, String> {
+fn parse_source(source: &str) -> Result<ast::Program, Vec<String>> {
     let mut lexer = lexer::Lexer::new(source);
     let mut tokens = Vec::new();
     loop {
-        let t = lexer.next_token()?;
+        let t = lexer.next_token().map_err(|e| vec![e])?;
         let eof = matches!(t.kind, lexer::TokenKind::Eof);
         tokens.push(t);
         if eof {
@@ -349,8 +327,8 @@ fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 buffer.clear();
             }
-            Err(msg) => {
-                reporting::report_parse_error("<repl>", &buffer, &msg);
+            Err(errors) => {
+                reporting::report_parse_errors("<repl>", &buffer, &errors);
                 buffer.clear();
             }
         }

@@ -14,9 +14,6 @@ pub struct PublishOptions<'a> {
     pub version: Option<&'a str>,
     pub registry_dir: Option<&'a Path>,
     pub base_url: Option<&'a str>,
-    pub push: bool,
-    pub remote: Option<&'a str>,
-    pub message: Option<&'a str>,
 }
 
 /// Publish a `.period` file to a local registry directory or upload it to a registry server.
@@ -87,75 +84,11 @@ pub fn publish(options: PublishOptions<'_>) -> Result<(), String> {
         index_path.display()
     );
 
-    if options.push {
-        let remote_name = options.remote.unwrap_or("origin");
-        git_push(&registry, remote_name, &package_name, &package_version, options.message)?;
-        println!("Pushed registry changes to remote '{}'.", remote_name);
-    } else {
-        println!("\nNext steps:");
-        println!("  1. Review the generated files.");
-        println!("  2. git add registry/ && git commit -m 'publish {} {}'", package_name, package_version);
-        println!("  3. git push origin main");
-    }
+    println!("\nNext steps:");
+    println!("  1. Review the generated files under '{}'.", registry.display());
+    println!("  2. git add registry/ && git commit -m 'publish {} {}'", package_name, package_version);
+    println!("  3. Open a PR or push to your registry remote manually.");
 
-    Ok(())
-}
-
-fn git_push(
-    registry: &Path,
-    remote: &str,
-    name: &str,
-    version: &str,
-    message: Option<&str>,
-) -> Result<(), String> {
-    let default_msg = format!("publish {} {}", name, version);
-    let msg = message.unwrap_or(&default_msg);
-
-    // Find the repository root that contains the registry directory.
-    let repo_root = find_git_root(registry)?;
-
-    run_git(&repo_root, &["add", registry.to_string_lossy().as_ref()])?;
-    run_git(&repo_root, &["commit", "-m", msg])?;
-    run_git(&repo_root, &["push", remote])?;
-
-    Ok(())
-}
-
-fn find_git_root(dir: &Path) -> Result<PathBuf, String> {
-    let output = Command::new("git")
-        .args(["-C", &dir.to_string_lossy(), "rev-parse", "--show-toplevel"])
-        .output()
-        .map_err(|e| format!("failed to run git: {}", e))?;
-    if !output.status.success() {
-        return Err(format!(
-            "registry directory is not inside a git repository: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    String::from_utf8(output.stdout)
-        .map(|s| PathBuf::from(s.trim()))
-        .map_err(|e| format!("invalid git output: {}", e))
-}
-
-fn run_git(repo: &Path, args: &[&str]) -> Result<(), String> {
-    let output = match Command::new("git").current_dir(repo).args(args).output() {
-        Ok(o) => o,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(
-                "git is not installed or not in PATH. \
-                 Install Git from https://git-scm.com or use --server to upload to a registry server instead of --push."
-                    .to_string(),
-            );
-        }
-        Err(e) => return Err(format!("failed to run git {}: {}", args.join(" "), e)),
-    };
-    if !output.status.success() {
-        return Err(format!(
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
     Ok(())
 }
 
@@ -246,9 +179,6 @@ mod tests {
             version: Some("1.2.3"),
             registry_dir: Some(&reg),
             base_url: None,
-            push: false,
-            remote: None,
-            message: None,
         }).unwrap();
 
         let pkg = reg.join("packages").join("greet-1.2.3.period");
@@ -277,9 +207,6 @@ mod tests {
             version: Some("1.0.0"),
             registry_dir: Some(&reg),
             base_url: None,
-            push: false,
-            remote: None,
-            message: None,
         }).unwrap();
         let result = publish(PublishOptions {
             file: &src,
@@ -287,9 +214,6 @@ mod tests {
             version: Some("1.0.0"),
             registry_dir: Some(&reg),
             base_url: None,
-            push: false,
-            remote: None,
-            message: None,
         });
         assert!(result.is_err());
 
