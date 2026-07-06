@@ -891,10 +891,40 @@ pre code {
   padding: 1rem;
 }
 
-#performance .chart-wrapper img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+#performance .chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1.5rem auto 0.5rem;
+  max-width: 900px;
+}
+
+#performance .chart-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  min-width: 220px;
+  text-align: center;
+}
+
+#performance .chart-header button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.4rem 0.9rem;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#performance .chart-header button:hover {
+  background: var(--border);
+}
+
+#performance .chart-header button:active {
+  transform: scale(0.96);
 }
 
 #performance .chart-note {

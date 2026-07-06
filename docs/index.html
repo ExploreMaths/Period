@@ -79,8 +79,13 @@
       <span class="section-label">Performance</span>
       <h2>Benchmark overview.</h2>
       <p>Nine workloads covering numeric loops, strings, lists, function calls, classes, and exception handling. Lower is better.</p>
+      <div class="chart-header">
+        <button id="prevWorkload" aria-label="Previous workload">←</button>
+        <h3 id="chartTitle">Sum 1..N</h3>
+        <button id="nextWorkload" aria-label="Next workload">→</button>
+      </div>
       <div class="chart-wrapper">
-        <img src="benchmark_long.svg" alt="Period benchmark results chart" loading="lazy">
+        <canvas id="perfChart"></canvas>
       </div>
       <p class="chart-note">Benchmarked with <a href="https://github.com/ExploreMaths/Period/blob/main/docs/benchmark_long.py"><code>benchmark_long.py</code></a> (averaged over 10 runs). Workloads: summing 1..N, counting numbers divisible by 3 or 5, counting numbers divisible by 3 and 5, summing numbers divisible by 3 or 5, string concatenation, list growth, function calls, object instantiation, and try/catch. C is compiled with the best available optimizing compiler (MSVC, GCC, Clang) and falls back to the bundled TCC if none are installed; Rust, Go, C# and Java use their normal release builds. Period now compiles all programs through its Cranelift-based JIT by default.</p>
     </section>
@@ -605,6 +610,121 @@ tell ada <span class="keyword">to</span> greet <span class="keyword">with</span>
     });
   </script>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const ctx = document.getElementById('perfChart');
+    const title = document.getElementById('chartTitle');
+    const prevBtn = document.getElementById('prevWorkload');
+    const nextBtn = document.getElementById('nextWorkload');
+    if (!ctx) return;
+
+    const labels = ['Period', 'C (Release)', 'Rust', 'Go', 'C#', 'Java'];
+    const colors = [
+      'rgba(217, 119, 6, 0.9)',
+      'rgba(245, 158, 11, 0.9)',
+      'rgba(59, 130, 246, 0.9)',
+      'rgba(20, 184, 166, 0.9)',
+      'rgba(139, 92, 246, 0.9)',
+      'rgba(236, 72, 153, 0.9)'
+    ];
+    const borderColors = colors.map(c => c.replace('0.9', '1'));
+
+    const workloads = [
+      { name: 'Sum 1..N', data: [13.2, 12.2, 22.6, 26.2, 46.9, 69.9] },
+      { name: 'Divisible by 3 or 5', data: [13.7, 17.7, 34.6, 38.3, 63.4, 79.9] },
+      { name: 'Divisible by 3 and 5', data: [13.6, 22.8, 47.9, 30.5, 63.0, 77.1] },
+      { name: 'Sum multiples of 3 or 5', data: [14.2, 18.5, 31.1, 39.2, 57.6, 80.0] },
+      { name: 'String concatenation', data: [35.8, 14.3, 12.8, 618.7, 44.3, 66.7] },
+      { name: 'List growth', data: [21.3, 13.8, 15.5, 23.5, 43.4, 75.4] },
+      { name: 'Function calls', data: [14.1, 12.4, 12.9, 23.1, 41.7, 71.0] },
+      { name: 'Object instantiation', data: [47.5, 13.5, 17.4, 26.1, 42.0, 63.7] },
+      { name: 'Try/catch', data: [111.4, null, null, null, 124.9, 95.1] }
+    ];
+
+    let current = 0;
+
+    const relativeLabels = {
+      id: 'relativeLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const baseIndex = 0; // Period
+        const meta = chart.getDatasetMeta(0);
+        const dataset = chart.data.datasets[0];
+        ctx.save();
+        meta.data.forEach((bar, i) => {
+          const value = dataset.data[i];
+          if (value == null) return;
+          const ratio = value / dataset.data[baseIndex];
+          const text = i === baseIndex ? 'baseline' : `×${ratio.toFixed(1)}`;
+          ctx.textAlign = 'center';
+          ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.lineJoin = 'round';
+          ctx.setLineDash([]);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = 'white';
+          ctx.strokeText(text, bar.x, bar.y - 6);
+          ctx.fillStyle = '#78716c';
+          ctx.fillText(text, bar.x, bar.y - 6);
+        });
+        ctx.restore();
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: workloads[0].name,
+          data: workloads[0].data,
+          backgroundColor: colors,
+          borderColor: borderColors,
+          borderWidth: 1,
+          borderRadius: 6,
+          barPercentage: 0.7
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => item.raw == null ? 'not measured' : `${item.raw} ms`
+            }
+          }
+        },
+        scales: {
+          y: {
+            type: 'logarithmic',
+            title: { display: true, text: 'Milliseconds, logarithmic scale (lower is better)' },
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            ticks: { callback: (value) => value + ' ms' }
+          },
+          x: {
+            grid: { display: false }
+          }
+        }
+      },
+      plugins: [relativeLabels]
+    });
+
+    function showWorkload(index) {
+      current = (index + workloads.length) % workloads.length;
+      const w = workloads[current];
+      title.textContent = w.name;
+      chart.data.datasets[0].label = w.name;
+      chart.data.datasets[0].data = w.data;
+      chart.update();
+    }
+
+    prevBtn.addEventListener('click', () => showWorkload(current - 1));
+    nextBtn.addEventListener('click', () => showWorkload(current + 1));
+  });
+</script>
 <script type="module" src="copy-code.js"></script>
 <script type="module" src="bubble-menu.js"></script>
 </body>
