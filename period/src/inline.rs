@@ -48,6 +48,11 @@ pub fn inline_small_functions(stmts: &mut [Stmt]) {
         inline_stmt(stmt, &candidates, 3);
     }
 
+    let error_candidates = collect_error_candidates(stmts);
+    if !error_candidates.is_empty() {
+        inline_try_error_calls(stmts, &error_candidates);
+    }
+
     remove_unused_defines(stmts);
 }
 
@@ -366,5 +371,114 @@ fn substitute(expr: &mut Expr, param: &str, arg: &Expr) {
             }
         }
         _ => {}
+    }
+}
+
+#[derive(Clone)]
+struct ErrorCandidate {
+    params: Vec<String>,
+    cond: Expr,
+    error_expr: Expr,
+    return_expr: Expr,
+}
+
+/// Collect functions whose body is `if cond then error err_expr; return ret_expr`.
+/// These are common "guard" functions used inside try/catch.
+fn collect_error_candidates(stmts: &[Stmt]) -> HashMap<String, ErrorCandidate> {
+    let mut candidates: HashMap<String, ErrorCandidate> = HashMap::new();
+    for stmt in stmts.iter() {
+        if let Stmt::Define { name, params, body, .. } = stmt {
+            if body.len() == 2 {
+                if let (
+                    Stmt::If {
+                        cond,
+                        then_branch,
+                        else_branch,
+                    },
+                    Stmt::Return {
+                        value: Some(return_expr),
+                        ..
+                    },
+                ) = (&body[0], &body[1])
+                {
+                    if then_branch.len() == 1
+                        && else_branch.is_empty()
+                        && matches!(then_branch[0], Stmt::Expr(_))
+                    {
+                        let Stmt::Expr(error_expr) = &then_branch[0] else {
+                            continue;
+                        };
+                        candidates.insert(
+                            name.clone(),
+                            ErrorCandidate {
+                                params: params.iter().map(|(n, _)| n.clone()).collect(),
+                                cond: cond.clone(),
+                                error_expr: error_expr.clone(),
+                                return_expr: return_expr.clone(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+    candidates
+}
+
+/// Inline guard-function calls that appear directly inside a `try` body.
+fn inline_try_error_calls(stmts: &mut [Stmt], candidates: &HashMap<String, ErrorCandidate>) {
+    for stmt in stmts.iter_mut() {
+        match stmt {
+            Stmt::If { then_branch, else_branch, .. } => {
+                inline_try_error_calls(then_branch, candidates);
+                inline_try_error_calls(else_branch, candidates);
+            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Define { body, .. }
+            | Stmt::Init(Init { body, .. }) => {
+                inline_try_error_calls(body, candidates);
+            }
+            Stmt::Class { init, methods, .. } => {
+                if let Some(init) = init {
+                    inline_try_error_calls(&mut init.body, candidates);
+                }
+                for m in methods.iter_mut() {
+                    inline_try_error_calls(std::slice::from_mut(m), candidates);
+                }
+            }
+            Stmt::Try { body, catch_body, .. } => {
+                inline_try_error_calls(catch_body, candidates);
+                let mut new_body: Vec<Stmt> = Vec::with_capacity(body.len() * 2);
+                for s in body.drain(..) {
+                    if let Stmt::Expr(Expr::Call { callee, args, span }) = &s {
+                        if let Expr::Variable { name, .. } = callee.as_ref() {
+                            if let Some(cand) = candidates.get(name) {
+                                if cand.params.len() == args.len() {
+                                    let mut cond = cand.cond.clone();
+                                    let mut error_expr = cand.error_expr.clone();
+                                    let mut return_expr = cand.return_expr.clone();
+                                    for (param, arg) in cand.params.iter().zip(args.iter()) {
+                                        substitute(&mut cond, param, arg);
+                                        substitute(&mut error_expr, param, arg);
+                                        substitute(&mut return_expr, param, arg);
+                                    }
+                                    new_body.push(Stmt::If {
+                                        cond,
+                                        then_branch: vec![Stmt::Expr(error_expr)],
+                                        else_branch: vec![],
+                                    });
+                                    new_body.push(Stmt::Expr(return_expr));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    new_body.push(s);
+                }
+                *body = new_body;
+            }
+            _ => {}
+        }
     }
 }

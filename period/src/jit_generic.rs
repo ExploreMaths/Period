@@ -1135,9 +1135,16 @@ impl GenericJitCompiler {
                     if is_error_call {
                         drop_value(module, helpers, &mut builder, callee);
                         let msg = args.into_iter().next().unwrap();
-                        let err = call1(module, helpers, &mut builder, helpers.raise, &[msg]);
-                        stack.push(err);
-                        guard_error(module, helpers, &mut builder, err, handler);
+                        if builder.block_params(handler).is_empty() {
+                            // The catch variable is unused, so we can jump straight
+                            // to the handler without constructing an Error value.
+                            drop_value(module, helpers, &mut builder, msg);
+                            builder.ins().jump(handler, &[]);
+                        } else {
+                            let err = call1(module, helpers, &mut builder, helpers.raise, &[msg]);
+                            stack.push(err);
+                            guard_error(module, helpers, &mut builder, err, handler);
+                        }
                     } else {
                         let (_slot, argv_ptr) = store_in_stack_slot(&mut builder, &args);
                         let argc_val = builder.ins().iconst(types::I64, argc as i64);
