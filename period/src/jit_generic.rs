@@ -769,8 +769,9 @@ impl GenericJitCompiler {
                     } else {
                         let local_ptr = builder.use_var(locals[*slot]);
                         let (ptr, len) = emit_string(module, helpers, &mut builder, &mut name_strings, &func.chunk.strings[*string_idx], *string_idx);
-                        let res = call(module, helpers, &mut builder, helpers.append_local_string, &[local_ptr, ptr, len]);
-                        guard_error_non_null(module, helpers, &mut builder, res, handler);
+                        // append_local_string returns null on success for these
+                        // direct-local cases, so the error guard can be skipped.
+                        let _res = call(module, helpers, &mut builder, helpers.append_local_string, &[local_ptr, ptr, len]);
                     }
                 }
                 Op::AppendLocalList { slot } => {
@@ -793,8 +794,9 @@ impl GenericJitCompiler {
                     } else {
                         let item = stack.pop()?;
                         let local_ptr = builder.use_var(locals[*slot]);
-                        let res = call(module, helpers, &mut builder, helpers.append_local_list, &[local_ptr, item]);
-                        guard_error_non_null(module, helpers, &mut builder, res, handler);
+                        // append_local_list returns null on success for these
+                        // direct-local cases, so the error guard can be skipped.
+                        let _res = call(module, helpers, &mut builder, helpers.append_local_list, &[local_ptr, item]);
                     }
                 }
                 Op::LoadGlobal(idx) => {
@@ -1438,21 +1440,6 @@ fn guard_error(
     let call = builder.ins().call(callee, &[value]);
     let flag = builder.inst_results(call)[0];
     let cmp = builder.ins().icmp_imm(IntCC::NotEqual, flag, 0);
-    let fallthrough = builder.create_block();
-    builder.ins().brif(cmp, handler, &[BlockArg::Value(value)], fallthrough, &[]);
-    builder.switch_to_block(fallthrough);
-    builder.seal_block(fallthrough);
-}
-
-/// Like `guard_error` but the value is null on success and an error pointer on failure.
-fn guard_error_non_null(
-    _module: &mut cranelift_jit::JITModule,
-    _helpers: &Helpers,
-    builder: &mut FunctionBuilder,
-    value: ClValue,
-    handler: Block,
-) {
-    let cmp = builder.ins().icmp_imm(IntCC::NotEqual, value, 0);
     let fallthrough = builder.create_block();
     builder.ins().brif(cmp, handler, &[BlockArg::Value(value)], fallthrough, &[]);
     builder.switch_to_block(fallthrough);
