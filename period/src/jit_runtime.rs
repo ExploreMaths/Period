@@ -15,6 +15,37 @@ use crate::bytecode::CompiledFunction;
 use crate::interpreter::{Interpreter, Control};
 use crate::value::{ErrorValue, Integer, Value, VMClassValue, VMFunctionValue};
 
+const VALUE_POOL_CAPACITY: usize = 4096;
+thread_local! {
+    static VALUE_POOL: RefCell<Vec<*mut Value>> = RefCell::new(Vec::new());
+}
+
+fn alloc_value(v: Value) -> *mut Value {
+    VALUE_POOL.with(|pool| {
+        if let Some(ptr) = pool.borrow_mut().pop() {
+            unsafe { std::ptr::write(ptr, v); }
+            ptr
+        } else {
+            Box::into_raw(Box::new(v))
+        }
+    })
+}
+
+unsafe fn free_value(v: *mut Value) {
+    if !v.is_null() {
+        unsafe { std::ptr::drop_in_place(v); }
+        VALUE_POOL.with(|pool| {
+            let mut pool = pool.borrow_mut();
+            if pool.len() < VALUE_POOL_CAPACITY {
+                pool.push(v);
+            } else {
+                unsafe { drop(Box::from_raw(v)); }
+            }
+        });
+    }
+}
+
+
 fn cstr(ptr: *const u8, len: usize) -> String {
     unsafe {
         if ptr.is_null() {
@@ -43,8 +74,17 @@ fn take_value(v: *mut Value) -> Value {
         if v.is_null() {
             return Value::Nothing;
         }
-        let value = Box::from_raw(v);
-        *value
+        let mut b = Box::from_raw(v);
+        let value = std::ptr::read(&mut *b);
+        VALUE_POOL.with(|pool| {
+            let mut pool = pool.borrow_mut();
+            if pool.len() < VALUE_POOL_CAPACITY {
+                pool.push(Box::into_raw(b));
+            } else {
+                drop(b);
+            }
+        });
+        value
     }
 }
 
@@ -72,7 +112,7 @@ fn make_error(message: impl Into<String>) -> Value {
 }
 
 fn error_value(message: impl Into<String>) -> *mut Value {
-    Box::into_raw(Box::new(make_error(message)))
+    alloc_value(make_error(message))
 }
 
 /// Create an error value from a message value.  Takes ownership of `msg`.
@@ -88,13 +128,13 @@ pub extern "C" fn period_raise(msg: *mut Value) -> *mut Value {
 
 fn result_to_ptr(result: Result<Value, Control>) -> *mut Value {
     match result {
-        Ok(v) => Box::into_raw(Box::new(v)),
+        Ok(v) => alloc_value(v),
         Err(Control::RuntimeError(msg, span)) => {
             period_set_span(span.line as i64, span.col as i64);
             error_value(msg)
         }
         Err(Control::Error(msg)) => error_value(msg),
-        Err(Control::Return(v, _)) => Box::into_raw(Box::new(v)),
+        Err(Control::Return(v, _)) => alloc_value(v),
     }
 }
 
@@ -105,7 +145,7 @@ pub extern "C" fn period_value_clone(v: *const Value) -> *mut Value {
         if v.is_null() {
             return std::ptr::null_mut();
         }
-        Box::into_raw(Box::new((*v).clone()))
+        alloc_value((*v).clone())
     }
 }
 
@@ -114,7 +154,7 @@ pub extern "C" fn period_value_clone(v: *const Value) -> *mut Value {
 pub extern "C" fn period_value_drop(v: *mut Value) {
     unsafe {
         if !v.is_null() {
-            drop(Box::from_raw(v));
+            free_value(v);
         }
     }
 }
@@ -133,7 +173,7 @@ pub extern "C" fn period_value_is_error(v: *const Value) -> i64 {
 /// Create a value from an i64.
 #[unsafe(no_mangle)]
 pub extern "C" fn period_value_from_i64(n: i64) -> *mut Value {
-    Box::into_raw(Box::new(Value::Integer(Integer::Small(n))))
+    alloc_value(Value::Integer(Integer::Small(n)))
 }
 
 /// If the value is a small integer, return it; otherwise return 0.
@@ -150,25 +190,25 @@ pub extern "C" fn period_value_as_i64(v: *const Value) -> i64 {
 /// Create a value from an f64.
 #[unsafe(no_mangle)]
 pub extern "C" fn period_value_from_f64(n: f64) -> *mut Value {
-    Box::into_raw(Box::new(Value::Number(n)))
+    alloc_value(Value::Number(n))
 }
 
 /// Create a boolean value.
 #[unsafe(no_mangle)]
 pub extern "C" fn period_value_from_bool(b: i64) -> *mut Value {
-    Box::into_raw(Box::new(Value::Bool(b != 0)))
+    alloc_value(Value::Bool(b != 0))
 }
 
 /// Create the Nothing value.
 #[unsafe(no_mangle)]
 pub extern "C" fn period_value_nothing() -> *mut Value {
-    Box::into_raw(Box::new(Value::Nothing))
+    alloc_value(Value::Nothing)
 }
 
 /// Make a string constant available to the JIT.
 #[unsafe(no_mangle)]
 pub extern "C" fn period_value_from_string(ptr: *const u8, len: usize) -> *mut Value {
-    Box::into_raw(Box::new(Value::String(cstr(ptr, len))))
+    alloc_value(Value::String(cstr(ptr, len)))
 }
 
 /// Return 1 if the value is truthy, 0 otherwise.
@@ -224,7 +264,7 @@ pub extern "C" fn period_value_binary(op: BinOp, left: *const Value, right: *con
             BinOp::And | BinOp::Or => make_error("unexpected binary and/or in JIT"),
         };
 
-        Box::into_raw(Box::new(result))
+        alloc_value(result)
     }
 }
 
@@ -296,29 +336,29 @@ pub extern "C" fn period_append_local_list(local: *mut Value, item: *mut Value) 
     unsafe {
         if local.is_null() || item.is_null() {
             if !item.is_null() {
-                drop(Box::from_raw(item));
+                free_value(item);
             }
             return error_value("invalid local or item");
         }
         let local_ref = &mut *local;
-        let item_val = Box::from_raw(item);
+        let item_val = take_value(item);
         match local_ref {
             Value::List(list) => {
                 if std::rc::Rc::strong_count(list) > 1 {
                     let mut new_items = list.borrow().clone();
-                    new_items.push(*item_val);
+                    new_items.push(item_val);
                     *local_ref = Value::List(std::rc::Rc::new(std::cell::RefCell::new(new_items)));
                 } else {
                     let mut borrowed = list.borrow_mut();
                     if borrowed.is_empty() {
                         borrowed.reserve(512);
                     }
-                    borrowed.push(*item_val);
+                    borrowed.push(item_val);
                 }
             }
             _ => {
                 let mut items = Vec::with_capacity(512);
-                items.push(*item_val);
+                items.push(item_val);
                 let right = Value::List(std::rc::Rc::new(std::cell::RefCell::new(items)));
                 let result = add_values(local_ref, &right);
                 *local_ref = result;
@@ -495,7 +535,7 @@ pub extern "C" fn period_value_unary(op: UnaryOp, operand: *const Value) -> *mut
                 _ => make_error("'not' requires a boolean operand".to_string()),
             },
         };
-        Box::into_raw(Box::new(result))
+        alloc_value(result)
     }
 }
 
@@ -512,7 +552,7 @@ pub extern "C" fn period_env_get(interp: *mut Interpreter, name_ptr: *const u8, 
         };
         let name = cstr(name_ptr, name_len);
         match interp.env.borrow().get(&name) {
-            Some(v) => Box::into_raw(Box::new(v)),
+            Some(v) => alloc_value(v),
             None => error_value(format!("Undefined variable '{}'", name)),
         }
     }
@@ -565,10 +605,10 @@ pub extern "C" fn period_build_list(argc: usize, argv: *const *mut Value) -> *mu
     let items = argv_to_vec(argc, argv);
     for p in unsafe { std::slice::from_raw_parts(argv, argc) } {
         if !p.is_null() {
-            unsafe { drop(Box::from_raw(*p)); }
+            unsafe { free_value(*p); }
         }
     }
-    Box::into_raw(Box::new(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items)))))
+    alloc_value(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items))))
 }
 
 #[unsafe(no_mangle)]
@@ -585,7 +625,7 @@ pub extern "C" fn period_build_dict(pairc: usize, kv: *const *mut Value) -> *mut
             };
             map.insert(key, value);
         }
-        Box::into_raw(Box::new(Value::Dict(std::rc::Rc::new(std::cell::RefCell::new(map)))))
+        alloc_value(Value::Dict(std::rc::Rc::new(std::cell::RefCell::new(map))))
     }
 }
 
@@ -643,7 +683,7 @@ pub extern "C" fn period_index_get(obj: *mut Value, idx: *mut Value) -> *mut Val
         }
         _ => return error_value(format!("Cannot index {}", obj.type_name())),
     };
-    Box::into_raw(Box::new(result))
+    alloc_value(result)
 }
 
 #[unsafe(no_mangle)]
@@ -668,7 +708,7 @@ pub extern "C" fn period_index_set(obj: *mut Value, idx: *mut Value, value: *mut
         }
         _ => return error_value(format!("Cannot index-assign {}", obj.type_name())),
     }
-    Box::into_raw(Box::new(obj))
+    alloc_value(obj)
 }
 
 fn field_name_matches(name_ptr: *const u8, name_len: usize, s: &str) -> bool {
@@ -690,7 +730,7 @@ pub extern "C" fn period_property_get(obj: *mut Value, name_ptr: *const u8, name
         if let Some(slots) = slots {
             if let Value::VMClass(cv) = class.as_ref() {
                 if let Some(idx) = cv.field_names.iter().position(|n| field_name_matches(name_ptr, name_len, n)) {
-                    return Box::into_raw(Box::new(slots.borrow().get(idx).cloned().unwrap_or(Value::Nothing)));
+                    return alloc_value(slots.borrow().get(idx).cloned().unwrap_or(Value::Nothing));
                 }
             }
         }
@@ -713,7 +753,7 @@ pub extern "C" fn period_property_get(obj: *mut Value, name_ptr: *const u8, name
         Value::Module(mv) => mv.env.borrow().get(&name).unwrap_or(Value::Nothing),
         _ => return error_value(format!("Cannot get property '{}' of {}", name, obj.type_name())),
     };
-    Box::into_raw(Box::new(result))
+    alloc_value(result)
 }
 
 #[unsafe(no_mangle)]
@@ -726,7 +766,7 @@ pub extern "C" fn period_property_set(obj: *mut Value, name_ptr: *const u8, name
             if let Value::VMClass(cv) = class.as_ref() {
                 if let Some(idx) = cv.field_names.iter().position(|n| field_name_matches(name_ptr, name_len, n)) {
                     slots.borrow_mut()[idx] = value;
-                    return Box::into_raw(Box::new(obj));
+                    return alloc_value(obj);
                 }
             }
         }
@@ -742,7 +782,7 @@ pub extern "C" fn period_property_set(obj: *mut Value, name_ptr: *const u8, name
         }
         _ => return error_value(format!("Cannot set property on {}", obj.type_name())),
     }
-    Box::into_raw(Box::new(obj))
+    alloc_value(obj)
 }
 
 #[unsafe(no_mangle)]
@@ -755,7 +795,7 @@ pub extern "C" fn period_length(v: *mut Value) -> *mut Value {
         Value::Range { start, stop, step } => crate::value::range_len(*start, *stop, *step),
         _ => return error_value(format!("length not supported for {}", v.type_name())),
     };
-    Box::into_raw(Box::new(Value::Integer(Integer::Small(len))))
+    alloc_value(Value::Integer(Integer::Small(len)))
 }
 
 #[unsafe(no_mangle)]
@@ -777,7 +817,7 @@ pub extern "C" fn period_iter_init(v: *mut Value) -> *mut Value {
         }
         _ => return error_value(format!("Cannot iterate over {}", v.type_name())),
     };
-    Box::into_raw(Box::new(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items)))))
+    alloc_value(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items))))
 }
 
 // ---------------------------------------------------------------------------
@@ -799,7 +839,7 @@ pub extern "C" fn period_call(interp: *mut Interpreter, callee: *mut Value, argc
                 let args = argv_to_vec(argc, argv);
                 for p in std::slice::from_raw_parts(argv, argc) {
                     if !p.is_null() {
-                        drop(Box::from_raw(*p));
+                        free_value(*p);
                     }
                 }
                 result_to_ptr(new_instance(interp, callee, args, &span))
@@ -808,7 +848,7 @@ pub extern "C" fn period_call(interp: *mut Interpreter, callee: *mut Value, argc
                 if fv.func.params.len() != argc {
                     for p in std::slice::from_raw_parts(argv, argc) {
                         if !p.is_null() {
-                            drop(Box::from_raw(*p));
+                            free_value(*p);
                         }
                     }
                     return error_value(format!(
@@ -844,7 +884,7 @@ pub extern "C" fn period_call(interp: *mut Interpreter, callee: *mut Value, argc
                 let args = argv_to_vec(argc, argv);
                 for p in std::slice::from_raw_parts(argv, argc) {
                     if !p.is_null() {
-                        drop(Box::from_raw(*p));
+                        free_value(*p);
                     }
                 }
                 result_to_ptr(interp.call_value(&callee, args, &span))
@@ -853,7 +893,7 @@ pub extern "C" fn period_call(interp: *mut Interpreter, callee: *mut Value, argc
                 let args = argv_to_vec(argc, argv);
                 for p in std::slice::from_raw_parts(argv, argc) {
                     if !p.is_null() {
-                        drop(Box::from_raw(*p));
+                        free_value(*p);
                     }
                 }
                 result_to_ptr(interp.call_value(&callee, args, &span))
@@ -919,7 +959,7 @@ pub extern "C" fn period_new_instance(
         let args = argv_to_vec(argc, argv);
         for p in std::slice::from_raw_parts(argv, argc) {
             if !p.is_null() {
-                drop(Box::from_raw(*p));
+                free_value(*p);
             }
         }
         result_to_ptr(new_instance(interp, cls, args, &span))
@@ -947,7 +987,7 @@ pub extern "C" fn period_tell(
         let mut args = argv_to_vec(argc, argv);
         for p in std::slice::from_raw_parts(argv, argc) {
             if !p.is_null() {
-                drop(Box::from_raw(*p));
+                free_value(*p);
             }
         }
         let class = match &obj {
@@ -1011,7 +1051,7 @@ pub extern "C" fn period_make_closure(
             upvalues,
             from_module: interp.loading_module,
         }));
-        Box::into_raw(Box::new(closure))
+        alloc_value(closure)
     }
 }
 
@@ -1032,7 +1072,7 @@ pub extern "C" fn period_upvalue_get(cell: *mut std::ffi::c_void) -> *mut Value 
         }
         let cell = cell as *const RefCell<Value>;
         let value = (*cell).borrow().clone();
-        Box::into_raw(Box::new(value))
+        alloc_value(value)
     }
 }
 
@@ -1090,14 +1130,14 @@ pub extern "C" fn period_build_class(
         }
         let field_init_slice = std::slice::from_raw_parts(field_init, field_count);
         let field_init_vec: Vec<Option<usize>> = field_init_slice.iter().map(|&i| if i == usize::MAX { None } else { Some(i) }).collect();
-        Box::into_raw(Box::new(Value::VMClass(Box::new(VMClassValue {
+        alloc_value(Value::VMClass(Box::new(VMClassValue {
             name,
             init,
             methods: method_map,
             field_names: field_name_vec,
             field_init: field_init_vec,
             from_module,
-        }))))
+        })))
     }
 }
 
@@ -1138,7 +1178,7 @@ pub extern "C" fn period_qualified_get(
             Some(env) => env.borrow().get(&name).unwrap_or(Value::Nothing),
             None => return error_value(format!("Module '{}' not imported", module)),
         };
-        Box::into_raw(Box::new(result))
+        alloc_value(result)
     }
 }
 
@@ -1169,7 +1209,7 @@ pub extern "C" fn period_read(interp: *mut Interpreter, path_value: *mut Value) 
         };
         let full = interp.resolve_path(&path);
         match std::fs::read_to_string(&full) {
-            Ok(s) => Box::into_raw(Box::new(Value::String(s))),
+            Ok(s) => alloc_value(Value::String(s)),
             Err(e) => error_value(format!("Cannot read '{}': {}", full.display(), e)),
         }
     }
