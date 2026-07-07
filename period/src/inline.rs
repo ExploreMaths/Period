@@ -53,6 +53,8 @@ pub fn inline_small_functions(stmts: &mut [Stmt]) {
         inline_try_error_calls(stmts, &error_candidates);
     }
 
+    simplify_guard_tries(stmts);
+
     remove_unused_defines(stmts);
 }
 
@@ -477,6 +479,120 @@ fn inline_try_error_calls(stmts: &mut [Stmt], candidates: &HashMap<String, Error
                     new_body.push(s);
                 }
                 *body = new_body;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// If a `try` block has been reduced to a single guard `if cond then error ...`
+/// and the catch variable is unused, eliminate the try/catch entirely and run
+/// the catch body directly under the guard condition.
+fn simplify_guard_tries(stmts: &mut [Stmt]) {
+    fn expr_uses_var(expr: &Expr, name: &str) -> bool {
+        match expr {
+            Expr::Variable { name: n, .. } => n == name,
+            Expr::Call { callee, args, .. } => {
+                expr_uses_var(callee, name) || args.iter().any(|a| expr_uses_var(a, name))
+            }
+            Expr::Binary { left, right, .. } => expr_uses_var(left, name) || expr_uses_var(right, name),
+            Expr::Unary { operand, .. } => expr_uses_var(operand, name),
+            Expr::List(items, _) => items.iter().any(|i| expr_uses_var(i, name)),
+            Expr::Dict(entries, _) => entries.iter().any(|(k, v)| {
+                expr_uses_var(k, name) || expr_uses_var(v, name)
+            }),
+            Expr::Index { object, index, .. } => expr_uses_var(object, name) || expr_uses_var(index, name),
+            Expr::Property { object, .. } | Expr::Tell { object, .. } => {
+                expr_uses_var(object, name)
+            }
+            Expr::New { args, .. } => args.iter().any(|a| expr_uses_var(a, name)),
+            Expr::Qualified { .. } | Expr::Ellipsis => false,
+            _ => false,
+        }
+    }
+
+    fn stmt_uses_var(stmt: &Stmt, name: &str) -> bool {
+        match stmt {
+            Stmt::Expr(e) | Stmt::Show(e) | Stmt::Return { value: Some(e), .. } => expr_uses_var(e, name),
+            Stmt::Let { value, .. } | Stmt::Set { value, .. } => expr_uses_var(value, name),
+            Stmt::If { cond, then_branch, else_branch } => {
+                expr_uses_var(cond, name)
+                    || then_branch.iter().any(|s| stmt_uses_var(s, name))
+                    || else_branch.iter().any(|s| stmt_uses_var(s, name))
+            }
+            Stmt::While { cond, body } => {
+                expr_uses_var(cond, name) || body.iter().any(|s| stmt_uses_var(s, name))
+            }
+            Stmt::For { iterable, body, .. } => {
+                expr_uses_var(iterable, name) || body.iter().any(|s| stmt_uses_var(s, name))
+            }
+            Stmt::Define { body, .. } => body.iter().any(|s| stmt_uses_var(s, name)),
+            Stmt::Init(Init { body, .. }) => body.iter().any(|s| stmt_uses_var(s, name)),
+            Stmt::Class { init, methods, .. } => {
+                init.as_ref().map_or(false, |i| i.body.iter().any(|s| stmt_uses_var(s, name)))
+                    || methods.iter().any(|m| stmt_uses_var(m, name))
+            }
+            Stmt::Try { body, catch_body, catch_var, .. } => {
+                body.iter().any(|s| stmt_uses_var(s, name))
+                    || (catch_var != name && catch_body.iter().any(|s| stmt_uses_var(s, name)))
+            }
+            _ => false,
+        }
+    }
+
+    fn is_error_call(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call { callee, .. } if matches!(callee.as_ref(), Expr::Variable { name, .. } if name == "error"))
+    }
+
+    for stmt in stmts.iter_mut() {
+        match stmt {
+            Stmt::If { then_branch, else_branch, .. } => {
+                simplify_guard_tries(then_branch);
+                simplify_guard_tries(else_branch);
+            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Define { body, .. }
+            | Stmt::Init(Init { body, .. }) => {
+                simplify_guard_tries(body);
+            }
+            Stmt::Class { init, methods, .. } => {
+                if let Some(init) = init {
+                    simplify_guard_tries(&mut init.body);
+                }
+                for m in methods.iter_mut() {
+                    simplify_guard_tries(std::slice::from_mut(m));
+                }
+            }
+            Stmt::Try { body, catch_var, catch_body } => {
+                simplify_guard_tries(catch_body);
+                if catch_body.iter().any(|s| stmt_uses_var(s, catch_var)) {
+                    return;
+                }
+                // Body must be: if cond then error ...; <ignored expr>
+                if body.len() == 2 {
+                    if let (
+                        Stmt::If {
+                            cond,
+                            then_branch,
+                            else_branch,
+                        },
+                        Stmt::Expr(_),
+                    ) = (&body[0], &body[1])
+                    {
+                        if then_branch.len() == 1
+                            && else_branch.is_empty()
+                            && matches!(&then_branch[0], Stmt::Expr(e) if is_error_call(e))
+                        {
+                            let cond = cond.clone();
+                            *stmt = Stmt::If {
+                                cond,
+                                then_branch: std::mem::take(catch_body),
+                                else_branch: vec![],
+                            };
+                        }
+                    }
+                }
             }
             _ => {}
         }
