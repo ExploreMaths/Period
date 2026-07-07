@@ -272,13 +272,13 @@ pub extern "C" fn period_append_local_string(local: *mut Value, ptr: *const u8, 
         match local_ref {
             Value::String(s) => {
                 if s.is_empty() {
-                    s.reserve(len.max(64));
+                    s.reserve(len.max(256));
                 }
                 s.push_str(chunk);
             }
             _ => {
                 let mut s = chunk.to_string();
-                s.reserve(len.max(64));
+                s.reserve(len.max(256));
                 let right = Value::String(s);
                 let result = add_values(local_ref, &right);
                 *local_ref = result;
@@ -311,13 +311,13 @@ pub extern "C" fn period_append_local_list(local: *mut Value, item: *mut Value) 
                 } else {
                     let mut borrowed = list.borrow_mut();
                     if borrowed.is_empty() {
-                        borrowed.reserve(16);
+                        borrowed.reserve(512);
                     }
                     borrowed.push(*item_val);
                 }
             }
             _ => {
-                let mut items = Vec::with_capacity(16);
+                let mut items = Vec::with_capacity(512);
                 items.push(*item_val);
                 let right = Value::List(std::rc::Rc::new(std::cell::RefCell::new(items)));
                 let result = add_values(local_ref, &right);
