@@ -16,7 +16,11 @@ struct InlineCandidate {
 }
 
 /// Inline eligible function calls throughout the program.
-pub fn inline_small_functions(stmts: &mut [Stmt]) {
+///
+/// When `remove_unused` is `false`, top-level function definitions are kept
+/// even if they are not referenced inside the same file. This is required when
+/// compiling a module whose purpose is to export those definitions.
+pub fn inline_small_functions(stmts: &mut [Stmt], remove_unused: bool) {
     let mut candidates: HashMap<String, InlineCandidate> = HashMap::new();
 
     for stmt in stmts.iter() {
@@ -55,7 +59,9 @@ pub fn inline_small_functions(stmts: &mut [Stmt]) {
 
     simplify_guard_tries(stmts);
 
-    remove_unused_defines(stmts);
+    if remove_unused {
+        remove_unused_defines(stmts);
+    }
 }
 
 fn remove_unused_defines(stmts: &mut [Stmt]) {

@@ -415,7 +415,7 @@ pub(crate) fn run_jit_program(program: &ast::Program, path: PathBuf, source: &st
     if let Some(cached) = try_jit_cache(source) {
         return (0, cached);
     }
-    match compiler::Compiler::compile_program(&program.statements) {
+    match compiler::Compiler::compile_program(&program.statements, false) {
         Ok(main) => {
             let main = Rc::new(main);
             // Fast path: if the whole program reduces to constant arithmetic,

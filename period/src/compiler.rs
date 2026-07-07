@@ -278,9 +278,9 @@ impl Compiler {
         }
     }
 
-    pub fn compile_program(stmts: &[Stmt]) -> Result<CompiledFunction, CompileError> {
+    pub fn compile_program(stmts: &[Stmt], is_module: bool) -> Result<CompiledFunction, CompileError> {
         let mut stmts: Vec<Stmt> = stmts.to_vec();
-        crate::inline::inline_small_functions(&mut stmts);
+        crate::inline::inline_small_functions(&mut stmts, !is_module);
         let captured_globals = collect_captured_globals(&stmts);
         let compiler = Compiler::new("<main>", Vec::new(), None, Span { line: 1, col: 1 }, captured_globals);
         for stmt in &stmts {
@@ -541,7 +541,17 @@ impl Compiler {
                 let upvalues = compiled.upvalues.clone();
                 let func_idx = self.add_function(compiled);
                 self.emit(Op::Closure { func: func_idx, upvalues }, span.clone());
-                self.emit(Op::StoreLocal(name_slot), span.clone());
+                if self.state().scope_depth == 0 {
+                    // Top-level functions are globals so they can be exported from
+                    // modules and referenced by imported modules. Keep the local
+                    // slot populated as well so local references resolve correctly.
+                    self.emit(Op::Dup, span.clone());
+                    let name_idx = self.add_string(name);
+                    self.emit(Op::DefineGlobal { name: name_idx, type_ann: None }, span.clone());
+                    self.emit(Op::StoreLocal(name_slot), span.clone());
+                } else {
+                    self.emit(Op::StoreLocal(name_slot), span.clone());
+                }
             }
             Stmt::Class { name, init, methods, span, .. } => {
                 let init_idx = if let Some(init) = init {

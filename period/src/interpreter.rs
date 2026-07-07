@@ -64,7 +64,7 @@ impl Interpreter {
         // Try the bytecode compiler first.  If it succeeds, attempt to JIT the
         // top-level function to native code; otherwise fall back to the VM, and
         // if compilation itself fails fall back to the tree-walking interpreter.
-        if let Ok(main) = compiler::Compiler::compile_program(&program.statements) {
+        if let Ok(main) = compiler::Compiler::compile_program(&program.statements, false) {
             let main = std::rc::Rc::new(main);
             if !self.silent && !self.loading_module {
                 if let Some(code) = crate::jit::JitCompiler::new().compile(&main) {
@@ -951,7 +951,7 @@ impl Interpreter {
         self.env = module_env.clone();
         self.silent = true;
         self.loading_module = true;
-        let main = Rc::new(compiler::Compiler::compile_program(&program.statements)
+        let main = Rc::new(compiler::Compiler::compile_program(&program.statements, true)
             .map_err(|e| Control::Error(format!("Module '{}': {}", name, e.0)))?);
         let result = self.run_compiled_module_main(main);
         self.env = old_env;
