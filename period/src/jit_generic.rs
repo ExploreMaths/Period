@@ -1048,7 +1048,17 @@ impl GenericJitCompiler {
                         });
                     if let Some((_, t)) = transparent_store {
                         if t.arg_idx < argc {
-                            drop_value(module, helpers, &mut builder, class);
+                            // If the class operand was loaded from a global/local that
+                            // we replaced with a placeholder, there is nothing to drop.
+                            let class_load_ip = i.saturating_sub(argc + 1);
+                            let class_is_placeholder = func
+                                .chunk
+                                .ops
+                                .get(class_load_ip)
+                                .map_or(false, |op| matches!(op, Op::LoadLocal(_) | Op::LoadGlobal(_)) && transparent_class_loads.contains(&class_load_ip));
+                            if !class_is_placeholder {
+                                drop_value(module, helpers, &mut builder, class);
+                            }
                             let kept = args[t.arg_idx];
                             for (idx, arg) in args.iter().enumerate() {
                                 if idx != t.arg_idx {
