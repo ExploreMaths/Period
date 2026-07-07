@@ -739,6 +739,9 @@ impl GenericJitCompiler {
         for _ in 0..func.local_count {
             locals.push(builder.declare_var(types::I64));
         }
+        // Track whether a transparent local's value has already been moved to
+        // the stack; this lets the next store skip an unnecessary drop.
+        let mut local_consumed: Vec<bool> = vec![false; func.local_count];
         let mut captured_locals: HashSet<usize> = HashSet::new();
         for op in ops {
             if let Op::Closure { upvalues, .. } = op {
@@ -820,6 +823,13 @@ impl GenericJitCompiler {
                         // transparent `new`.  Push a placeholder; the real
                         // value is never inspected.
                         stack.push(builder.ins().iconst(types::I64, 0));
+                    } else if transparent_locals.contains_key(slot) && !captured_locals.contains(slot) {
+                        // The local holds a field-only class value that is only
+                        // read once; the single owner can be moved to the stack
+                        // without cloning.
+                        let v = builder.use_var(locals[*slot]);
+                        local_consumed[*slot] = true;
+                        stack.push(v);
                     } else if captured_locals.contains(slot) {
                         let v = builder.use_var(locals[*slot]);
                         let value = call1(module, helpers, &mut builder, helpers.upvalue_get, &[v]);
@@ -835,6 +845,15 @@ impl GenericJitCompiler {
                     if captured_locals.contains(slot) {
                         let cell = builder.use_var(locals[*slot]);
                         call_void(module, helpers, &mut builder, helpers.upvalue_set, &[cell, v]);
+                    } else if transparent_locals.contains_key(slot) {
+                        // If the previous transparent value was already moved to
+                        // the stack, there is nothing left in this local to drop.
+                        if !local_consumed[*slot] {
+                            let old = builder.use_var(locals[*slot]);
+                            drop_value(module, helpers, &mut builder, old);
+                        }
+                        builder.def_var(locals[*slot], v);
+                        local_consumed[*slot] = false;
                     } else {
                         let old = builder.use_var(locals[*slot]);
                         builder.def_var(locals[*slot], v);
