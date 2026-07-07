@@ -4,14 +4,28 @@
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## 2.0.0-beta.6 (2026-07-04)
+
+### Added
+
 - Generic Cranelift JIT compiler (`period/src/jit_generic.rs` and `period/src/jit_runtime.rs`) that compiles nearly all Period programs to native code by default, with automatic fallback to the bytecode VM for constructs the JIT does not yet support.
-- Expanded `docs/benchmark_long.py` to nine workloads covering numeric loops, string concatenation, list growth, function calls, object instantiation, and exception handling.
-- Static SVG benchmark chart (`docs/benchmark_long.svg`) rendered by `docs/benchmark_long.py`, replacing the previous Chart.js canvas on the homepage.
+- Closed-form `LoopOpt::Count` optimisation in the integer JIT for simple counter loops (`acc += 1; i += 1`).
+- AST simplification: a `try` block reduced to `if cond then error ...` with an unused catch variable is converted to a plain `if cond then catch_body`, eliminating try/catch overhead.
+- `docs/benchmark_long.py` now runs Period through a long-running `--server` worker so benchmark numbers measure execution speed rather than per-subprocess startup overhead.
+- C, Rust and Go implementations of the `try_catch` workload in `docs/benchmark_long.py`.
+- Static SVG benchmark chart (`docs/benchmark_long.svg`) rendered by `docs/benchmark_long.py`, used in `README.md`.
 
 ### Changed
 
 - `period_run` now routes all programs through the JIT path first; the pure-integer fast path and the new generic JIT are tried before falling back to the bytecode VM.
-- Homepage performance section updated to describe the broader benchmark suite and the default Cranelift JIT.
+- `docs/benchmark_long.py` expanded to nine workloads covering numeric loops, string concatenation, list growth, function calls, object instantiation, and exception handling.
+- `docs/benchmark_long.svg` layout: Period is now first in each group, margins are tighter, and the legend title no longer overlaps the first item.
+- `docs/index.html` homepage performance section updated to a per-workload Chart.js chart with fresh data and a visually distinct `benchmark_long.py` link.
+- `README.md` now embeds `docs/benchmark_long.svg` in a Benchmark section.
 
 ## 2.0.0-beta.5 (2026-07-04)
 
