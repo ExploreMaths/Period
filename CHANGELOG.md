@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- `period.exe` wrapper: when the persistent worker reports an error, the local re-run's exit code is now authoritative. Previously a stale worker left running from an older version could make successful programs exit with code 1.
+
 ## 2.0.0-beta.7 (2026-07-12)
 
 ### Added

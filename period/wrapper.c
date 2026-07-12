@@ -361,9 +361,10 @@ int main(int argc, char *argv[]) {
         if (result < 0) {
             result = run_core(argc, argv);
         } else if (result != 0) {
-            /* On error run locally so the user sees diagnostics. */
-            int local = run_core(argc, argv);
-            if (local != 0) result = local;
+            /* On error run locally so the user sees diagnostics. The local
+             * result is authoritative: a stale worker from an older version
+             * may reject programs the current core runs fine. */
+            result = run_core(argc, argv);
         }
     }
 
