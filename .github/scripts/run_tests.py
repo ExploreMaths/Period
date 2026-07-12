@@ -824,7 +824,7 @@ class TestLSP(unittest.TestCase):
                         "uri": uri,
                         "languageId": "period",
                         "version": 1,
-                        "text": "-- a comment with let show\nshow 1.\n",
+                        "text": "-- a comment with let show\nshow 1. -- inline comment\n",
                     }
                 },
             }))
@@ -847,7 +847,24 @@ class TestLSP(unittest.TestCase):
             self.assertIsNotNone(msg, "No completion response received")
             self.assertEqual(msg["result"], [], f"Expected no completions in comment, got {msg['result']}")
 
-            # Sanity: completion on a normal line is non-empty.
+            # Completion inside an inline comment after code (line 1).
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "textDocument/completion",
+                "params": {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": 1, "character": 20},
+                },
+            }))
+            proc.stdin.flush()
+            msg = self._lsp_read_message(proc)
+            while msg is not None and msg.get("id") != 4:
+                msg = self._lsp_read_message(proc)
+            self.assertIsNotNone(msg, "No completion response received")
+            self.assertEqual(msg["result"], [], f"Expected no completions in inline comment, got {msg['result']}")
+
+            # Sanity: completion on the code part of the same line is non-empty.
             proc.stdin.write(self._lsp_message({
                 "jsonrpc": "2.0",
                 "id": 3,

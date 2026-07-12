@@ -367,6 +367,34 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
     })
 }
 
+/// Returns true if the cursor position on `line` is inside a `--` comment.
+/// A `--` inside a string literal does not start a comment.
+fn cursor_in_comment(line: &str, cursor: usize) -> bool {
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut prev = '\0';
+    for (i, c) in line.chars().enumerate() {
+        if i >= cursor {
+            break;
+        }
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else if c == '"' {
+            in_string = true;
+        } else if c == '-' && prev == '-' {
+            return true;
+        }
+        prev = c;
+    }
+    false
+}
+
 fn completion(
     documents: &Arc<Mutex<HashMap<Url, String>>>,
     params: CompletionParams,
@@ -387,7 +415,8 @@ fn completion(
     }
 
     // Don't offer completions inside comments ('--' starts a comment).
-    if trimmed.starts_with("--") {
+    let cursor = params.text_document_position.position.character as usize;
+    if cursor_in_comment(line_text, cursor) {
         return Ok(Some(CompletionResponse::Array(Vec::new())));
     }
 
