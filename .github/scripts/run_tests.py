@@ -8,6 +8,7 @@ Expects the Period debug binary to exist at period/target/debug/period
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -500,7 +501,9 @@ class TestLanguageFeatures(unittest.TestCase):
             should_fail=True,
         )
         self.assertIn("expected '.' at end of let", out)
-        self.assertIn("1:12", out)
+        # Column is 11 on Unix and 12 on Windows, where the temp file is
+        # written with \r\n line endings.
+        self.assertRegex(out, r":1:1[12]: error")
         self.assertIn("^", out)
 
     def test_compact_show_returns_zero(self):
