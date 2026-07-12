@@ -259,10 +259,22 @@ async function startClient(context) {
     await client.start();
 }
 
-function runCurrentFile(context) {
+async function runCurrentFile(context) {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== 'period') {
         vscode.window.showWarningMessage('Open a .period file to run it.');
+        return;
+    }
+
+    // Save before running so the executed file reflects the editor contents.
+    if (editor.document.isDirty) {
+        const saved = await editor.document.save();
+        if (!saved) {
+            return; // User cancelled the save dialog.
+        }
+    }
+    if (editor.document.isUntitled) {
+        vscode.window.showWarningMessage('Save the file before running it.');
         return;
     }
 
