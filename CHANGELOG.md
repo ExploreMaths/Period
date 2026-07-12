@@ -8,7 +8,7 @@
 
 ### Fixed
 
-## 2.0.0-beta.7 (2026-07-12)
+## 0.2.7 (2026-07-12)
 
 ### Added
 
@@ -25,7 +25,7 @@
 
 - Added regression tests for issues #5–#8: parse errors report a source location instead of a Rust panic, compact `show("...")` calls exit with code 0, non-ASCII identifiers compile and run, and comment lines return an empty completion list.
 
-## 2.0.0-beta.6 (2026-07-04)
+## 0.2.6 (2026-07-04)
 
 ### Added
 
@@ -44,7 +44,7 @@
 - `docs/index.html` homepage performance section updated to a per-workload Chart.js chart with fresh data and a visually distinct `benchmark_long.py` link.
 - `README.md` now embeds `docs/benchmark_long.svg` in a Benchmark section.
 
-## 2.0.0-beta.5 (2026-07-04)
+## 0.2.5 (2026-07-04)
 
 ### Added
 
@@ -59,7 +59,7 @@
 
 - `benchmark_long.py` now benchmarks four 20,000,000-iteration numeric workloads so that Period's zero-runtime-loop optimisations clearly outperform compiled languages on numeric loops.
 
-## 2.0.0-beta.4 (2026-07-04)
+## 0.2.4 (2026-07-04)
 
 ### Fixed
 
@@ -82,7 +82,7 @@
 - `period publish` no longer supports `--push`/`--remote`/`--message`; it only writes files to the local registry directory and prints manual git steps. This removes the risky auto-`git commit/push` behavior and leaves registry updates to the user's normal PR/push workflow.
 - `Value::Class` methods are now stored as first-class callable values so the bytecode VM and tree-walking interpreter can share the same class representation.
 
-## 2.0.0-beta.3 (2026-07-04)
+## 0.2.3 (2026-07-04)
 
 ### Added
 
@@ -98,7 +98,7 @@
   - Registry URL is configurable via the `PERIOD_REGISTRY` environment variable and defaults to `https://raw.githubusercontent.com/ExploreMaths/Period/main/registry`.
   - Downloads use system root certificates via `ureq` + `rustls-native-certs`, fixing TLS errors in environments where bundled roots are insufficient.
 
-## 2.0.0-beta.2 (2026-07-04)
+## 0.2.2 (2026-07-04)
 
 ### Fixed
 
@@ -107,7 +107,7 @@
 - Terminal error caret (`^`) is aligned with the exact source column and underlines the whole quoted token (`^^` for `ab`, `^^^` for `abc`).
 - VS Code extension run button uses the wrapper executable (`period`) and prefers a workspace-local compiler before falling back to PATH, avoiding accidental use of an older system-wide installation.
 
-## 2.0.0-beta.1 (2026-07-03)
+## 0.2.1 (2026-07-03)
 
 ### Breaking redesign
 
@@ -171,7 +171,7 @@
 - Removed the misleading performance chart from `docs/index.html` and reframed `docs/benchmark_long.py` as regression tracking rather than competition with compiled languages.
 - Updated the VS Code extension README and LSP hover docs to use POSIX-style relative imports.
 
-## 1.0.6 (2026-07-01)
+## 0.1.6 (2026-07-01)
 
 ### What's new
 
@@ -180,21 +180,21 @@
 
 ### Full commit
 
-`v1.0.6`
+`v0.1.6`
 
-## 1.0.5 (2026-07-01)
+## 0.1.5 (2026-07-01)
 
 ### What's new
 
-- Fixed local/relative module imports (`import .helper.`) being incorrectly rejected by the pre-runtime semantic check introduced in 1.0.4.
+- Fixed local/relative module imports (`import .helper.`) being incorrectly rejected by the pre-runtime semantic check introduced in 0.1.4.
 - Fixed the REPL and file mode crashing with no output when given lexer-invalid input such as `..`; they now report a friendly parse error instead.
 - Added a cross-platform CI workflow (`.github/workflows/ci.yml`) that runs `cargo test`, all example programs, and an expanded integration test suite on every push and pull request.
 
 ### Full commit
 
-`v1.0.5`
+`v0.1.5`
 
-## 1.0.4 (2026-07-01)
+## 0.1.4 (2026-07-01)
 
 > **Note:** The C/JIT backend, bundled TCC, and numeric fast-path described in this release were removed in the Unreleased redesign. The current implementation uses a single Rust interpreter for all programs.
 
@@ -210,7 +210,7 @@
 - Website copy updated to match the current Rust/JIT/LSP implementation.
 - Package manager documentation removed from the site; the feature remains experimental.
 
-## 1.0.3 (2026-06-28)
+## 0.1.3 (2026-06-28)
 
 > **Note:** The C/JIT backend mentioned in this release was removed in the Unreleased redesign.
 
@@ -221,13 +221,13 @@
 - Long-running numeric loops are now faster than the equivalent C program compiled with TCC by caching a JIT DLL and running it in-process via the `period.exe` wrapper.
 - Updated `docs/index.html` performance chart to use `benchmark_long.py` results with 1M and 5M iteration bars.
 
-## 1.0.2 (2026-06-27)
+## 0.1.2 (2026-06-27)
 
 > **Note:** Keyword case enforcement mentioned in this release was later reverted; the current implementation treats keywords as case-insensitive.
 
 ### What's new
 
-- Bumped the VS Code: extension to v1.0.2.
+- Bumped the VS Code: extension to v0.1.2.
 - Added LSP diagnostics for parse/lex errors, undefined names, and invalid keyword capitalization.
 - Added hover docs for keywords and improved hover/completion details with Period `with` syntax.
 - Fixed LSP crashes on lexer errors and false-positive "undefined variable" diagnostics inside blocks.
@@ -238,7 +238,7 @@
 - Improved VS Code: syntax highlighting for module names, exported functions, and keyword capitalization.
 - Fixed lexer panic on Windows CRLF line endings.
 
-## 1.0.1 (2026-06-27)
+## 0.1.1 (2026-06-27)
 
 > **Note:** The C/JIT numeric fast-path and keyword case enforcement mentioned in this release were removed in the Unreleased redesign.
 
@@ -277,7 +277,7 @@
 
 `760a43e`
 
-## 1.0.0 (2026-06-27)
+## 0.1.0 (2026-06-27)
 
 > **Note:** The numeric fast-path compiler was removed in the Unreleased redesign; all programs now run through the single Rust interpreter.
 

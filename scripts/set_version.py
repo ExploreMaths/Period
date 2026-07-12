@@ -1,6 +1,6 @@
 """Synchronise project version numbers with the latest git tag.
 
-Reads the most recent git tag (e.g. v2.0.0-beta.1), strips the leading 'v',
+Reads the most recent git tag (e.g. v0.2.1), strips the leading 'v',
 and writes that version into:
   - period/Cargo.toml
   - installer/period.iss
