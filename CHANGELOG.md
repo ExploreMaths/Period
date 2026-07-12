@@ -8,8 +8,6 @@
 
 ### Fixed
 
-- `period.exe` wrapper: when the persistent worker reports an error, the local re-run's exit code is now authoritative. Previously a stale worker left running from an older version could make successful programs exit with code 1.
-
 ## 2.0.0-beta.7 (2026-07-12)
 
 ### Added
@@ -21,6 +19,7 @@
 
 - Lexer no longer panics or misreads tokens on lines containing multi-byte characters (e.g. Chinese identifiers): `read_identifier` and `read_number` collected token text by slicing the source line with character-based column numbers used as byte indices, and now collect characters directly instead. (issue #7)
 - The LSP server no longer offers completions while typing inside a `--` comment. (issue #8)
+- `period.exe` wrapper: when the persistent worker reports an error, the local re-run's exit code is now authoritative. Previously a stale worker left running from an older version could make successful programs exit with code 1.
 
 ### Quality
 
