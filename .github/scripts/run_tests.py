@@ -169,6 +169,17 @@ class TestLexerErrors(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("unexpected '..'", result.stdout)
 
+    def test_non_ascii_identifier_does_not_panic(self):
+        # Regression: multi-byte (e.g. Chinese) identifiers used to panic the
+        # lexer with a byte-index-out-of-bounds slice.
+        run_file(
+            """
+            let 变量 be 42.
+            show 变量.
+            """,
+            expected_lines=["42"],
+        )
+
 
 class TestLanguageFeatures(unittest.TestCase):
     def test_string_interpolation(self):
@@ -718,6 +729,23 @@ class TestLSP(unittest.TestCase):
         body = json.dumps(obj)
         return f"Content-Length: {len(body)}\r\n\r\n{body}".encode("utf-8")
 
+    def _lsp_read_message(self, proc):
+        """Read one LSP message from proc.stdout; returns parsed JSON or None."""
+        header = b""
+        while b"\r\n\r\n" not in header:
+            chunk = proc.stdout.read(1)
+            if not chunk:
+                return None
+            header += chunk
+        length = 0
+        for line in header.decode("utf-8").split("\r\n"):
+            if line.lower().startswith("content-length:"):
+                length = int(line.split(":", 1)[1].strip())
+                break
+        if length <= 0:
+            return None
+        return json.loads(proc.stdout.read(length).decode("utf-8"))
+
     def test_lsp_initialize(self):
         # Use binary mode pipes; the LSP server relies on exact CRLF framing.
         proc = subprocess.Popen(
@@ -751,6 +779,87 @@ class TestLSP(unittest.TestCase):
             self.assertGreater(length, 0, "No Content-Length in LSP initialize response")
             response = proc.stdout.read(length).decode("utf-8")
             self.assertIn('"result"', response, f"Initialize response missing result: {response}")
+        finally:
+            proc.stdin.close()
+            proc.stdout.close()
+            proc.stderr.close()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+    def test_lsp_no_completion_in_comment(self):
+        # Regression: typing inside a '--' comment must not offer completions.
+        proc = subprocess.Popen(
+            [PERIOD, "--lsp"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            uri = "file:///comment_test.period"
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"processId": None, "rootUri": None, "capabilities": {}},
+            }))
+            proc.stdin.flush()
+            self.assertEqual(self._lsp_read_message(proc)["id"], 1)
+
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "method": "initialized",
+                "params": {},
+            }))
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "period",
+                        "version": 1,
+                        "text": "-- a comment with let show\nshow 1.\n",
+                    }
+                },
+            }))
+            proc.stdin.flush()
+
+            # Completion inside the comment line (0-based line 0).
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "textDocument/completion",
+                "params": {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": 0, "character": 5},
+                },
+            }))
+            proc.stdin.flush()
+            msg = self._lsp_read_message(proc)
+            while msg is not None and msg.get("id") != 2:
+                msg = self._lsp_read_message(proc)
+            self.assertIsNotNone(msg, "No completion response received")
+            self.assertEqual(msg["result"], [], f"Expected no completions in comment, got {msg['result']}")
+
+            # Sanity: completion on a normal line is non-empty.
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "textDocument/completion",
+                "params": {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": 1, "character": 2},
+                },
+            }))
+            proc.stdin.flush()
+            msg = self._lsp_read_message(proc)
+            while msg is not None and msg.get("id") != 3:
+                msg = self._lsp_read_message(proc)
+            self.assertIsNotNone(msg, "No completion response received")
+            self.assertTrue(len(msg["result"]) > 0, "Expected completions on a normal line")
         finally:
             proc.stdin.close()
             proc.stdout.close()

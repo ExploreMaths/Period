@@ -386,6 +386,11 @@ fn completion(
         return Ok(Some(CompletionResponse::Array(Vec::new())));
     }
 
+    // Don't offer completions inside comments ('--' starts a comment).
+    if trimmed.starts_with("--") {
+        return Ok(Some(CompletionResponse::Array(Vec::new())));
+    }
+
     let mut symbols = Vec::new();
     symbols.extend(keyword_completions());
     symbols.extend(all_builtins());

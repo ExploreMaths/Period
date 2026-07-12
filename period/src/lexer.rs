@@ -374,16 +374,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_number(&mut self) -> Result<TokenKind, String> {
-        let start = self.col;
+        let mut chars = Vec::new();
         let mut saw_dot = false;
         while let Some(c) = self.peek_char() {
-            if c.is_ascii_digit() || c == '_' { self.advance(); }
+            if c.is_ascii_digit() || c == '_' {
+                chars.push(c);
+                self.advance();
+            }
             else if c == '.' && !saw_dot {
                 // Make sure the character after the dot is a digit (decimal point)
                 // rather than the end of the number / statement terminator.
                 if let Some((_, next)) = self.chars.clone().nth(1)
                     && next.is_ascii_digit() {
                         saw_dot = true;
+                        chars.push(c);
                         self.advance();
                         continue;
                     }
@@ -391,9 +395,9 @@ impl<'a> Lexer<'a> {
             }
             else { break; }
         }
-        let end = self.col;
-        let line = self.source.lines().nth(self.line - 1).unwrap();
-        let text: String = line[start - 1..end - 1].chars().filter(|c| *c != '_').collect();
+        // Collect chars instead of slicing the line: columns count characters,
+        // not bytes, so byte-slicing breaks on multi-byte characters.
+        let text: String = chars.into_iter().filter(|c| *c != '_').collect();
         if saw_dot {
             match text.parse() {
                 Ok(n) => Ok(TokenKind::Number(n)),
@@ -408,8 +412,6 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_identifier(&mut self) -> String {
-        let start_line = self.line;
-        let start_col = self.col;
         let mut chars = Vec::new();
         while let Some(c) = self.peek_char() {
             if c.is_alphanumeric() || c == '_' {
@@ -417,12 +419,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
             } else { break; }
         }
-        if self.line == start_line {
-            let line = self.source.lines().nth(start_line - 1).unwrap();
-            line[start_col - 1..self.col - 1].to_string()
-        } else {
-            chars.into_iter().collect()
-        }
+        chars.into_iter().collect()
     }
 }
 
