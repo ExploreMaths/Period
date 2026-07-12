@@ -8,6 +8,17 @@
 
 ### Fixed
 
+## 2.0.0-beta.7 (2026-07-12)
+
+### Fixed
+
+- Lexer no longer panics or misreads tokens on lines containing multi-byte characters (e.g. Chinese identifiers): `read_identifier` and `read_number` collected token text by slicing the source line with character-based column numbers used as byte indices, and now collect characters directly instead. (issue #7)
+- The LSP server no longer offers completions while typing inside a `--` comment. (issue #8)
+
+### Quality
+
+- Added regression tests for issues #5–#8: parse errors report a source location instead of a Rust panic, compact `show("...")` calls exit with code 0, non-ASCII identifiers compile and run, and comment lines return an empty completion list.
+
 ## 2.0.0 (2026-07-07)
 
 This release consolidates the six 2.0.0-beta releases into the first stable 2.x line. The interpreter was completely redesigned between 1.x and 2.0.0-beta.1, and the beta cycle added a bytecode compiler/VM, a package manager, and finally a native Cranelift JIT compiler.
