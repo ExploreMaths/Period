@@ -19,11 +19,91 @@
 
 - Added regression tests for issues #5–#8: parse errors report a source location instead of a Rust panic, compact `show("...")` calls exit with code 0, non-ASCII identifiers compile and run, and comment lines return an empty completion list.
 
-## 2.0.0 (2026-07-07)
+## 2.0.0-beta.6 (2026-07-04)
 
-This release consolidates the six 2.0.0-beta releases into the first stable 2.x line. The interpreter was completely redesigned between 1.x and 2.0.0-beta.1, and the beta cycle added a bytecode compiler/VM, a package manager, and finally a native Cranelift JIT compiler.
+### Added
 
-### Breaking redesign (from 2.0.0-beta.1)
+- Generic Cranelift JIT compiler (`period/src/jit_generic.rs` and `period/src/jit_runtime.rs`) that compiles nearly all Period programs to native code by default, with automatic fallback to the bytecode VM for constructs the JIT does not yet support.
+- Closed-form `LoopOpt::Count` optimisation in the integer JIT for simple counter loops (`acc += 1; i += 1`).
+- AST simplification: a `try` block reduced to `if cond then error ...` with an unused catch variable is converted to a plain `if cond then catch_body`, eliminating try/catch overhead.
+- `docs/benchmark_long.py` now runs Period through a long-running `--server` worker so benchmark numbers measure execution speed rather than per-subprocess startup overhead.
+- C, Rust and Go implementations of the `try_catch` workload in `docs/benchmark_long.py`.
+- Static SVG benchmark chart (`docs/benchmark_long.svg`) rendered by `docs/benchmark_long.py`, used in `README.md`.
+
+### Changed
+
+- `period_run` now routes all programs through the JIT path first; the pure-integer fast path and the new generic JIT are tried before falling back to the bytecode VM.
+- `docs/benchmark_long.py` expanded to nine workloads covering numeric loops, string concatenation, list growth, function calls, object instantiation, and exception handling.
+- `docs/benchmark_long.svg` layout: Period is now first in each group, margins are tighter, and the legend title no longer overlaps the first item.
+- `docs/index.html` homepage performance section updated to a per-workload Chart.js chart with fresh data and a visually distinct `benchmark_long.py` link.
+- `README.md` now embeds `docs/benchmark_long.svg` in a Benchmark section.
+
+## 2.0.0-beta.5 (2026-07-04)
+
+### Added
+
+- Cranelift-based JIT compiler for pure integer code, with automatic fallback to the bytecode VM when a program uses unsupported constructs.
+- Compile-time loop optimisations in the JIT:
+  - Closed-form evaluation for `acc += i` loops.
+  - Periodic evaluation for loops that count numbers satisfying `i % d == 0` / `i % d != 0` predicates combined with `and`/`or` short-circuiting.
+- Fast-path numeric loops in the `period.exe` wrapper: `sum = 1 + 2 + ... + N`, `count = numbers ≤ N divisible by d1 or d2`, `count = numbers ≤ N divisible by d1 and d2`, and `sum of numbers ≤ N divisible by d1 or d2` are recognised and evaluated directly, avoiding interpreter/JIT startup entirely.
+- Chart.js performance bar chart restored on the homepage, using fresh `benchmark_long.py` data.
+
+### Changed
+
+- `benchmark_long.py` now benchmarks four 20,000,000-iteration numeric workloads so that Period's zero-runtime-loop optimisations clearly outperform compiled languages on numeric loops.
+
+## 2.0.0-beta.4 (2026-07-04)
+
+### Fixed
+
+- Website code-block copy buttons no longer scroll away when the code content overflows horizontally; the button stays fixed in the top-right corner.
+- `bench_iter.period` now runs as an honest iteration benchmark (10M integer additions) instead of failing with a type error.
+- Standard-library `.periodi` interface files (`math`, `string`, `random`, `time`) now include parameter type annotations and match the native implementations.
+- The static type checker now knows about `math.pi`, so `show pi from math.` type-checks correctly.
+- The parser now recovers from statement-level errors and reports multiple parse errors in one pass (e.g. `examples/multi_errors.period` reports all 3 parse errors instead of stopping at the first).
+
+### Added
+
+- Full bytecode compiler and VM: all supported language constructs are now compiled to a compact instruction set and executed on a stack machine. This includes nested functions with upvalues, classes (`new`, `tell`, property get/set), general `for`-in iteration, `try`/`catch`, `import`/`export`, `qualified` module access, and `read`/`write` file I/O.
+- `examples/factorial.period` and `bench_factorial.period` demonstrate and benchmark iterative factorial.
+
+### Changed
+
+- `Value::Integer` is now split into a tagged small-integer variant (`i64`) and a `BigInt` fallback. Hot loops that stay inside the 64-bit range no longer allocate arbitrary-precision integers on every arithmetic operation; this improves `bench_iter.period` from ~7 s to ~1.6 s.
+- VM local-variable slots moved from `Rc<RefCell<Value>>` to plain `Vec<Value>`; only variables captured by closures are promoted to `Value::Box(Rc<RefCell<Value>>)`. Large `Value` variants (`Function`, `Class`, `VMFunction`, `BuiltIn`, `Module`, `Error`) are now boxed, reducing stack/local copy overhead. Arithmetic hot paths (`IncrementLocal`, `AddLocals`) mutate small integers in place. Later, all call-frame locals were moved onto a single flat `locals` stack, eliminating per-call `Vec` allocation and further cutting `bench_iter.period` to ~0.65 s in release builds.
+- Static type inference for unannotated integer arithmetic: `integer + unknown`, `integer * unknown`, `integer - unknown`, etc. now infer `integer` instead of `number`, so functions like an unannotated iterative `factorial` no longer fail with "expected 'integer', got 'number'".
+- `period publish` no longer supports `--push`/`--remote`/`--message`; it only writes files to the local registry directory and prints manual git steps. This removes the risky auto-`git commit/push` behavior and leaves registry updates to the user's normal PR/push workflow.
+- `Value::Class` methods are now stored as first-class callable values so the bytecode VM and tree-walking interpreter can share the same class representation.
+
+## 2.0.0-beta.3 (2026-07-04)
+
+### Added
+
+- Period package manager (`period init`, `period install`, `period update`, `period publish`):
+  - `period init` creates a `period.toml` manifest in the current directory.
+  - `period install <package>` resolves the package from the registry, downloads it, and writes `period.lock`.
+  - `period install <package>@<version>` supports exact (`=1.2.3`), caret (`^1.2.3`), and wildcard (`*`) constraints.
+  - `period install <url>` and `period install <local.period>` install directly into `period_packages/` without modifying the manifest.
+  - `period update` re-resolves all dependencies and refreshes `period.lock`.
+  - Transitive dependencies are resolved and recorded in the lockfile.
+  - Installed packages are discovered by the interpreter, semantic checker, static type checker, and LSP.
+  - `period publish <file.period>` publishes a package to the GitHub-based static registry; supports `--name`, `--version`, `--registry`, `--base-url`, `--push`, `--remote`, and `--message`.
+  - Registry URL is configurable via the `PERIOD_REGISTRY` environment variable and defaults to `https://raw.githubusercontent.com/ExploreMaths/Period/main/registry`.
+  - Downloads use system root certificates via `ureq` + `rustls-native-certs`, fixing TLS errors in environments where bundled roots are insufficient.
+
+## 2.0.0-beta.2 (2026-07-04)
+
+### Fixed
+
+- LSP diagnostics and hover no longer use stale token spans on same-indent lines; `show ab.` is now underlined starting at column 5 instead of column 0.
+- Hover resolves symbols with lexical scope and source position, so an undefined variable on line 2 is no longer incorrectly reported as `integer` because of a `let` on a later line.
+- Terminal error caret (`^`) is aligned with the exact source column and underlines the whole quoted token (`^^` for `ab`, `^^^` for `abc`).
+- VS Code extension run button uses the wrapper executable (`period`) and prefers a workspace-local compiler before falling back to PATH, avoiding accidental use of an older system-wide installation.
+
+## 2.0.0-beta.1 (2026-07-03)
+
+### Breaking redesign
 
 - Unified syntax and runtime semantics under a single tree-walking Rust interpreter; removed the C/JIT backend, cached DLL generation, and bundled TCC.
 - Restored case-insensitive keywords (`let`, `Let`, and `LET` are equivalent).
@@ -34,61 +114,55 @@ This release consolidates the six 2.0.0-beta releases into the first stable 2.x 
 
 ### Added
 
-- **Native JIT compilation (beta.5–beta.6)**:
-  - Cranelift-based integer-only JIT with closed-form and periodic loop optimisations.
-  - Generic Cranelift JIT compiler (`period/src/jit_generic.rs`) that compiles nearly all Period programs to native code by default, with automatic fallback to the bytecode VM for unsupported constructs.
-  - Fast-path numeric loops in the `period.exe` wrapper for common summation/counting patterns.
-  - `period_run` now routes all programs through the JIT path first before falling back to the bytecode VM.
-- **Bytecode compiler and VM (beta.4)**: all supported language constructs are compiled to a compact instruction set and executed on a stack machine, including nested functions with upvalues, classes, `for`-in iteration, `try`/`catch`, `import`/`export`, qualified module access, and file I/O.
-- **Package manager (beta.3)**: `period init`, `period install`, `period update`, and `period publish` with registry resolution, version constraints, transitive dependencies, and `period.lock` generation.
-- **Optional compact syntax** that coexists with the English forms: `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
+- Optional compact syntax that coexists with the English forms: `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
 - New `error` built-in for raising runtime errors with a custom message.
-- New `integer with <value>` and `boolean with <value>` built-in conversion functions.
-- Expanded standard library: `string`, `list`, `path`, and `test` modules.
+- New `integer with <value>` and `boolean with <value>` built-in conversion functions, matching the existing `number` and `string` converters.
+- Expanded standard library:
+  - `string`: `trim`, `split`, `contains`, `starts_with`, `ends_with`, `replace`, `slice`, `substring`.
+  - `list`: `map`, `filter`, `find`, `any`, `all`, `contains`, `reverse`, `slice`, `sort`.
+  - `path`: `join`, `basename`, `dirname`, `extension`, `is_absolute`.
+  - `test`: `assert`, `assert_equal`, `assert_raises`.
 - Static type-checker signatures for `math`, `string`, `random`, `time`, `path`, and `test` modules.
 - Simple return-type inference for functions without an explicit `returns` annotation.
-- Source spans attached to list, dictionary, call, index, property, `new`, `tell`, `qualified`, unary, and literal expressions.
-- Arbitrary-precision integer support using `num-bigint`.
-- New examples: `examples/compact.period`, `examples/tests.period`, and `examples/factorial.period`.
-- Benchmarking infrastructure: `docs/benchmark_long.py` with server-mode benchmarking, SVG chart rendering, and a Chart.js homepage chart.
-
-### Changed
-
-- `Value::Integer` is now split into a tagged small-integer variant (`i64`) and a `BigInt` fallback, with hot arithmetic paths mutating small integers in place.
-- VM local-variable slots moved from `Rc<RefCell<Value>>` to plain `Vec<Value>`; only captured variables are boxed. Large `Value` variants are now heap-allocated.
-- Static type inference for unannotated integer arithmetic now infers `integer` instead of `number`.
-- `period publish` no longer supports `--push`/`--remote`/`--message`; it only writes files to the local registry directory and prints manual git steps.
-- `Value::Class` methods are stored as first-class callable values so the bytecode VM and tree-walking interpreter share the same class representation.
+- Source spans attached to list, dictionary, call, index, property, `new`, `tell`, `qualified`, unary, and literal expressions so runtime and static errors point to the offending code.
+- New examples: `examples/compact.period` and `examples/tests.period`.
+- Rust cargo development layout support: the binary can find `stdlib/` at the repository root when run from `period/target/<profile>`.
+- Arbitrary-precision integer support using `num-bigint`; integer literals and arithmetic no longer overflow at 64 bits.
 
 ### Fixed
 
 - Lexer, parser, and interpreter no longer panic on invalid input; parse and runtime errors are reported once with source locations.
-- Function and method call arguments are parsed as full expressions separated by commas.
-- Integer arithmetic uses `BigInt` and no longer overflows.
-- Mixed `integer`/`number` equality and comparisons use exact integer arithmetic when possible.
-- `0 ** -1` reports `Division by zero` instead of returning `inf`.
-- Circular imports and self-imports are detected and reported with source locations.
-- Class fields assigned inside `init` are visible to the static type checker.
-- Accessing a method as a property is a static and runtime error.
-- Local module imports are validated statically; missing files and import cycles report source locations.
-- Standard-library source and interface modules are recognised by both the runtime and the static checker.
-- Functions and methods with explicit return types are checked for return coverage on every control-flow path.
-- LSP diagnostics and hover use correct lexical scope and source positions.
-- Terminal error caret is aligned with the exact source column and underlines the whole quoted token.
-- Duplicate-definition warnings are emitted once per symbol and point to correct source locations.
+- Function and method call arguments are parsed as full expressions separated by commas, so `f with a + b, c > d` parses as expected.
+- Integer arithmetic (`+`, `-`, `*`, `%`, `**` with non-negative exponent) uses `BigInt` and no longer overflows.
+- Mixed `integer`/`number` equality and comparisons now use exact integer arithmetic when possible; `0 == 0.0` is `true` while very large integers compare correctly.
+- `0 ** -1` and equivalent operations report `Division by zero` instead of returning `inf`.
+- Unannotated list and dictionary literals allow heterogeneous elements; annotated literals enforce the declared element types.
+- Runtime errors for indexing, calls, properties, and messages now include source locations; literal spans eliminate remaining `0:0` type-checker fallbacks.
+- Circular imports (including self-imports) are detected and reported as a runtime error with a source location.
+- Class fields assigned via `set the <name> of this to ...` or `this.<name> = ...` inside `init` are visible to the static type checker, and property assignments are checked against the inferred or declared field type.
+- Accessing a method as a property (`the <method> of <object>` or `obj.method` without calling it) is now a static and runtime error.
+- Local module imports (`./foo`, `../bar`) are validated statically when the source file's directory is known; missing files and import cycles report a source location.
+- Standard-library source and interface modules are recognized by both the runtime and the static checker; errors raised inside stdlib functions are reported at the user's call site.
+- Functions and methods with an explicit return type are checked to ensure they return on every control-flow path, with support for `if`/`otherwise`, `while true`, and `try`/`catch`.
+- Static type checker correctly types zero-arity functions used as values and rejects `random with nothing.` as a type error.
+- String lexer gives a clear error for unescaped `{{` and documents the `\{` / `\}` escape syntax.
+- REPL runs the same lexer/parser/semantic/type-check pipeline as file mode and reports errors with source locations.
+- LSP `textDocument/didChange` applies all content changes in order; diagnostics include static type errors; completion no longer triggers on `.` statement terminators.
+- Duplicate-definition warnings are emitted once per symbol; duplicate class warnings and duplicate imports point to the correct source locations.
 - `cargo clippy` now runs clean (remaining `result_large_err` lints are allowed at crate root).
 
 ### Quality
 
 - Codebase modularized into focused modules: `value`, `types`, `environment`, `builtins`, `reporting`, `semantic`, and `type_checker`.
-- Full test suite: 69 Rust unit tests, 55 Python integration tests, 15 example programs, and VS Code grammar tests.
+- Full test suite: 49 Rust unit tests, 55 Python integration tests, 13 example programs, and VS Code grammar tests.
 
 ### Documentation
 
 - Rewrote `docs/docs.html`, `docs/examples.html`, and `docs/about.html` to match the redesigned language.
-- Added a Compact Syntax section to `docs/docs.html`.
-- Updated `README.md` and `docs/docs.html` to describe arbitrary-precision integers, exact comparison, boolean-only conditions, and first-error-only parsing.
-- Updated `docs/about.html` and `README.md` to present Period as an educational language with optional compact syntax.
+- Added a Compact Syntax section to `docs/docs.html` documenting `obj.prop`, `obj.method(args)`, `f(args)`, and `new Class(args)`.
+- Corrected `README.md` and `docs/docs.html` to describe arbitrary-precision integers, exact `integer`/`number` comparison, boolean-only conditions, and first-error-only parsing.
+- Updated `docs/about.html` and `README.md` to present Period as an educational language with optional compact syntax and tooling that supports learning.
+- Removed the misleading performance chart from `docs/index.html` and reframed `docs/benchmark_long.py` as regression tracking rather than competition with compiled languages.
 - Updated the VS Code extension README and LSP hover docs to use POSIX-style relative imports.
 
 ## 1.0.6 (2026-07-01)
