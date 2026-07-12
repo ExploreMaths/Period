@@ -192,6 +192,17 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["Hello, World!"],
         )
 
+    def test_single_quoted_strings(self):
+        run_file(
+            """
+            let name be 'World'.
+            show 'Hello, {name}!'.
+            show 'say "hi"'.
+            show 'it\\'s'.
+            """,
+            expected_lines=["Hello, World!", 'say "hi"', "it's"],
+        )
+
     def test_try_catch(self):
         run_file(
             """

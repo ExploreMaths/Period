@@ -219,7 +219,7 @@ impl<'a> Lexer<'a> {
                 if self.peek_char() == Some('=') { self.advance(); Ok(Some(TokenKind::NotEq)) }
                 else { Err(self.error("unexpected '!'")) }
             }
-            '"' => Ok(Some(self.read_string_token()?)),
+            '"' | '\'' => Ok(Some(self.read_string_token()?)),
             d if d.is_ascii_digit() => Ok(Some(self.read_number()?)),
             a if a.is_alphabetic() || a == '_' => {
                 let name = self.read_identifier();
@@ -280,7 +280,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_string_token(&mut self) -> Result<TokenKind, String> {
-        self.advance(); // opening quote
+        // Both "double" and 'single' quotes delimit strings, with identical
+        // semantics including interpolation.
+        let quote = self.advance().unwrap_or('"');
         let mut literal = String::new();
         let mut parts: Vec<StringPart> = Vec::new();
         let mut has_interp = false;
@@ -293,13 +295,14 @@ impl<'a> Lexer<'a> {
 
         let mut closed = false;
         while let Some(c) = self.peek_char() {
-            if c == '"' { self.advance(); closed = true; break; }
+            if c == quote { self.advance(); closed = true; break; }
             if c == '\\' {
                 self.advance();
                 match self.advance() {
                     Some('n') => literal.push('\n'),
                     Some('t') => literal.push('\t'),
                     Some('"') => literal.push('"'),
+                    Some('\'') => literal.push('\''),
                     Some('\\') => literal.push('\\'),
                     Some('{') => literal.push('{'),
                     Some('}') => literal.push('}'),
@@ -313,7 +316,7 @@ impl<'a> Lexer<'a> {
                 has_interp = true;
                 flush(&mut literal, &mut parts);
                 self.advance(); // '{'
-                let expr = self.read_interpolation_expr()?;
+                let expr = self.read_interpolation_expr(quote)?;
                 parts.push(StringPart::Expr(expr));
             } else {
                 literal.push(c);
@@ -333,11 +336,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_interpolation_expr(&mut self) -> Result<String, String> {
+    fn read_interpolation_expr(&mut self, quote: char) -> Result<String, String> {
         let mut expr = String::new();
         let mut depth = 1;
         while let Some(c) = self.peek_char() {
-            if c == '"' { return Err(self.error("unterminated interpolation expression")); }
+            if c == quote { return Err(self.error("unterminated interpolation expression")); }
             if c == '{' {
                 depth += 1;
                 expr.push(c);
@@ -458,6 +461,20 @@ mod tests {
     fn tokenize_string_literal() {
         let toks = tokens("show \"hello\".");
         assert!(matches!(toks[1], TokenKind::String(ref s) if s == "hello"));
+    }
+
+    #[test]
+    fn tokenize_single_quoted_string() {
+        let toks = tokens("show 'hello'.");
+        assert!(matches!(toks[1], TokenKind::String(ref s) if s == "hello"));
+
+        // Double quotes need no escaping inside single-quoted strings.
+        let toks = tokens("show 'say \"hi\"'.");
+        assert!(matches!(toks[1], TokenKind::String(ref s) if s == "say \"hi\""));
+
+        // Escaped single quote.
+        let toks = tokens("show 'it\\'s'.");
+        assert!(matches!(toks[1], TokenKind::String(ref s) if s == "it's"));
     }
 
     #[test]

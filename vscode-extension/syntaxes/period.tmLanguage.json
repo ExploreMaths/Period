@@ -167,9 +167,26 @@
       ]
     },
     "string": {
-      "name": "string.quoted.double.period",
-      "begin": "\"",
-      "end": "\"",
+      "patterns": [
+        {
+          "name": "string.quoted.double.period",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#string-content" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.period",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "include": "#string-content" }
+          ]
+        }
+      ]
+    },
+    "string-content": {
       "patterns": [
         {
           "name": "constant.character.escape.period",

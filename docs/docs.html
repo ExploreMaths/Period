@@ -93,7 +93,7 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
 <span class="builtin">show</span> result<span class="period">.</span></code></pre>
 
       <h3>Strings</h3>
-      <p>Strings are enclosed in double quotes and support <code>\n</code>, <code>\t</code>, <code>\"</code>, and <code>\\</code> escapes. You can interpolate expressions inside <code>{ }</code>; each expression is automatically converted to its string representation. To include a literal brace, escape it as <code>\{</code> or <code>\}</code>.</p>
+      <p>Strings are enclosed in double or single quotes (equivalent) and support <code>\n</code>, <code>\t</code>, <code>\"</code>, <code>\'</code>, and <code>\\</code> escapes. You can interpolate expressions inside <code>{ }</code>; each expression is automatically converted to its string representation. To include a literal brace, escape it as <code>\{</code> or <code>\}</code>.</p>
       <pre><code><span class="keyword">let</span> name <span class="keyword">be</span> <span class="string">"Period"</span><span class="period">.</span>
 <span class="keyword">let</span> lines <span class="keyword">be</span> <span class="string">"First line\nSecond line"</span><span class="period">.</span>
 <span class="builtin">show</span> <span class="string">"Hello, {name}!"</span><span class="period">.</span>

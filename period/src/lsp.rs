@@ -370,23 +370,23 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
 /// Returns true if the cursor position on `line` is inside a `--` comment.
 /// A `--` inside a string literal does not start a comment.
 fn cursor_in_comment(line: &str, cursor: usize) -> bool {
-    let mut in_string = false;
+    let mut string_quote = '\0';
     let mut escaped = false;
     let mut prev = '\0';
     for (i, c) in line.chars().enumerate() {
         if i >= cursor {
             break;
         }
-        if in_string {
+        if string_quote != '\0' {
             if escaped {
                 escaped = false;
             } else if c == '\\' {
                 escaped = true;
-            } else if c == '"' {
-                in_string = false;
+            } else if c == string_quote {
+                string_quote = '\0';
             }
-        } else if c == '"' {
-            in_string = true;
+        } else if c == '"' || c == '\'' {
+            string_quote = c;
         } else if c == '-' && prev == '-' {
             return true;
         }

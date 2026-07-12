@@ -75,7 +75,7 @@ function disposeInterpolationDecorations() {
 function findStringBraces(document) {
     const text = document.getText();
     const braces = [];
-    const stringRegex = /"([^"\\]|\\.)*"/gs;
+    const stringRegex = /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/gs;
     let match;
     while ((match = stringRegex.exec(text)) !== null) {
         const strStart = match.index + 1; // after opening "

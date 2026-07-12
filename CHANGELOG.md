@@ -4,6 +4,8 @@
 
 ### Added
 
+- Single-quoted strings: `'...'` is equivalent to `"..."`, including interpolation and escapes (`\'` is now a recognised escape).
+
 ### Changed
 
 ### Fixed
