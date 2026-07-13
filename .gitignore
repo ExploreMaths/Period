@@ -8,7 +8,9 @@ venv/
 # Build artifacts
 dist/
 *.exe
+*.exe.old
 *.dll
+*.dll.old
 *.build/
 *.dist/
 *.onefile-build/
