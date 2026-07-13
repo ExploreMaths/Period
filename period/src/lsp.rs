@@ -1195,22 +1195,29 @@ fn effective_return_type(
     return_type.clone().or_else(|| infer_return_type(body, func_returns))
 }
 
-/// Infer a function's return type from its `return` statements. All returned
-/// expressions must infer to the same type, otherwise give up. Returns of
-/// nested functions are not collected (they belong to the nested function).
+/// Infer a function's return type from its `return` statements. Distinct
+/// inferred types are shown as a union in the language's list style:
+/// `number or string`, or `integer, number or string` for three or more.
+/// Returns of nested functions are not collected (they belong to the
+/// nested function).
 fn infer_return_type(body: &[Stmt], func_returns: &HashMap<String, String>) -> Option<String> {
     let mut exprs = Vec::new();
     collect_return_exprs(body, &mut exprs);
-    let mut inferred: Option<String> = None;
+    let mut types: Vec<String> = Vec::new();
     for expr in exprs {
         let t = infer_expr_with_funcs(expr, func_returns);
-        match &inferred {
-            None => inferred = Some(t),
-            Some(prev) if *prev == t => {}
-            Some(_) => return None,
+        if !types.contains(&t) {
+            types.push(t);
         }
     }
-    inferred
+    match types.len() {
+        0 => None,
+        1 => Some(types[0].clone()),
+        _ => {
+            let last = types.pop().unwrap();
+            Some(format!("{} or {}", types.join(", "), last))
+        }
+    }
 }
 
 fn collect_return_exprs<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Expr>) {

@@ -1171,8 +1171,8 @@ class TestLSP(unittest.TestCase):
 
             self.assertIn("define a -> integer", hover_at(15, "a"))
             self.assertIn("define b -> integer", hover_at(16, "b"))
-            # Conflicting return types give up and fall back to nothing.
-            self.assertIn("define mixed -> nothing", hover_at(17, "mixed"))
+            # Conflicting return types are shown as a union.
+            self.assertIn("define mixed -> integer or string", hover_at(17, "mixed"))
         finally:
             proc.stdin.close()
             proc.stdout.close()
