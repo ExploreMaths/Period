@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -7,8 +7,11 @@ use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
     CompletionResponse, Diagnostic, DiagnosticSeverity, GotoDefinitionParams, Hover, HoverContents,
     HoverParams, HoverProviderCapability, Location, MarkupContent, MarkupKind,
-    Position, PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentContentChangeEvent,
-    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
+    Position, PublishDiagnosticsParams, Range, SemanticToken, SemanticTokens,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensServerCapabilities, SemanticTokenType, ServerCapabilities,
+    TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncCapability,
+    TextDocumentSyncKind, Url,
 };
 
 use crate::ast::*;
@@ -40,6 +43,20 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             ..Default::default()
         }),
         definition_provider: Some(lsp_types::OneOf::Left(true)),
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                legend: SemanticTokensLegend {
+                    token_types: vec![
+                        SemanticTokenType::FUNCTION,
+                        SemanticTokenType::TYPE,
+                        SemanticTokenType::METHOD,
+                    ],
+                    token_modifiers: vec![],
+                },
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                ..Default::default()
+            },
+        )),
         ..Default::default()
     })?;
 
@@ -98,6 +115,16 @@ fn handle_request(
         "textDocument/definition" => {
             let params: GotoDefinitionParams = serde_json::from_value(req.params)?;
             let result = definition(documents, params)?;
+            let result_value = serde_json::to_value(result)?;
+            connection.sender.send(Message::Response(Response {
+                id,
+                result: Some(result_value),
+                error: None,
+            }))?;
+        }
+        "textDocument/semanticTokens/full" => {
+            let params: SemanticTokensParams = serde_json::from_value(req.params)?;
+            let result = semantic_tokens(documents, params)?;
             let result_value = serde_json::to_value(result)?;
             connection.sender.send(Message::Response(Response {
                 id,
@@ -499,6 +526,87 @@ fn span_to_range(span: &Span, len: u32) -> Range {
         start: Position { line, character: start_col },
         end: Position { line, character: end_col },
     }
+}
+
+// Semantic token type indices, matching the legend order in the server capabilities.
+const SEM_TOKEN_FUNCTION: u32 = 0;
+const SEM_TOKEN_TYPE: u32 = 1;
+const SEM_TOKEN_METHOD: u32 = 2;
+
+fn semantic_tokens(
+    documents: &Arc<Mutex<HashMap<Url, String>>>,
+    params: SemanticTokensParams,
+) -> Result<Option<SemanticTokens>, Box<dyn Error>> {
+    let text = match documents.lock().unwrap().get(&params.text_document.uri) {
+        Some(t) => t.clone(),
+        None => return Ok(None),
+    };
+
+    let empty = SemanticTokens { result_id: None, data: vec![] };
+    let program = match semantic::try_parse(&text) {
+        Ok(p) => p,
+        Err(_) => return Ok(Some(empty)),
+    };
+
+    let mut functions = HashSet::new();
+    let mut classes = HashSet::new();
+    let mut methods = HashSet::new();
+    for stmt in &program.statements {
+        match stmt {
+            Stmt::Define { name, .. } => {
+                functions.insert(name.clone());
+            }
+            Stmt::Class { name, methods: class_methods, .. } => {
+                classes.insert(name.clone());
+                for m in class_methods {
+                    if let Stmt::Define { name: mname, .. } = m {
+                        methods.insert(mname.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let tokens = match lex_tokens(&text) {
+        Ok(t) => t,
+        Err(_) => return Ok(Some(empty)),
+    };
+
+    let mut data = Vec::new();
+    let mut prev_line = 0u32;
+    let mut prev_col = 0u32;
+    for tok in &tokens {
+        let name = match &tok.kind {
+            // Skip qualified/module idents like `foo.bar` or `./mod`.
+            TokenKind::Ident(n) if !n.contains('.') && !n.contains('/') => n,
+            _ => continue,
+        };
+        let token_type = if classes.contains(name) {
+            SEM_TOKEN_TYPE
+        } else if functions.contains(name) {
+            SEM_TOKEN_FUNCTION
+        } else if methods.contains(name) {
+            SEM_TOKEN_METHOD
+        } else {
+            continue;
+        };
+        let line = (tok.span.line as u32).saturating_sub(1);
+        let col = (tok.span.col as u32).saturating_sub(1);
+        let delta_line = line - prev_line;
+        let delta_start = if delta_line == 0 { col - prev_col } else { col };
+        data.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length: name.chars().count() as u32,
+            token_type,
+            token_modifiers_bitset: 0,
+        });
+        prev_line = line;
+        prev_col = col;
+    }
+
+    Ok(Some(SemanticTokens { result_id: None, data }))
 }
 
 fn ident_name(kind: &TokenKind) -> Option<String> {
