@@ -7,6 +7,7 @@
     { "include": "#comment" },
     { "include": "#statement-terminator" },
     { "include": "#class-declaration" },
+    { "include": "#function-declaration" },
     { "include": "#new-expression" },
     { "include": "#module-reference" },
     { "include": "#keyword" },
@@ -54,6 +55,18 @@
               "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
             }
           ]
+        }
+      ]
+    },
+    "function-declaration": {
+      "patterns": [
+        {
+          "name": "meta.function.declaration.period",
+          "match": "\\b(define)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.period" },
+            "2": { "name": "entity.name.function.period" }
+          }
         }
       ]
     },
