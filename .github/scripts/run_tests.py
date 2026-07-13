@@ -170,6 +170,18 @@ class TestLexerErrors(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("unexpected '..'", result.stdout)
 
+    def test_repl_preserves_variables_across_inputs(self):
+        result = run_period([], input_text="let a be 1.\nshow a.\nshow a + 1.\nexit.\n")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("1", result.stdout)
+        self.assertIn("2", result.stdout)
+        self.assertNotIn("Undefined variable", result.stdout)
+
+    def test_repl_does_not_repeat_history_warnings(self):
+        result = run_period([], input_text="let x be 1.\nlet x be 2.\nshow x.\nexit.\n")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout.count("redefinition of 'x'"), 1, result.stdout)
+
     def test_non_ascii_identifier_does_not_panic(self):
         # Regression: multi-byte (e.g. Chinese) identifiers used to panic the
         # lexer with a byte-index-out-of-bounds slice.

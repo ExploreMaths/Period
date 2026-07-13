@@ -80,7 +80,7 @@ impl Interpreter {
         self.interpret_tree_walk(program)
     }
 
-    fn interpret_tree_walk(&mut self, program: &Program) -> Result<(), Control> {
+    pub(crate) fn interpret_tree_walk(&mut self, program: &Program) -> Result<(), Control> {
         for stmt in &program.statements {
             self.execute(stmt)?;
         }

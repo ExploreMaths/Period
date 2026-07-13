@@ -553,6 +553,10 @@ pub(crate) fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut buffer = String::new();
     let mut repl_history: Vec<ast::Stmt> = Vec::new();
+    // Diagnostics of the already-accepted history, so each warning is shown
+    // only once instead of being re-reported on every subsequent input.
+    let mut history_diags: std::collections::HashMap<(usize, usize, String), usize> =
+        std::collections::HashMap::new();
 
     loop {
         let prompt = if buffer.is_empty() { ">>> " } else { "... " };
@@ -597,7 +601,30 @@ pub(crate) fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                 let trial_program = ast::Program { statements: trial_history };
                 let mut had_error = false;
                 let (sem_errors, sem_warnings) = semantic::program_diagnostics(&trial_program, current_path.as_deref());
-                for (span, msg) in sem_warnings {
+                let (type_errors, type_warnings) = if sem_errors.is_empty() {
+                    let mut tc = type_checker::TypeChecker::new();
+                    tc.check(&trial_program)
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                // Only surface warnings that are new relative to the
+                // already-accepted history (multiset difference); history
+                // never contains errors, so errors are always fresh.
+                let mut seen = history_diags.clone();
+                let mut fresh = |diags: &[(ast::Span, String)]| -> Vec<(ast::Span, String)> {
+                    let mut out = Vec::new();
+                    for (span, msg) in diags {
+                        let key = (span.line, span.col, msg.clone());
+                        if let Some(n) = seen.get_mut(&key)
+                            && *n > 0 {
+                                *n -= 1;
+                                continue;
+                            }
+                        out.push((span.clone(), msg.clone()));
+                    }
+                    out
+                };
+                for (span, msg) in fresh(&sem_warnings) {
                     reporting::report_source_warning("<repl>", &buffer, &span, &msg);
                 }
                 for (span, msg) in sem_errors {
@@ -605,9 +632,7 @@ pub(crate) fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                     had_error = true;
                 }
                 if !had_error {
-                    let mut tc = type_checker::TypeChecker::new();
-                    let (type_errors, type_warnings) = tc.check(&trial_program);
-                    for (span, msg) in type_warnings {
+                    for (span, msg) in fresh(&type_warnings) {
                         reporting::report_source_warning("<repl>", &buffer, &span, &msg);
                     }
                     for (span, msg) in type_errors {
@@ -617,7 +642,14 @@ pub(crate) fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 if !had_error {
                     repl_history.extend(program.statements.clone());
-                    if let Err(ctrl) = interp.interpret(&program) {
+                    history_diags.clear();
+                    for (span, msg) in sem_warnings.into_iter().chain(type_warnings) {
+                        *history_diags.entry((span.line, span.col, msg)).or_insert(0) += 1;
+                    }
+                    // Execute on the tree-walking interpreter: its environment
+                    // persists across inputs, unlike the per-program bytecode
+                    // VM whose locals vanish after each run.
+                    if let Err(ctrl) = interp.interpret_tree_walk(&program) {
                         match ctrl {
                             interpreter::Control::RuntimeError(msg, span) => {
                                 reporting::report_runtime_error("<repl>", &buffer, &msg, Some(&span));

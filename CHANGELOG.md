@@ -27,6 +27,7 @@
 - The bytecode VM could not iterate a `range` stored in a variable (`for i in r repeat:` reported "Cannot iterate over range"); it now works like the other backends.
 - The crate now builds with zero warnings (unused imports, dead code, and unreachable patterns cleaned up).
 - Dictionary output and key iteration order are now deterministic (sorted by key text) on every run and every execution backend; previously `HashMap` iteration order made `show` of a dict and `for` loops over dict keys vary between runs and between the JIT, VM, and tree-walk paths.
+- The REPL lost variables between inputs (`let a be 1.` followed by `show a.` reported "Undefined variable 'a'"): each input ran as a standalone bytecode program whose locals vanished after execution. Inputs now run on the persistent tree-walking interpreter, and warnings from earlier inputs are no longer re-reported on every subsequent line.
 
 ## 0.2.7 (2026-07-12)
 
