@@ -1187,6 +1187,13 @@ impl GenericJitCompiler {
                 }
                 Op::Return => {
                     let ret = stack.pop().unwrap_or_else(|| call0(module, helpers, &mut builder, helpers.nothing, &[]));
+                    // Check return type annotation, same as the VM does.
+                    if let Some(ref ann) = func.return_type {
+                        let (ptr, len) = emit_string(module, helpers, &mut builder, &mut name_strings, ann, usize::MAX);
+                        let res = call(module, helpers, &mut builder, helpers.check_type, &[interp_ptr, ret, ptr, len]);
+                        guard_error(module, helpers, &mut builder, res, handler);
+                        drop_value(module, helpers, &mut builder, res);
+                    }
                     builder.ins().return_(&[ret]);
                     terminated = true;
                 }

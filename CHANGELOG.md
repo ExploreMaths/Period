@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- Type annotations on parameters and return values are now enforced at runtime on every execution path. Previously, annotated single-expression functions were inlined away (dropping their checks), the generic JIT's `Op::Return` skipped the return-type check, and the JIT call dispatch (`period_call`) and the bytecode VM skipped parameter-annotation checks entirely, so a dynamically-typed value of the wrong type could pass through an annotated function silently.
+- `period/stdlib/` is back in sync with the root `stdlib/` (it was missing `path` and `test` and had a stale `list`), so the installed interpreter sees the same standard library as a source checkout.
+
 ## 0.2.7 (2026-07-12)
 
 ### Added

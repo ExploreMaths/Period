@@ -733,6 +733,12 @@ impl Interpreter {
                         fv.func.span.clone(),
                     ));
                 }
+                // Check parameter type annotations, same as the tree-walk path.
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(ann) = &fv.func.params[i].1 {
+                        self.check_type(arg, ann, &fv.func.span.clone())?;
+                    }
+                }
                 if let Some(code) = crate::jit_generic::get_jit_code(&fv.func) {
                     let upvalues: Vec<*const std::ffi::c_void> = fv
                         .upvalues

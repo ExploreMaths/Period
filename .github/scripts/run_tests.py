@@ -353,6 +353,34 @@ class TestLanguageFeatures(unittest.TestCase):
         )
         self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
 
+    def test_annotated_small_function_return_checked_at_runtime(self):
+        # Single-return functions are inlined unless annotated; the return
+        # annotation must still be enforced on every execution path.
+        out = run_file(
+            """
+            define make:
+                return [1, 2].
+            define bad with x returns integer or string:
+                return x.
+            show bad with make.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+
+    def test_annotated_small_function_params_checked_at_runtime(self):
+        out = run_file(
+            """
+            define make:
+                return [1, 2].
+            define pick with integer or string x:
+                show x.
+            pick with make.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+
     def test_list_negative_index(self):
         run_file(
             """

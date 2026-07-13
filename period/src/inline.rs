@@ -28,10 +28,16 @@ pub fn inline_small_functions(stmts: &mut [Stmt], remove_unused: bool) {
             name,
             params,
             body,
+            return_type,
             ..
         } = stmt
         {
-            if body.len() == 1 {
+            // Inlining a call erases its runtime type-annotation checks (the
+            // VM/JIT only check annotations on real calls), so annotated
+            // functions must stay as ordinary calls.
+            let has_annotations =
+                return_type.is_some() || params.iter().any(|(_, ann)| ann.is_some());
+            if !has_annotations && body.len() == 1 {
                 if let Stmt::Return {
                     value: Some(expr), ..
                 } = &body[0]
@@ -395,8 +401,19 @@ struct ErrorCandidate {
 fn collect_error_candidates(stmts: &[Stmt]) -> HashMap<String, ErrorCandidate> {
     let mut candidates: HashMap<String, ErrorCandidate> = HashMap::new();
     for stmt in stmts.iter() {
-        if let Stmt::Define { name, params, body, .. } = stmt {
-            if body.len() == 2 {
+        if let Stmt::Define {
+            name,
+            params,
+            body,
+            return_type,
+            ..
+        } = stmt
+        {
+            // Same as `inline_small_functions`: annotated functions must stay
+            // real calls so their runtime type-annotation checks survive.
+            let has_annotations =
+                return_type.is_some() || params.iter().any(|(_, ann)| ann.is_some());
+            if !has_annotations && body.len() == 2 {
                 if let (
                     Stmt::If {
                         cond,

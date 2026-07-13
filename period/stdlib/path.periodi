@@ -1,0 +1,16 @@
+-- Minimal string path utilities (no OS dependencies).
+
+define join with string a, string b returns string:
+    ...
+
+define basename with string path returns string:
+    ...
+
+define dirname with string path returns string:
+    ...
+
+define extension with string path returns string:
+    ...
+
+define is_absolute with string path returns boolean:
+    ...

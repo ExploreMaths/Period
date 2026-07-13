@@ -1,7 +1,7 @@
 -- List utilities.
 
 define sum with list of number values returns number:
-    let total be 0.
+    let total be 0.0.
     for x in values repeat:
         set total to total + x.
     return total.
@@ -19,3 +19,71 @@ define min with list of number values returns number:
         if x < m, then:
             set m to x.
     return m.
+
+define map with values, f:
+    let result be [].
+    for x in values repeat:
+        set result to result + [f with x].
+    return result.
+
+define filter with values, f:
+    let result be [].
+    for x in values repeat:
+        if (f with x), then:
+            set result to result + [x].
+    return result.
+
+define find with values, f:
+    for x in values repeat:
+        if (f with x), then:
+            return x.
+    return nothing.
+
+define any with values, f returns boolean:
+    for x in values repeat:
+        if (f with x), then:
+            return true.
+    return false.
+
+define all with values, f returns boolean:
+    for x in values repeat:
+        if not (f with x), then:
+            return false.
+    return true.
+
+define contains with values, item returns boolean:
+    for x in values repeat:
+        if x == item, then:
+            return true.
+    return false.
+
+define reverse with values:
+    let result be [].
+    for x in values repeat:
+        set result to [x] + result.
+    return result.
+
+define slice with values, integer start, integer end:
+    let result be [].
+    let i be start.
+    let len be length with values.
+    let stop be end.
+    if stop > len, then:
+        set stop to len.
+    while i < stop repeat:
+        set result to result + [values[i]].
+        set i to i + 1.
+    return result.
+
+define sort with list of number values returns list of number:
+    -- Simple insertion sort.
+    let result be [].
+    for x in values repeat:
+        let i be 0.
+        let n be length with result.
+        while i < n and result[i] < x repeat:
+            set i to i + 1.
+        let before be slice with result, 0, i.
+        let after be slice with result, i, n.
+        set result to before + [x] + after.
+    return result.

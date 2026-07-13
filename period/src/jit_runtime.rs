@@ -964,6 +964,31 @@ pub extern "C" fn period_call(interp: *mut Interpreter, callee: *mut Value, argc
                         argc
                     ));
                 }
+                // Check parameter type annotations, same as the VM and
+                // tree-walk paths do.
+                for (i, (_, ann)) in fv.func.params.iter().enumerate() {
+                    if let Some(ann) = ann {
+                        let arg = match argv.add(i).read().as_ref() {
+                            Some(a) => a,
+                            None => continue,
+                        };
+                        if let Err(ctrl) = interp.check_type(arg, ann, &span) {
+                            for p in std::slice::from_raw_parts(argv, argc) {
+                                if !p.is_null() {
+                                    free_value(*p);
+                                }
+                            }
+                            return match ctrl {
+                                Control::RuntimeError(msg, span) => {
+                                    period_set_span(span.line as i64, span.col as i64);
+                                    error_value(msg)
+                                }
+                                Control::Error(msg) => error_value(msg),
+                                Control::Return(v, _) => alloc_value(v),
+                            };
+                        }
+                    }
+                }
                 if let Some(code) = crate::jit_generic::get_jit_code(&fv.func) {
                     let upvalues_ptr = if fv.upvalues.is_empty() {
                         std::ptr::null_mut()

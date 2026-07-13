@@ -718,6 +718,12 @@ impl<'a> Vm<'a> {
                 }
                 let slots_start = self.locals.len();
                 self.locals.resize(slots_start + fv.func.local_count, Value::Nothing);
+                // Check parameter type annotations, same as the tree-walk path.
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(ann) = &fv.func.params[i].1 {
+                        self.check_type(arg, ann, &fv.func.span.clone())?;
+                    }
+                }
                 for (i, arg) in args.into_iter().enumerate() {
                     self.locals[slots_start + i] = arg;
                 }
