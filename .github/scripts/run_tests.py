@@ -992,6 +992,101 @@ class TestLSP(unittest.TestCase):
                 proc.kill()
                 proc.wait()
 
+    def test_lsp_semantic_tokens_with_syntax_errors(self):
+        # A document that fails to parse must still get semantic highlighting
+        # via the token-stream fallback, including classes without a body.
+        proc = subprocess.Popen(
+            [PERIOD, "--lsp"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            uri = "file:///sem_tokens_broken_test.period"
+            source = (
+                "define a:\n"
+                "    show \"hi\".\n"
+                "\n"
+                "class Point:\n"
+                "    define move:\n"
+                "        show \"moving\".\n"
+                "\n"
+                "show a.\n"
+                "let p be\n"
+                "let q be new Point.\n"
+                "show p.move.\n"
+                "class Empty:\n"
+                "define b:\n"
+                "    show a.\n"
+            )
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"processId": None, "rootUri": None, "capabilities": {}},
+            }))
+            proc.stdin.flush()
+            msg = self._lsp_read_message(proc)
+            while msg is not None and msg.get("id") != 1:
+                msg = self._lsp_read_message(proc)
+            self.assertIsNotNone(msg, "No initialize response received")
+            legend = msg["result"]["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"]
+
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "method": "initialized",
+                "params": {},
+            }))
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "period",
+                        "version": 1,
+                        "text": source,
+                    }
+                },
+            }))
+            proc.stdin.write(self._lsp_message({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "textDocument/semanticTokens/full",
+                "params": {"textDocument": {"uri": uri}},
+            }))
+            proc.stdin.flush()
+            msg = self._lsp_read_message(proc)
+            while msg is not None and msg.get("id") != 2:
+                msg = self._lsp_read_message(proc)
+            self.assertIsNotNone(msg, "No semanticTokens response received")
+
+            data = msg["result"]["data"]
+            self.assertTrue(len(data) > 0 and len(data) % 5 == 0, f"Bad token data: {data}")
+            lines = source.splitlines()
+            line, col = 0, 0
+            found = []
+            for i in range(0, len(data), 5):
+                dl, ds, length, ttype, _ = data[i:i + 5]
+                line += dl
+                col = col + ds if dl == 0 else ds
+                found.append((lines[line][col:col + length], legend[ttype]))
+            expected = [
+                ("a", "function"), ("Point", "type"), ("move", "method"),
+                ("a", "function"), ("Point", "type"), ("move", "method"),
+                ("Empty", "type"), ("b", "function"), ("a", "function"),
+            ]
+            self.assertEqual(found, expected, f"Unexpected semantic tokens: {found}")
+        finally:
+            proc.stdin.close()
+            proc.stdout.close()
+            proc.stderr.close()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
 
 class TestStandardLibrary(unittest.TestCase):
     def test_string_module_functions(self):

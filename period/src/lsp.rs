@@ -542,35 +542,15 @@ fn semantic_tokens(
         None => return Ok(None),
     };
 
-    let empty = SemanticTokens { result_id: None, data: vec![] };
-    let program = match semantic::try_parse(&text) {
-        Ok(p) => p,
-        Err(_) => return Ok(Some(empty)),
-    };
+    // Lex lossily: keep the tokens produced before any lexer error so
+    // highlighting still works in a document with syntax errors.
+    let tokens = lex_tokens_lossy(&text);
 
-    let mut functions = HashSet::new();
-    let mut classes = HashSet::new();
-    let mut methods = HashSet::new();
-    for stmt in &program.statements {
-        match stmt {
-            Stmt::Define { name, .. } => {
-                functions.insert(name.clone());
-            }
-            Stmt::Class { name, methods: class_methods, .. } => {
-                classes.insert(name.clone());
-                for m in class_methods {
-                    if let Stmt::Define { name: mname, .. } = m {
-                        methods.insert(mname.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let tokens = match lex_tokens(&text) {
-        Ok(t) => t,
-        Err(_) => return Ok(Some(empty)),
+    // Prefer exact definitions from the AST; if the document does not parse,
+    // fall back to scanning the token stream for `define`/`class` headers.
+    let (functions, classes, methods) = match semantic::try_parse(&text) {
+        Ok(program) => definitions_from_program(&program),
+        Err(_) => definitions_from_tokens(&tokens),
     };
 
     let mut data = Vec::new();
@@ -607,6 +587,100 @@ fn semantic_tokens(
     }
 
     Ok(Some(SemanticTokens { result_id: None, data }))
+}
+
+fn lex_tokens_lossy(source: &str) -> Vec<Token> {
+    let mut lexer = Lexer::new(source);
+    let mut tokens = Vec::new();
+    loop {
+        match lexer.next_token() {
+            Ok(t) => {
+                let eof = matches!(t.kind, TokenKind::Eof);
+                tokens.push(t);
+                if eof { break; }
+            }
+            Err(_) => break,
+        }
+    }
+    tokens
+}
+
+fn definitions_from_program(program: &Program) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
+    let mut functions = HashSet::new();
+    let mut classes = HashSet::new();
+    let mut methods = HashSet::new();
+    for stmt in &program.statements {
+        match stmt {
+            Stmt::Define { name, .. } => {
+                functions.insert(name.clone());
+            }
+            Stmt::Class { name, methods: class_methods, .. } => {
+                classes.insert(name.clone());
+                for m in class_methods {
+                    if let Stmt::Define { name: mname, .. } = m {
+                        methods.insert(mname.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    (functions, classes, methods)
+}
+
+// Heuristic definition collection used when the document has syntax errors:
+// a `define` at a class body's indent depth is a method, any other `define`
+// is a function, and the name after `class` is a type.
+fn definitions_from_tokens(tokens: &[Token]) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
+    let mut functions = HashSet::new();
+    let mut classes = HashSet::new();
+    let mut methods = HashSet::new();
+    let mut depth = 0usize;
+    let mut class_body_depths: Vec<usize> = Vec::new();
+    let mut pending_class = false;
+    for (i, tok) in tokens.iter().enumerate() {
+        match tok.kind {
+            TokenKind::Indent => {
+                depth += 1;
+                if pending_class {
+                    class_body_depths.push(depth);
+                    pending_class = false;
+                }
+            }
+            TokenKind::Dedent => {
+                depth = depth.saturating_sub(1);
+                class_body_depths.retain(|&d| d <= depth);
+            }
+            TokenKind::Newline if pending_class => {
+                // A class header only starts a body if an Indent follows;
+                // otherwise (EOF, syntax error) drop the pending state so a
+                // later unrelated indented block is not treated as its body.
+                let next = tokens[i + 1..].iter().find(|t| !matches!(t.kind, TokenKind::Newline));
+                if !matches!(next.map(|t| &t.kind), Some(TokenKind::Indent)) {
+                    pending_class = false;
+                }
+            }
+            TokenKind::Class => {
+                pending_class = true;
+                if let Some(t) = tokens.get(i + 1)
+                    && let TokenKind::Ident(n) = &t.kind {
+                        classes.insert(n.clone());
+                    }
+            }
+            TokenKind::Define => {
+                if let Some(t) = tokens.get(i + 1)
+                    && let TokenKind::Ident(n) = &t.kind {
+                        if class_body_depths.contains(&depth) {
+                            methods.insert(n.clone());
+                        } else {
+                            functions.insert(n.clone());
+                        }
+                    }
+            }
+            _ => {}
+        }
+    }
+    (functions, classes, methods)
 }
 
 fn ident_name(kind: &TokenKind) -> Option<String> {
