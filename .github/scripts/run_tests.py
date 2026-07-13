@@ -322,6 +322,37 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["0"],
         )
 
+    def test_union_type_annotations(self):
+        run_file(
+            """
+            define pick with number or string x returns number or string:
+                return x.
+            define three returns integer, number or string:
+                return 2.
+            show pick with 42.
+            show pick with "hi".
+            show three.
+            let a be number or string 7.
+            show a.
+            let b be number or string "yo".
+            show b.
+            """,
+            expected_lines=["42", "hi", "2", "7", "yo"],
+        )
+
+    def test_union_type_let_enforced_at_runtime(self):
+        out = run_file(
+            """
+            define make:
+                return [1, 2].
+            let v be make.
+            let w be integer or string v.
+            show w.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+
     def test_list_negative_index(self):
         run_file(
             """
@@ -587,6 +618,47 @@ class TestSemanticChecks(unittest.TestCase):
             result = run_period([path])
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("assignment type mismatch", result.stdout)
+
+    def test_union_type_static_mismatch_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "union_bad.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    let x be integer or string [1, 2].
+                    show x.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("type mismatch", result.stdout)
+            self.assertIn("integer or string", result.stdout)
+
+    def test_union_return_type_static_mismatch_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "union_ret_bad.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    define bad returns integer or string:
+                        return 2.5.
+                    show bad.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("return type mismatch", result.stdout)
+            self.assertIn("integer or string", result.stdout)
+
+    def test_union_param_type_static_mismatch_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "union_param_bad.period")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent("""
+                    define pick with integer or string x:
+                        show x.
+                    let v be 2.5.
+                    pick with v.
+                """).strip() + "\n")
+            result = run_period([path])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("type mismatch", result.stdout)
 
     def test_missing_return_caught(self):
         with tempfile.TemporaryDirectory() as tmp:

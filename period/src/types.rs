@@ -18,6 +18,8 @@ pub enum Type {
     Range,
     Error,
     Unknown,
+    /// Union of two or more types, written `a or b` or `a, b or c`.
+    Union(Vec<Type>),
 }
 
 impl Type {
@@ -40,6 +42,14 @@ impl Type {
             Type::Range => "range".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Unknown => "<unknown>".to_string(),
+            Type::Union(members) => {
+                let names: Vec<String> = members.iter().map(|m| m.name()).collect();
+                if let Some((last, head)) = names.split_last()
+                    && !head.is_empty() {
+                        return format!("{} or {}", head.join(", "), last);
+                    }
+                names.into_iter().next().unwrap_or_default()
+            }
         }
     }
 
@@ -49,6 +59,8 @@ impl Type {
             (_, Type::Unknown) => true,
             (Type::Error, _) => true,
             (_, Type::Error) => true,
+            (Type::Union(members), other) => members.iter().all(|m| m.is_subtype(other)),
+            (this, Type::Union(members)) => members.iter().any(|m| this.is_subtype(m)),
             (Type::Integer, Type::Number) => true,
             (Type::List(a), Type::List(b)) => a.is_subtype(b),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.is_subtype(bk) && av.is_subtype(bv),
@@ -64,7 +76,19 @@ impl Type {
 }
 
 /// Parse a Period type annotation string into a `Type`.
+///
+/// Supports unions in the language's list style: `a or b`, or `a, b or c`
+/// for three or more members.
 pub fn parse_type_ann(ann: &str) -> Type {
+    let members: Vec<&str> = ann
+        .split(" or ")
+        .flat_map(|seg| seg.split(','))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    if members.len() > 1 {
+        return Type::Union(members.iter().map(|m| parse_type_ann(m)).collect());
+    }
     let parts: Vec<&str> = ann.split_whitespace().collect();
     if parts.is_empty() {
         return Type::Unknown;
@@ -156,5 +180,47 @@ mod tests {
             Type::List(Box::new(Type::Integer)).name(),
             "list of integer"
         );
+    }
+
+    #[test]
+    fn parse_union_types() {
+        assert_eq!(
+            parse_type_ann("number or string"),
+            Type::Union(vec![Type::Number, Type::String])
+        );
+        assert_eq!(
+            parse_type_ann("integer, number or string"),
+            Type::Union(vec![Type::Integer, Type::Number, Type::String])
+        );
+        assert_eq!(
+            parse_type_ann("list of integer or string"),
+            Type::Union(vec![Type::List(Box::new(Type::Integer)), Type::String])
+        );
+    }
+
+    #[test]
+    fn union_names() {
+        assert_eq!(
+            Type::Union(vec![Type::Number, Type::String]).name(),
+            "number or string"
+        );
+        assert_eq!(
+            Type::Union(vec![Type::Integer, Type::Number, Type::String]).name(),
+            "integer, number or string"
+        );
+    }
+
+    #[test]
+    fn union_subtyping() {
+        let u = Type::Union(vec![Type::Number, Type::String]);
+        // A value matches a union if it matches any member.
+        assert!(Type::Integer.is_subtype(&u)); // integer <: number
+        assert!(Type::String.is_subtype(&u));
+        assert!(!Type::Boolean.is_subtype(&u));
+        // A union is a subtype only if every member is.
+        assert!(Type::Union(vec![Type::Integer, Type::Number]).is_subtype(&Type::Number));
+        assert!(!u.is_subtype(&Type::Number));
+        // Union vs union.
+        assert!(Type::Union(vec![Type::Integer, Type::String]).is_subtype(&u));
     }
 }

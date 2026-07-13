@@ -88,6 +88,23 @@ impl Interpreter {
     /// subset of `number`; class names match instances of that class; compound
     /// types are checked recursively.
     pub(crate) fn check_type(&self, value: &Value, ann: &str, span: &Span) -> Result<(), Control> {
+        // Union annotations (`a or b` / `a, b or c`): any member may match.
+        let members: Vec<&str> = ann
+            .split(" or ")
+            .flat_map(|seg| seg.split(','))
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        if members.len() > 1 {
+            return if members.iter().any(|m| self.check_type(value, m, span).is_ok()) {
+                Ok(())
+            } else {
+                Err(Control::RuntimeError(
+                    format!("Type mismatch: expected '{}', got '{}'", ann, value.type_name()),
+                    span.clone(),
+                ))
+            };
+        }
         let parts: Vec<&str> = ann.split_whitespace().collect();
         if parts.is_empty() { return Ok(()); }
         let ok = match parts[0] {

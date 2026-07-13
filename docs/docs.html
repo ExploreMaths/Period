@@ -221,6 +221,10 @@ ada<span class="period">.</span>greet<span class="period">(</span><span class="s
 <span class="keyword">let</span> scores <span class="keyword">be</span> dictionary <span class="keyword">of</span> string <span class="keyword">to</span> number {<span class="string">"Ada"</span>: <span class="number">90</span>}<span class="period">.</span>
 <span class="keyword">let</span> names <span class="keyword">be</span> list <span class="keyword">of</span> string [<span class="string">"Ada"</span>, <span class="string">"Grace"</span>]<span class="period">.</span></code></pre>
       <p>Built-in type names are <code>nothing</code>, <code>boolean</code>, <code>integer</code>, <code>number</code>, <code>string</code>, <code>list</code>, <code>dictionary</code>, <code>function</code>, and <code>class</code>. <code>integer</code> values are a subset of <code>number</code>; an annotation of <code>number</code> accepts both integers and floating-point values. <code>type with</code> reports the more specific <code>integer</code> for whole-number literals. Compound types use <code>list of &lt;type&gt;</code> and <code>dictionary of &lt;key&gt; to &lt;value&gt;</code>. You can also use a class name or a generic type variable such as <code>T</code> to match instances of that class.</p>
+      <p>Several types can be combined into a union with <code>or</code>: <code>number or string</code>, or <code>integer, number or string</code> for three or more. A value matches a union when it matches any member.</p>
+      <pre><code><span class="keyword">define</span> pick <span class="keyword">with</span> number <span class="keyword">or</span> string x <span class="keyword">returns</span> number <span class="keyword">or</span> string<span class="period">:</span>
+    <span class="keyword">return</span> x<span class="period">.</span>
+<span class="keyword">let</span> item <span class="keyword">be</span> integer <span class="keyword">or</span> string <span class="number">42</span><span class="period">.</span></code></pre>
     </section>
 
     <section id="classes">
@@ -440,6 +444,7 @@ method         := "define" &lt;identifier&gt; ("with" &lt;params&gt;)? ("returns
 module-path    := &lt;identifier&gt; | "./" &lt;path&gt; | "../" &lt;path&gt;
 arguments      := &lt;expression&gt; ("," &lt;expression&gt;)*
 type           := &lt;type-name&gt; | "list" "of" &lt;type&gt; | "dictionary" "of" &lt;type&gt; "to" &lt;type&gt;
+                | &lt;type&gt; (("or" | ",") &lt;type&gt;)+
 type-name      := "nothing" | "boolean" | "integer" | "number" | "string" | "list" | "dictionary" | "function" | "class" | &lt;identifier&gt;
 expression     := &lt;or-expr&gt;
 or-expr        := &lt;and-expr&gt; ("or" &lt;and-expr&gt;)*

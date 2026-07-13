@@ -4,7 +4,14 @@
 
 ### Added
 
+- Union type annotations: several types can be combined with `or` (`number or string`, or `integer, number or string` for three or more) on parameters, return values, and variables. A value matches a union when it matches any member; mismatches are reported with the full union name. Checked both statically and at runtime.
+- LSP semantic tokens: user-defined functions, classes, and methods are highlighted at both definition and call sites, including zero-argument calls that the TextMate grammar cannot distinguish from variables. When the document has syntax errors, highlighting falls back to a token-stream scan so it keeps working while typing.
+- The LSP now infers undeclared function return types from `return` statements for hover and completion, including if/otherwise branches; conflicting types are shown as a union in the language's list style.
+- The TextMate grammar now highlights the function name after `define` (which also fixes function-name highlighting inside hover popups).
+
 ### Changed
+
+- LSP hover shows function and method signatures with a `define` prefix, and displays the fallback type as `nothing` instead of `unknown`.
 
 ### Fixed
 

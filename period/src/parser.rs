@@ -435,7 +435,24 @@ impl Parser {
 
     fn parse_type(&mut self) -> Result<String, String> {
         let name = self.expect_ident("expected type name")?;
-        self.parse_type_from(name)
+        let first = self.parse_type_from(name)?;
+        self.parse_type_union_rest(first)
+    }
+
+    /// Continue parsing a type annotation after its first member, collecting
+    /// union members separated by `or` or commas: `a or b`, `a, b or c`.
+    fn parse_type_union_rest(&mut self, first: String) -> Result<String, String> {
+        let mut members = vec![first];
+        while matches!(self.peek(0).kind, TokenKind::Or | TokenKind::Comma) {
+            self.advance();
+            let name = self.expect_ident("expected type name after ',' or 'or'")?;
+            members.push(self.parse_type_from(name)?);
+        }
+        if members.len() == 1 {
+            return Ok(members.pop().unwrap());
+        }
+        let last = members.pop().unwrap();
+        Ok(format!("{} or {}", members.join(", "), last))
     }
 
     fn parse_typed_name(&mut self) -> Result<(Option<String>, String), String> {
@@ -443,12 +460,14 @@ impl Parser {
         if self.is_type_start(&first) {
             // Disambiguate: `let X be 10` (X is the variable) vs `let Person p be ...`
             // (Person is the type). If the next token is an identifier, `first` is a
-            // type; if it is `of` after `list`/`dictionary`, parse a compound type.
-            // Otherwise `first` is the name itself.
+            // type; if it is `of` after `list`/`dictionary`, parse a compound type;
+            // if it is `or`/`,`, parse a union type. Otherwise `first` is the name itself.
             let is_compound = matches!(first.as_str(), "list" | "dictionary") && self.check(&TokenKind::Of);
             let is_simple_type = matches!(self.peek(0).kind, TokenKind::Ident(_));
-            if is_compound || is_simple_type {
-                let type_ann = self.parse_type_from(first)?;
+            let is_union = matches!(self.peek(0).kind, TokenKind::Or | TokenKind::Comma);
+            if is_compound || is_simple_type || is_union {
+                let first_ty = self.parse_type_from(first)?;
+                let type_ann = self.parse_type_union_rest(first_ty)?;
                 let name = self.expect_ident("expected variable name after type")?;
                 Ok((Some(type_ann), name))
             } else {
