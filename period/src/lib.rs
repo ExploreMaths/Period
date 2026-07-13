@@ -34,6 +34,19 @@ use sha2::{Digest, Sha256};
 
 use crate::value::Value;
 
+/// Disable every JIT tier (constant folding, the specialized integer JIT, and
+/// the generic Cranelift JIT); execution falls back to the bytecode VM.
+/// Used by the cross-path differential tests.
+pub(crate) fn jit_disabled() -> bool {
+    env::var_os("PERIOD_NO_JIT").is_some()
+}
+
+/// Disable the bytecode compiler as well; everything runs on the
+/// tree-walking interpreter. Implies no JIT either.
+pub(crate) fn bytecode_disabled() -> bool {
+    env::var_os("PERIOD_NO_BYTECODE").is_some()
+}
+
 /// Main entry point used by both the `period` binary and the `period-core` DLL.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn period_run() -> i32 {
@@ -412,33 +425,41 @@ fn compile_and_run_path(path: &str) -> (i32, String) {
 }
 
 pub(crate) fn run_jit_program(program: &ast::Program, path: PathBuf, source: &str) -> (i32, String) {
-    if let Some(cached) = try_jit_cache(source) {
-        return (0, cached);
+    if bytecode_disabled() {
+        return run_interpreter(program, path, source);
     }
+    if !jit_disabled()
+        && let Some(cached) = try_jit_cache(source) {
+            return (0, cached);
+        }
     match compiler::Compiler::compile_program(&program.statements, false) {
         Ok(main) => {
             let main = Rc::new(main);
             // Fast path: if the whole program reduces to constant arithmetic,
             // run it directly without invoking the Cranelift JIT.
-            if let Some(output) = jit::try_run_constant(&main) {
-                write_jit_cache(source, &output);
-                return (0, output);
-            }
-            let mut jit = jit::JitCompiler::new();
-            if let Some(code) = jit.compile(&main) {
-                {
-                    let mut out = jit::JIT_OUTPUT.lock().unwrap();
-                    out.clear();
+            if !jit_disabled()
+                && let Some(output) = jit::try_run_constant(&main) {
+                    write_jit_cache(source, &output);
+                    return (0, output);
                 }
-                let _ = unsafe { code() };
-                let output = jit::JIT_OUTPUT.lock().unwrap().clone();
-                return (0, output);
+            if !jit_disabled() {
+                let mut jit = jit::JitCompiler::new();
+                if let Some(code) = jit.compile(&main) {
+                    {
+                        let mut out = jit::JIT_OUTPUT.lock().unwrap();
+                        out.clear();
+                    }
+                    let _ = unsafe { code() };
+                    let output = jit::JIT_OUTPUT.lock().unwrap().clone();
+                    return (0, output);
+                }
             }
             let mut interp = interpreter::Interpreter::new();
             interp.set_current_path(path.clone());
             interp.silent = true;
             let mut generic = jit_generic::GenericJitCompiler::new();
-            if let Some(code) = generic.compile(&main) {
+            if !jit_disabled()
+                && let Some(code) = generic.compile(&main) {
                 unsafe {
                     let ctx = jit_generic::JitContext {
                         interp: &mut interp,

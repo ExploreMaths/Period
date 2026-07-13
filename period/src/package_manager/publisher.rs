@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::package_manager::downloader::sha256_hex;
 use crate::package_manager::manifest::PeriodToml;

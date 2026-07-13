@@ -781,9 +781,9 @@ pub extern "C" fn period_index_get(obj: *mut Value, idx: *mut Value) -> *mut Val
             }
         }
         Value::Range { start, stop, step } => {
-            let len = crate::value::range_len(*start, *stop, *step) as usize;
-            match as_index(&idx, len) {
-                Ok(i) => Value::Integer(Integer::Small(*start + (*step) * (i as i64))),
+            let len = crate::value::range_len(start, stop, step);
+            match crate::value::bigint_index(&idx, &len) {
+                Ok(i) => Value::big_integer(start.to_bigint() + step.to_bigint() * i),
                 Err(msg) => return error_value(msg),
             }
         }
@@ -895,13 +895,13 @@ pub extern "C" fn period_property_set(obj: *mut Value, name_ptr: *const u8, name
 pub extern "C" fn period_length(v: *mut Value) -> *mut Value {
     let v = take_value(v);
     let len = match &v {
-        Value::String(s) => s.len() as i64,
-        Value::List(l) => l.borrow().len() as i64,
-        Value::Dict(d) => d.borrow().len() as i64,
-        Value::Range { start, stop, step } => crate::value::range_len(*start, *stop, *step),
+        Value::String(s) => num_bigint::BigInt::from(s.len()),
+        Value::List(l) => num_bigint::BigInt::from(l.borrow().len()),
+        Value::Dict(d) => num_bigint::BigInt::from(d.borrow().len()),
+        Value::Range { start, stop, step } => crate::value::range_len(start, stop, step),
         _ => return error_value(format!("length not supported for {}", v.type_name())),
     };
-    alloc_value(Value::Integer(Integer::Small(len)))
+    alloc_value(Value::big_integer(len))
 }
 
 #[unsafe(no_mangle)]
@@ -910,14 +910,15 @@ pub extern "C" fn period_iter_init(v: *mut Value) -> *mut Value {
     let items = match v {
         Value::List(l) => l.borrow().clone(),
         Value::String(s) => s.chars().map(|c| Value::String(c.to_string())).collect(),
-        Value::Dict(d) => d.borrow().keys().map(|k| k.to_value()).collect(),
+        Value::Dict(d) => crate::value::dict_sorted_keys(&d.borrow()),
         Value::Range { start, stop, step } => {
+            let zero = Integer::Small(0);
             let mut out = Vec::new();
             let mut i = start;
-            if step > 0 {
-                while i < stop { out.push(Value::Integer(Integer::Small(i))); i += step; }
-            } else if step < 0 {
-                while i > stop { out.push(Value::Integer(Integer::Small(i))); i += step; }
+            if step > zero {
+                while i < stop { out.push(Value::Integer(i.clone())); i.add_assign(&step); }
+            } else if step < zero {
+                while i > stop { out.push(Value::Integer(i.clone())); i.add_assign(&step); }
             }
             out
         }

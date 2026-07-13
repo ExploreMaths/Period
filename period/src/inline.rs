@@ -476,7 +476,7 @@ fn inline_try_error_calls(stmts: &mut [Stmt], candidates: &HashMap<String, Error
                 inline_try_error_calls(catch_body, candidates);
                 let mut new_body: Vec<Stmt> = Vec::with_capacity(body.len() * 2);
                 for s in body.drain(..) {
-                    if let Stmt::Expr(Expr::Call { callee, args, span }) = &s {
+                    if let Stmt::Expr(Expr::Call { callee, args, span: _ }) = &s {
                         if let Expr::Variable { name, .. } = callee.as_ref() {
                             if let Some(cand) = candidates.get(name) {
                                 if cand.params.len() == args.len() {

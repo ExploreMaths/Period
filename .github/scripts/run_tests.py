@@ -286,13 +286,72 @@ class TestLanguageFeatures(unittest.TestCase):
         run_file(
             """
             let x be 5.
-            if x > 3, then:
+            if x > 3 then:
                 show "big".
             otherwise:
                 show "small".
             """,
             expected_lines=["big"],
         )
+
+    def test_if_condition_comma_is_rejected(self):
+        out = run_file(
+            """
+            let x be 5.
+            if x > 3, then:
+                show "big".
+            """,
+            should_fail=True,
+        )
+        self.assertIn("error", out)
+
+    def test_range_arbitrary_precision(self):
+        run_file(
+            """
+            show length with range with 10 ** 30.
+            show (range with 10 ** 30)[-1].
+            for i in range with 10 ** 30, 10 ** 30 + 3 repeat:
+                show i.
+            """,
+            expected_lines=[
+                "1000000000000000000000000000000",
+                "999999999999999999999999999999",
+                "1000000000000000000000000000000",
+                "1000000000000000000000000000001",
+                "1000000000000000000000000000002",
+            ],
+        )
+
+    def test_random_seed_is_reproducible(self):
+        run_file(
+            """
+            import random.
+            seed with 42.
+            let a be random.
+            seed with 42.
+            let b be random.
+            show a == b.
+            """,
+            expected_lines=["true"],
+        )
+
+    def test_anything_annotation_accepts_everything(self):
+        run_file(
+            """
+            let v be anything [1, 2].
+            show v.
+            """,
+            expected_lines=["[1, 2]"],
+        )
+
+    def test_length_rejects_integer_statically(self):
+        out = run_file(
+            """
+            show length with 42.
+            """,
+            should_fail=True,
+        )
+        self.assertIn("argument 1 type mismatch", out)
 
     def test_classes(self):
         run_file(
@@ -1203,13 +1262,13 @@ class TestLSP(unittest.TestCase):
                 "    return 2.\n"
                 "\n"
                 "define b:\n"
-                "    if true, then:\n"
+                "    if true then:\n"
                 "        return 1.\n"
                 "    otherwise:\n"
                 "        return 2.\n"
                 "\n"
                 "define mixed:\n"
-                "    if true, then:\n"
+                "    if true then:\n"
                 "        return 1.\n"
                 "    otherwise:\n"
                 "        return \"x\".\n"

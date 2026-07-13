@@ -506,6 +506,9 @@ thread_local! {
 /// first use. The backing JIT module is leaked so the generated code stays valid
 /// for the lifetime of the process.
 pub fn get_jit_code(func: &CompiledFunction) -> Option<GenericJitFn> {
+    if crate::jit_disabled() {
+        return None;
+    }
     let key = func as *const CompiledFunction;
     JIT_CODE_CACHE.with(|cache| {
         {

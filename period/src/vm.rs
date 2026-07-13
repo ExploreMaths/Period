@@ -9,7 +9,7 @@ use crate::ast::{BinOp, Span, UnaryOp};
 use crate::bytecode::{CompiledFunction, Op};
 use crate::environment::Environment;
 use crate::interpreter::{Control, Interpreter};
-use crate::value::{range_len, ErrorValue, Integer, VMClassValue, VMFunctionValue, Value};
+use crate::value::{bigint_index, range_len, ErrorValue, Integer, VMClassValue, VMFunctionValue, Value};
 
 pub struct Vm<'a> {
     interpreter: &'a mut Interpreter,
@@ -361,7 +361,18 @@ impl<'a> Vm<'a> {
                 let items = match value {
                     Value::List(list) => list.borrow().clone(),
                     Value::String(s) => s.chars().map(|c| Value::String(c.to_string())).collect(),
-                    Value::Dict(dict) => dict.borrow().keys().map(|k| k.to_value()).collect(),
+                    Value::Dict(dict) => crate::value::dict_sorted_keys(&dict.borrow()),
+                    Value::Range { start, stop, step } => {
+                        let zero = Integer::Small(0);
+                        let mut out = Vec::new();
+                        let mut i = start;
+                        if step > zero {
+                            while i < stop { out.push(Value::Integer(i.clone())); i.add_assign(&step); }
+                        } else if step < zero {
+                            while i > stop { out.push(Value::Integer(i.clone())); i.add_assign(&step); }
+                        }
+                        out
+                    }
                     _ => return Err(Control::RuntimeError(format!("Cannot iterate over {}", value.type_name()), span.clone())),
                 };
                 self.stack.push(Value::List(Rc::new(RefCell::new(items))));
@@ -369,13 +380,13 @@ impl<'a> Vm<'a> {
             Op::Length => {
                 let value = self.stack.pop().expect("stack underflow in length");
                 let len = match value {
-                    Value::String(s) => s.len(),
-                    Value::List(list) => list.borrow().len(),
-                    Value::Dict(dict) => dict.borrow().len(),
-                    Value::Range { start, stop, step } => range_len(start, stop, step) as usize,
+                    Value::String(s) => BigInt::from(s.len()),
+                    Value::List(list) => BigInt::from(list.borrow().len()),
+                    Value::Dict(dict) => BigInt::from(dict.borrow().len()),
+                    Value::Range { start, stop, step } => range_len(&start, &stop, &step),
                     _ => return Err(Control::RuntimeError(format!("Cannot get length of {}", value.type_name()), span.clone())),
                 };
-                self.stack.push(Value::integer(len as i64));
+                self.stack.push(Value::big_integer(len));
             }
             Op::TryBegin(catch_ip, catch_var_slot) => {
                 self.try_stack.push(TryFrame {
@@ -953,9 +964,9 @@ impl<'a> Vm<'a> {
                 Ok(Value::String(s.chars().nth(i).unwrap().to_string()))
             }
             Value::Range { start, stop, step } => {
-                let len = range_len(start, stop, step);
-                let i = self.as_index(&idx, len as usize, span)?;
-                Ok(Value::integer(start + step * (i as i64)))
+                let len = range_len(&start, &stop, &step);
+                let i = bigint_index(&idx, &len).map_err(|m| Control::RuntimeError(m, span.clone()))?;
+                Ok(Value::big_integer(start.to_bigint() + step.to_bigint() * i))
             }
             _ => Err(Control::RuntimeError(format!("Cannot index into {}", obj.type_name()), span.clone())),
         }

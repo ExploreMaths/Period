@@ -317,7 +317,7 @@ pub fn module_exports_names(module: &str, current_path: Option<&Path>) -> Vec<St
     match module {
         "math" => vec!["sin", "cos", "tan", "sqrt", "abs", "floor", "ceil"],
         "string" => vec!["upper", "lower", "trim", "split", "contains", "starts_with", "ends_with", "replace", "slice", "substring"],
-        "random" => vec!["random"],
+        "random" => vec!["random", "seed"],
         "system" => vec!["run", "open", "alert", "confirm", "notify"],
         "time" => vec!["now"],
         "path" => vec!["join", "basename", "dirname", "extension", "is_absolute"],

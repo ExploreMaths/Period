@@ -27,9 +27,17 @@ jobs:
         working-directory: period
         run: cargo test
 
+      - name: Check stdlib copies stay in sync
+        shell: bash
+        run: diff -r stdlib period/stdlib
+
       - name: Run example programs
         shell: bash
         run: .github/scripts/run_examples.sh
+
+      - name: Check execution paths agree
+        shell: bash
+        run: .github/scripts/run_paths.sh
 
       - name: Run integration tests
         shell: bash

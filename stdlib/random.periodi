@@ -3,3 +3,7 @@
 define random returns number:
     "Return a random number between 0 and 1.".
     ...
+
+define seed with integer value:
+    "Re-seed the random number generator so subsequent random calls are reproducible.".
+    ...

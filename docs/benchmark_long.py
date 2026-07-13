@@ -692,7 +692,7 @@ def source_for(lang: str, workload: str, n: int) -> str:
         if lang == "period":
             return (
                 f"define may_error with i:\n"
-                f"    if i % 2 == 0, then:\n"
+                f"    if i % 2 == 0 then:\n"
                 f"        error with \"even\".\n"
                 f"    return i.\n"
                 f"let caught be 0.\n"

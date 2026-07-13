@@ -3,11 +3,11 @@
 -- This avoids Period's auto-call behavior for zero-argument functions.
 
 define assert with condition:
-    if not condition, then:
+    if not condition then:
         error with "assertion failed".
 
 define assert_equal with expected, actual:
-    if expected != actual, then:
+    if expected != actual then:
         error with "expected " + string with expected + ", got " + string with actual.
 
 define assert_raises with f:

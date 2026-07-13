@@ -371,8 +371,8 @@ fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Show => "```period\nshow <expression>.\n```\n\nPrint the value of an expression.",
         TokenKind::Let => "```period\nlet <name> be <expression>.\n```\n\nDeclare a new variable.",
         TokenKind::Set => "```period\nset <target> to <expression>.\n```\n\nAssign a new value to an existing variable, index, or property.",
-        TokenKind::If => "```period\nif <condition>, then:\n    ...\n```\n\nConditionally execute a block.",
-        TokenKind::Then => "Part of an `if` statement: `if <condition>, then:`.",
+        TokenKind::If => "```period\nif <condition> then:\n    ...\n```\n\nConditionally execute a block.",
+        TokenKind::Then => "Part of an `if` statement: `if <condition> then:`.",
         TokenKind::Otherwise => "```period\notherwise:\n    ...\n```\n\nElse branch of an `if` statement.",
         TokenKind::While => "```period\nwhile <condition> repeat:\n    ...\n```\n\nLoop while a condition is true.",
         TokenKind::Repeat => "Part of a `while` loop: `while <condition> repeat:`.",
@@ -1170,7 +1170,7 @@ fn infer_expr_with_funcs(expr: &Expr, func_returns: &HashMap<String, String>) ->
                     function_return_type(name)
                 }
             } else {
-                "nothing".to_string()
+                "anything".to_string()
             }
         }
         // A bare identifier naming a zero-argument function auto-calls.
@@ -1181,7 +1181,7 @@ fn infer_expr_with_funcs(expr: &Expr, func_returns: &HashMap<String, String>) ->
                 function_return_type(name)
             }
         }
-        _ => "nothing".to_string(),
+        _ => "anything".to_string(),
     }
 }
 
@@ -1358,7 +1358,7 @@ fn resolve_scope_symbols(
                         if param_name == name {
                             result.push(SymbolInfo {
                                 name: param_name.clone(),
-                                detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("nothing")),
+                                detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
                                 docstring: None,
                                 kind: CompletionItemKind::VARIABLE,
                             });
@@ -1372,7 +1372,7 @@ fn resolve_scope_symbols(
                             if param_name == name {
                                 result.push(SymbolInfo {
                                     name: param_name.clone(),
-                                    detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("nothing")),
+                                    detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
                                     docstring: None,
                                     kind: CompletionItemKind::VARIABLE,
                                 });
@@ -1387,7 +1387,7 @@ fn resolve_scope_symbols(
                                     if param_name == name {
                                         result.push(SymbolInfo {
                                             name: param_name.clone(),
-                                            detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("nothing")),
+                                            detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
                                             docstring: None,
                                             kind: CompletionItemKind::VARIABLE,
                                         });
@@ -1619,7 +1619,7 @@ fn function_return_type(name: &str) -> String {
         "random" => "number",
         "now" => "number",
         "upper" | "lower" => "string",
-        _ => "nothing",
+        _ => "anything",
     }
     .to_string()
 }
@@ -1717,6 +1717,7 @@ fn module_exports(module: &str) -> Vec<SymbolInfo> {
         ],
         "random" => vec![
             builtin_fn("random", "", "number", "Return a random number between 0 and 1."),
+            builtin_fn("seed", "integer value", "nothing", "Re-seed the random number generator so subsequent random calls are reproducible."),
         ],
         "time" => vec![
             builtin_fn("now", "", "number", "Return the current Unix timestamp."),
@@ -1767,7 +1768,7 @@ fn keyword_completions() -> Vec<SymbolInfo> {
         ("class", "class <Name>:"),
         ("new", "new <Class>."),
         ("tell", "tell <object> to <method> with <args>."),
-        ("if", "if <condition>, then:"),
+        ("if", "if <condition> then:"),
         ("then", "Part of an if statement."),
         ("otherwise", "otherwise:"),
         ("else", "else:"),

@@ -15,7 +15,7 @@ use crate::environment::Environment;
 use crate::jit_generic;
 use crate::lexer::{Lexer, TokenKind};
 use crate::parser::Parser;
-use crate::value::{range_len, ClassValue, ErrorValue, FunctionValue, ModuleValue, Value};
+use crate::value::{bigint_index, range_len, ClassValue, ErrorValue, FunctionValue, Integer, ModuleValue, Value};
 use crate::vm;
 
 #[derive(Debug)]
@@ -64,16 +64,19 @@ impl Interpreter {
         // Try the bytecode compiler first.  If it succeeds, attempt to JIT the
         // top-level function to native code; otherwise fall back to the VM, and
         // if compilation itself fails fall back to the tree-walking interpreter.
-        if let Ok(main) = compiler::Compiler::compile_program(&program.statements, false) {
-            let main = std::rc::Rc::new(main);
-            if !self.silent && !self.loading_module {
-                if let Some(code) = crate::jit::JitCompiler::new().compile(&main) {
-                    unsafe { code(); }
-                    return Ok(());
+        // PERIOD_NO_BYTECODE / PERIOD_NO_JIT force the slower paths (used by
+        // the cross-path differential tests).
+        if !crate::bytecode_disabled()
+            && let Ok(main) = compiler::Compiler::compile_program(&program.statements, false) {
+                let main = std::rc::Rc::new(main);
+                if !self.silent && !self.loading_module && !crate::jit_disabled() {
+                    if let Some(code) = crate::jit::JitCompiler::new().compile(&main) {
+                        unsafe { code(); }
+                        return Ok(());
+                    }
                 }
+                return vm::Vm::new(self, main).run();
             }
-            return vm::Vm::new(self, main).run();
-        }
         self.interpret_tree_walk(program)
     }
 
@@ -108,6 +111,7 @@ impl Interpreter {
         let parts: Vec<&str> = ann.split_whitespace().collect();
         if parts.is_empty() { return Ok(()); }
         let ok = match parts[0] {
+            "anything" => true,
             "nothing" => matches!(value, Value::Nothing),
             "boolean" => matches!(value, Value::Bool(_)),
             "integer" => matches!(value, Value::Integer(_)) || matches!(value, Value::Number(n) if n.fract() == 0.0),
@@ -237,16 +241,17 @@ impl Interpreter {
                 let iter_value = self.evaluate(iterable)?;
                 match iter_value {
                     Value::Range { start, stop, step } => {
+                        let zero = Integer::Small(0);
                         let mut i = start;
-                        while (step > 0 && i < stop) || (step < 0 && i > stop) {
+                        while (step > zero && i < stop) || (step < zero && i > stop) {
                             let env = Environment::with_parent(self.env.clone());
-                            env.borrow().define_untyped(var, Value::integer(i));
+                            env.borrow().define_untyped(var, Value::Integer(i.clone()));
                             let old = self.env.clone();
                             self.env = env;
                             let result = self.execute_block(body);
                             self.env = old;
                             result?;
-                            i += step;
+                            i.add_assign(&step);
                         }
                     }
                     _ => {
@@ -452,9 +457,9 @@ impl Interpreter {
                         Ok(Value::String(s.chars().nth(i).unwrap().to_string()))
                     }
                     Value::Range { start, stop, step } => {
-                        let len = range_len(start, stop, step);
-                        let i = self.as_index(&idx, len as usize, span)?;
-                        Ok(Value::integer(start + step * (i as i64)))
+                        let len = range_len(&start, &stop, &step);
+                        let i = bigint_index(&idx, &len).map_err(|m| Control::RuntimeError(m, span.clone()))?;
+                        Ok(Value::big_integer(start.to_bigint() + step.to_bigint() * i))
                     }
                     _ => Err(Control::RuntimeError(format!("Cannot index into {}", obj.type_name()), span.clone())),
                 }
@@ -535,7 +540,6 @@ impl Interpreter {
     }
 
     fn eval_binary(&self, op: &BinOp, left: Value, right: Value, span: &Span) -> Result<Value, Control> {
-        use crate::value::Integer;
         match op {
             BinOp::Add => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.add(b))),
@@ -663,7 +667,6 @@ impl Interpreter {
     }
 
     fn as_index(&self, value: &Value, len: usize, span: &Span) -> Result<usize, Control> {
-        use num_traits::Signed;
         let n = match value {
             Value::Integer(n) => n.to_bigint(),
             Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n).unwrap_or_else(|| BigInt::from(0)),
@@ -876,7 +879,7 @@ impl Interpreter {
         match value {
             Value::List(l) => Ok(l.borrow().clone()),
             Value::String(s) => Ok(s.chars().map(|c| Value::String(c.to_string())).collect()),
-            Value::Dict(d) => Ok(d.borrow().keys().map(|k| k.to_value()).collect()),
+            Value::Dict(d) => Ok(crate::value::dict_sorted_keys(&d.borrow())),
             _ => Err(Control::Error(format!("Cannot iterate over {}", value.type_name()))),
         }
     }

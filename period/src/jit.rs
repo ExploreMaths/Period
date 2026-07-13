@@ -522,7 +522,9 @@ fn try_count_opt(
         return None;
     }
     let init_acc = slot_consts[*acc_slot]?;
-    let final_acc = init_acc.checked_add(iter_count)?;
+    // Overflow guard: bail out of the optimisation if the accumulator would
+    // overflow, so the closed-form result stays exact.
+    let _ = init_acc.checked_add(iter_count)?;
     let final_i = match cond_op {
         BinOp::Lt => init_i.checked_add(iter_count)?,
         BinOp::Le => n.checked_add(1)?,

@@ -17,7 +17,9 @@ pub enum Type {
     Module(String),
     Range,
     Error,
-    Unknown,
+    /// Gradual-typing escape hatch: a value whose type is not (yet) known
+    /// statically. Compatible with every type; checked at runtime instead.
+    Anything,
     /// Union of two or more types, written `a or b` or `a, b or c`.
     Union(Vec<Type>),
 }
@@ -41,7 +43,7 @@ impl Type {
             Type::Module(n) => format!("module {}", n),
             Type::Range => "range".to_string(),
             Type::Error => "<error>".to_string(),
-            Type::Unknown => "<unknown>".to_string(),
+            Type::Anything => "anything".to_string(),
             Type::Union(members) => {
                 let names: Vec<String> = members.iter().map(|m| m.name()).collect();
                 if let Some((last, head)) = names.split_last()
@@ -55,8 +57,8 @@ impl Type {
 
     pub fn is_subtype(&self, other: &Type) -> bool {
         match (self, other) {
-            (Type::Unknown, _) => true,
-            (_, Type::Unknown) => true,
+            (Type::Anything, _) => true,
+            (_, Type::Anything) => true,
             (Type::Error, _) => true,
             (_, Type::Error) => true,
             (Type::Union(members), other) => members.iter().all(|m| m.is_subtype(other)),
@@ -91,7 +93,7 @@ pub fn parse_type_ann(ann: &str) -> Type {
     }
     let parts: Vec<&str> = ann.split_whitespace().collect();
     if parts.is_empty() {
-        return Type::Unknown;
+        return Type::Anything;
     }
     match parts[0] {
         "integer" => Type::Integer,
@@ -109,6 +111,7 @@ pub fn parse_type_ann(ann: &str) -> Type {
             )
         }
         "range" => Type::Range,
+        "anything" => Type::Anything,
         name => Type::Instance(name.to_string()),
     }
 }
@@ -134,6 +137,7 @@ mod tests {
         assert_eq!(parse_type_ann("string"), Type::String);
         assert_eq!(parse_type_ann("boolean"), Type::Boolean);
         assert_eq!(parse_type_ann("nothing"), Type::Nothing);
+        assert_eq!(parse_type_ann("anything"), Type::Anything);
     }
 
     #[test]
@@ -168,9 +172,9 @@ mod tests {
     }
 
     #[test]
-    fn unknown_absorbs_everything() {
-        assert!(Type::Integer.is_subtype(&Type::Unknown));
-        assert!(Type::Unknown.is_subtype(&Type::Integer));
+    fn anything_absorbs_everything() {
+        assert!(Type::Integer.is_subtype(&Type::Anything));
+        assert!(Type::Anything.is_subtype(&Type::Integer));
     }
 
     #[test]

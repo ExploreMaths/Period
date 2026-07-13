@@ -136,16 +136,6 @@ impl Integer {
         *self = Integer::from_bigint(self.to_bigint() + other.to_bigint());
     }
 
-    pub fn sub_assign(&mut self, other: &Integer) {
-        if let (Integer::Small(a), Integer::Small(b)) = (&*self, other) {
-            if let Some(res) = a.checked_sub(*b) {
-                *self = Integer::Small(res);
-                return;
-            }
-        }
-        *self = Integer::from_bigint(self.to_bigint() - other.to_bigint());
-    }
-
     pub fn mul_assign(&mut self, other: &Integer) {
         if let (Integer::Small(a), Integer::Small(b)) = (&*self, other) {
             if let Some(res) = a.checked_mul(*b) {
@@ -244,6 +234,8 @@ pub struct VMClassValue {
     pub methods: HashMap<String, Value>,
     pub field_names: Vec<String>,
     pub field_init: Vec<Option<usize>>,
+    // Kept for parity with Value::Function/ClassValue; the VM variants never read it.
+    #[allow(dead_code)]
     pub from_module: bool,
 }
 
@@ -252,6 +244,8 @@ pub struct VMFunctionValue {
     pub func: Rc<crate::bytecode::CompiledFunction>,
     pub closure: Rc<RefCell<Environment>>,
     pub upvalues: Vec<Rc<RefCell<Value>>>,
+    // Kept for parity with Value::Function; the VM variant never reads it.
+    #[allow(dead_code)]
     pub from_module: bool,
 }
 
@@ -286,9 +280,9 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Dict(Rc<RefCell<HashMap<ValueKey, Value>>>),
     Range {
-        start: i64,
-        stop: i64,
-        step: i64,
+        start: Integer,
+        stop: Integer,
+        step: Integer,
     },
     Function(Box<FunctionValue>),
     Class(Box<ClassValue>),
@@ -315,6 +309,15 @@ impl Value {
     }
 }
 
+/// Dict keys in deterministic (text-sorted) order. HashMap iteration order is
+/// not stable across processes, so every backend iterates dict keys through
+/// this helper to keep `for` loops over dictionaries reproducible.
+pub fn dict_sorted_keys(d: &HashMap<ValueKey, Value>) -> Vec<Value> {
+    let mut keys: Vec<Value> = d.keys().map(|k| k.to_value()).collect();
+    keys.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    keys
+}
+
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -324,7 +327,13 @@ impl std::fmt::Debug for Value {
             Value::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
             Value::Nothing => write!(f, "nothing"),
             Value::List(l) => write!(f, "{:?}", l.borrow()),
-            Value::Dict(d) => write!(f, "{:?}", d.borrow()),
+            Value::Dict(d) => {
+                let mut items: Vec<String> = d.borrow().iter()
+                    .map(|(k, v)| format!("{:?}: {:?}", k.to_value(), v))
+                    .collect();
+                items.sort();
+                write!(f, "{{{}}}", items.join(", "))
+            }
             Value::Function(fv) => write!(f, "<function {}>", fv.name),
             Value::Class(cv) => write!(f, "<class {}>", cv.name),
             Value::VMClass(cv) => write!(f, "<class {}>", cv.name),
@@ -333,7 +342,7 @@ impl std::fmt::Debug for Value {
             Value::VMFunction(fv) => write!(f, "<function {}>", fv.func.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),
             Value::Error(ev) => write!(f, "error: {}", ev.message),
-            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start, stop, step),
+            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start.to_bigint(), stop.to_bigint(), step.to_bigint()),
             Value::Box(v) => write!(f, "{:?}", v.borrow()),
         }
     }
@@ -434,9 +443,12 @@ impl std::fmt::Display for Value {
                 write!(f, "[{}]", items.join(", "))
             }
             Value::Dict(d) => {
-                let items: Vec<String> = d.borrow().iter()
+                // Sorted by key text so output is deterministic across runs
+                // and execution backends (HashMap iteration order is not).
+                let mut items: Vec<String> = d.borrow().iter()
                     .map(|(k, v)| format!("{}: {}", k.to_value(), v))
                     .collect();
+                items.sort();
                 write!(f, "{{{}}}", items.join(", "))
             }
             Value::Function(fv) => write!(f, "<function {}>", fv.name),
@@ -446,7 +458,7 @@ impl std::fmt::Display for Value {
             Value::Instance { class, .. } => write!(f, "<instance of {:?}>", class),
             Value::BuiltIn(bv) => write!(f, "<built-in {}>", bv.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),
-            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start, stop, step),
+            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start.to_bigint(), stop.to_bigint(), step.to_bigint()),
             Value::Error(ev) => write!(f, "{}:{}: {}", ev.line, ev.col, ev.message),
             Value::Box(v) => write!(f, "{}", v.borrow()),
         }
@@ -466,13 +478,30 @@ impl ValueKey {
 
 }
 
-pub fn range_len(start: i64, stop: i64, step: i64) -> i64 {
-    if step == 0 || (step > 0 && start >= stop) || (step < 0 && start <= stop) {
-        return 0;
+pub fn range_len(start: &Integer, stop: &Integer, step: &Integer) -> BigInt {
+    let zero = Integer::Small(0);
+    if step == &zero || (step > &zero && start >= stop) || (step < &zero && start <= stop) {
+        return BigInt::from(0);
     }
-    let diff = if step > 0 { stop - start } else { start - stop };
-    let abs_step = step.abs();
-    (diff + abs_step - 1) / abs_step
+    let diff = if step > &zero { stop.to_bigint() - start.to_bigint() } else { start.to_bigint() - stop.to_bigint() };
+    let abs_step = if step > &zero { step.to_bigint() } else { -step.to_bigint() };
+    (diff + &abs_step - 1) / abs_step
+}
+
+/// Resolve an index value against a length that may exceed `usize` (ranges
+/// over arbitrary-precision integers). Negative indices count from the end.
+pub fn bigint_index(value: &Value, len: &BigInt) -> Result<BigInt, String> {
+    let n = match value {
+        Value::Integer(n) => n.to_bigint(),
+        Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n).unwrap_or_else(|| BigInt::from(0)),
+        _ => return Err("Index must be integer".to_string()),
+    };
+    let i = if n < BigInt::from(0) { len + n } else { n };
+    if i < BigInt::from(0) || i >= *len {
+        Err("Index out of range".to_string())
+    } else {
+        Ok(i)
+    }
 }
 
 #[cfg(test)]
@@ -508,10 +537,11 @@ mod tests {
 
     #[test]
     fn range_len_calculations() {
-        assert_eq!(range_len(0, 10, 1), 10);
-        assert_eq!(range_len(0, 10, 2), 5);
-        assert_eq!(range_len(10, 0, -2), 5);
-        assert_eq!(range_len(0, 0, 1), 0);
+        let i = |n: i64| Integer::from_i64(n);
+        assert_eq!(range_len(&i(0), &i(10), &i(1)), BigInt::from(10));
+        assert_eq!(range_len(&i(0), &i(10), &i(2)), BigInt::from(5));
+        assert_eq!(range_len(&i(10), &i(0), &i(-2)), BigInt::from(5));
+        assert_eq!(range_len(&i(0), &i(0), &i(1)), BigInt::from(0));
     }
 
     #[test]

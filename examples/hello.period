@@ -8,7 +8,7 @@ while count > 0 repeat:
     set count to count - 1.
 
 define factorial with n:
-    if n <= 1, then:
+    if n <= 1 then:
         return 1.
     return n * factorial with (n - 1).
 

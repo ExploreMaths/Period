@@ -139,7 +139,7 @@
         },
         {
           "name": "support.type.builtin.period",
-          "match": "\\b(any|never|nothing|boolean|integer|number|string|list|dictionary|function|class|error)\\b"
+          "match": "\\b(any|anything|never|nothing|boolean|integer|number|string|list|dictionary|function|class|error)\\b"
         },
         {
           "name": "support.function.builtin.period",

@@ -110,7 +110,6 @@ impl CompilerState {
 
 pub struct Compiler {
     state: Rc<RefCell<CompilerState>>,
-    enclosing: Option<Rc<RefCell<CompilerState>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -259,7 +258,6 @@ impl Compiler {
             state: Rc::new(RefCell::new(CompilerState::new(
                 name, params, return_type, span, captured_globals, None,
             ))),
-            enclosing: None,
         }
     }
 
@@ -274,7 +272,6 @@ impl Compiler {
             state: Rc::new(RefCell::new(CompilerState::new(
                 name, params, return_type, span, HashSet::new(), Some(enclosing),
             ))),
-            enclosing: None,
         }
     }
 
@@ -524,7 +521,7 @@ impl Compiler {
                 // Declare the function name as a local *before* compiling the body so
                 // recursive calls resolve to the correct slot.
                 let name_slot = self.declare_local(name, None);
-                let mut func_compiler = Compiler::new_child(
+                let func_compiler = Compiler::new_child(
                     name.clone(),
                     params.clone(),
                     return_type.clone(),
@@ -557,7 +554,7 @@ impl Compiler {
                 let init_idx = if let Some(init) = init {
                     let mut init_params = vec![("this".to_string(), None)];
                     init_params.extend(init.params.clone());
-                    let mut init_compiler = Compiler::new_child(
+                    let init_compiler = Compiler::new_child(
                         "<init>",
                         init_params,
                         None,
@@ -584,7 +581,7 @@ impl Compiler {
                     if let Stmt::Define { name: mname, params, return_type, body, span: mspan, .. } = m {
                         let mut method_params = vec![("this".to_string(), None)];
                         method_params.extend(params.clone());
-                        let mut method_compiler = Compiler::new_child(
+                        let method_compiler = Compiler::new_child(
                             mname.clone(),
                             method_params,
                             return_type.clone(),
@@ -908,9 +905,6 @@ impl Compiler {
                     self.compile_expr(v)?;
                 }
                 self.emit(Op::BuildDict(pairs.len()), span);
-            }
-            _ => {
-                return Err(CompileError("expression not supported by VM".to_string()));
             }
         }
         Ok(())

@@ -32,7 +32,6 @@ pub struct Token {
 }
 
 pub struct Lexer<'a> {
-    source: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     line: usize,
     col: usize,
@@ -44,7 +43,6 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
-            source,
             chars: source.char_indices().peekable(),
             line: 1,
             col: 1,

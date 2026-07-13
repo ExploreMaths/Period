@@ -9,15 +9,24 @@
 - The LSP now infers undeclared function return types from `return` statements for hover and completion, including if/otherwise branches; conflicting types are shown as a union in the language's list style.
 - The TextMate grammar now highlights the function name after `define` (which also fixes function-name highlighting inside hover popups).
 - New native `system` module (`import system.`): `run with <command>` runs a shell command and returns its output, `open with <target>` opens a URL or file in the default handler, `alert with <message>` shows a message box, `confirm with <message>` shows a yes/no dialog and returns a boolean, and `notify with <title>, <message>` shows a desktop notification. Dialogs and notifications use the native mechanism on each platform (Win32 MessageBox and WinRT toasts on Windows, osascript on macOS, zenity/notify-send on Linux).
+- `random` module: `seed with <integer>` re-seeds the generator so subsequent `random` sequences are reproducible (accepts arbitrary-precision seeds).
 
 ### Changed
 
-- LSP hover shows function and method signatures with a `define` prefix, and displays the fallback type as `nothing` instead of `unknown`.
+- LSP hover shows function and method signatures with a `define` prefix.
+- The gradual-typing escape-hatch type is now called `anything` instead of `unknown`: it appears in error messages and hover, and can be written as an annotation. Semantics are unchanged — it matches every value, and unannotated code is still checked dynamically at runtime.
+- The static type checker is more precise: `length`, `number`, and `integer` now have proper parameter signatures instead of accepting `anything`, and inferred return types of conflicting branches produce a union (`number or string`) instead of giving up.
+- `range` now works with arbitrary-precision integers end to end (iteration, indexing, and `length`), instead of rejecting values that do not fit in 64 bits. `for` loops iterate ranges lazily without materializing them.
+- The optional comma after an `if` condition is removed: only `if <condition> then:` is accepted now. This was a grammar concession to typos that complicated the parser for no real benefit.
 
 ### Fixed
 
 - Type annotations on parameters and return values are now enforced at runtime on every execution path. Previously, annotated single-expression functions were inlined away (dropping their checks), the generic JIT's `Op::Return` skipped the return-type check, and the JIT call dispatch (`period_call`) and the bytecode VM skipped parameter-annotation checks entirely, so a dynamically-typed value of the wrong type could pass through an annotated function silently.
-- `period/stdlib/` is back in sync with the root `stdlib/` (it was missing `path` and `test` and had a stale `list`), so the installed interpreter sees the same standard library as a source checkout.
+- `period/stdlib/` is back in sync with the root `stdlib/` (it was missing `path` and `test` and had a stale `list`), and CI now fails if the two copies drift apart again.
+- New differential test (`run_paths.sh`): every example must produce byte-identical output and exit codes on all execution paths (JIT, bytecode VM via `PERIOD_NO_JIT=1`, tree-walk via `PERIOD_NO_BYTECODE=1`), guarding against semantic divergence between tiers.
+- The bytecode VM could not iterate a `range` stored in a variable (`for i in r repeat:` reported "Cannot iterate over range"); it now works like the other backends.
+- The crate now builds with zero warnings (unused imports, dead code, and unreachable patterns cleaned up).
+- Dictionary output and key iteration order are now deterministic (sorted by key text) on every run and every execution backend; previously `HashMap` iteration order made `show` of a dict and `for` loops over dict keys vary between runs and between the JIT, VM, and tree-walk paths.
 
 ## 0.2.7 (2026-07-12)
 

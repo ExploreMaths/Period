@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 use std::io::{self, Write};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use num_bigint::BigInt;
-use num_traits::cast::ToPrimitive;
+use num_traits::cast::{FromPrimitive, ToPrimitive};
 
 use crate::environment::Environment;
-use crate::value::{range_len, BuiltInValue, Value};
+use crate::value::{range_len, BuiltInValue, Integer, Value};
 
 pub fn install_builtins(env: &Environment) {
     env.define_untyped("length", Value::BuiltIn(Box::new(BuiltInValue { name: "length".to_string(), min_arity: 1, max_arity: 1, func: builtin_length })));
@@ -27,7 +27,7 @@ fn builtin_length(args: &[Value]) -> Result<Value, String> {
         Value::String(s) => Ok(Value::integer(s.len() as i64)),
         Value::List(l) => Ok(Value::integer(l.borrow().len() as i64)),
         Value::Dict(d) => Ok(Value::integer(d.borrow().len() as i64)),
-        Value::Range { start, stop, step } => Ok(Value::integer(range_len(*start, *stop, *step))),
+        Value::Range { start, stop, step } => Ok(Value::big_integer(range_len(start, stop, step))),
         _ => Err("Cannot get length".to_string()),
     }
 }
@@ -67,7 +67,10 @@ fn builtin_boolean(args: &[Value]) -> Result<Value, String> {
         Value::Nothing => false,
         Value::List(l) => !l.borrow().is_empty(),
         Value::Dict(d) => !d.borrow().is_empty(),
-        Value::Range { start, stop, step } => (*step > 0 && start < stop) || (*step < 0 && start > stop),
+        Value::Range { start, stop, step } => {
+            let zero = Integer::Small(0);
+            (step > &zero && start < stop) || (step < &zero && start > stop)
+        }
         _ => true,
     };
     Ok(Value::Bool(b))
@@ -90,22 +93,24 @@ fn builtin_error(args: &[Value]) -> Result<Value, String> {
 
 fn builtin_range(args: &[Value]) -> Result<Value, String> {
     let to_i = |v: &Value| match v {
-        Value::Integer(n) => n.to_i64().ok_or_else(|| "range argument too large to iterate over".to_string()),
+        Value::Integer(n) => Ok(n.clone()),
         Value::Number(n) => {
             if n.fract() != 0.0 {
                 return Err("range arguments must be whole numbers".to_string());
             }
-            Ok(*n as i64)
+            BigInt::from_f64(*n)
+                .map(Integer::from_bigint)
+                .ok_or_else(|| "range arguments must be finite".to_string())
         }
         _ => Err("range args must be integers".to_string()),
     };
     let (start, stop, step) = match args.len() {
-        1 => (0, to_i(&args[0])?, 1),
-        2 => (to_i(&args[0])?, to_i(&args[1])?, 1),
+        1 => (Integer::Small(0), to_i(&args[0])?, Integer::Small(1)),
+        2 => (to_i(&args[0])?, to_i(&args[1])?, Integer::Small(1)),
         3 => (to_i(&args[0])?, to_i(&args[1])?, to_i(&args[2])?),
         _ => unreachable!(),
     };
-    if step == 0 { return Err("range step cannot be zero".to_string()); }
+    if step.is_zero() { return Err("range step cannot be zero".to_string()); }
     Ok(Value::Range { start, stop, step })
 }
 
@@ -145,18 +150,34 @@ pub fn make_math_module() -> Rc<RefCell<Environment>> {
 
 pub fn make_random_module() -> Rc<RefCell<Environment>> {
     static SEED: AtomicU64 = AtomicU64::new(0);
+    static SEEDED: AtomicBool = AtomicBool::new(false);
     fn random_fn(_: &[Value]) -> Result<Value, String> {
         let mut seed = SEED.load(Ordering::Relaxed);
-        if seed == 0 {
+        if !SEEDED.load(Ordering::Relaxed) {
             seed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+            SEEDED.store(true, Ordering::Relaxed);
         }
         seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         SEED.store(seed, Ordering::Relaxed);
         let r = ((seed >> 33) as f64) / ((1u64 << 31) as f64);
         Ok(Value::Number(r))
     }
+    fn seed_fn(args: &[Value]) -> Result<Value, String> {
+        let n = match &args[0] {
+            Value::Integer(i) => i.to_bigint(),
+            Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n)
+                .ok_or_else(|| "seed must be a finite number".to_string())?,
+            _ => return Err("seed must be an integer".to_string()),
+        };
+        // Reduce to the low 64 bits so any integer, however large, is accepted.
+        let seed = (n & BigInt::from(u64::MAX)).to_u64().unwrap_or(0);
+        SEED.store(seed, Ordering::Relaxed);
+        SEEDED.store(true, Ordering::Relaxed);
+        Ok(Value::Nothing)
+    }
     make_module(vec![
         ("random", Value::BuiltIn(Box::new(BuiltInValue { name: "random".to_string(), min_arity: 0, max_arity: 0, func: random_fn }))),
+        ("seed", Value::BuiltIn(Box::new(BuiltInValue { name: "seed".to_string(), min_arity: 1, max_arity: 1, func: seed_fn }))),
     ])
 }
 

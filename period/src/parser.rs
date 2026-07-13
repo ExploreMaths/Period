@@ -194,7 +194,6 @@ impl Parser {
     fn parse_if(&mut self) -> Result<Stmt, String> {
         self.advance(); // if
         let cond = self.parse_expression()?;
-        if self.check(&TokenKind::Comma) { self.advance(); }
         self.expect(TokenKind::Then, "expected 'then' after if condition")?;
         self.expect(TokenKind::Colon, "expected ':' after then")?;
         let then_branch = self.parse_block()?;
@@ -411,7 +410,7 @@ impl Parser {
         matches!(
             name,
             "nothing" | "boolean" | "integer" | "number" | "string" | "list" | "dictionary"
-                | "function" | "class"
+                | "function" | "class" | "anything"
         ) || name.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false)
     }
 
