@@ -89,7 +89,7 @@ sudo cp target/release/period /usr/local/bin/period</code></pre>
       <h3>Numbers</h3>
       <p>Integers and floating-point numbers are supported. Arithmetic follows standard precedence rules. <code>integer</code> values use arbitrary-precision integers, so they are not limited to 64 bits and do not silently overflow. Literals containing a decimal point produce <code>number</code> (floating-point) values instead. Comparisons between integers and numbers use exact arithmetic whenever possible, so a large integer is not silently considered equal to a nearby floating-point value.</p>
       <pre><code><span class="keyword">let</span> count <span class="keyword">be</span> <span class="number">42</span><span class="period">.</span>
-<span class="keyword">let</span> pi <span class="keyword">be</span> <span class="number">3.14</span><span class="period">.</span>
+<span class="keyword">let</span> pi <span class="keyword">be</span> <span class="number">3.141592653589793</span><span class="period">.</span>
 <span class="keyword">let</span> result <span class="keyword">be</span> <span class="number">2</span> ** <span class="number">100</span><span class="period">.</span>  <span class="comment">-- arbitrary-precision integer</span>
 <span class="builtin">show</span> result<span class="period">.</span></code></pre>
 

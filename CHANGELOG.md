@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- `docs/docs.html` no longer rounds `math.pi` to `3.14`; the example now uses the full `3.141592653589793` value and a regression test verifies the output. (issue #9)
+
 ## 0.2.8 (2026-07-14)
 
 ### Added

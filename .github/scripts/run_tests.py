@@ -1428,6 +1428,13 @@ class TestStandardLibrary(unittest.TestCase):
             show "ok".
         """, expected_lines=["ok"])
 
+    def test_math_pi_precision(self):
+        # Regression test for issue #9: pi must be printed with full f64 precision.
+        run_file("""
+            import math.
+            show pi from math.
+        """, expected_lines=["3.141592653589793"])
+
     def test_system_module_run(self):
         # `echo hi` works in both cmd (Windows) and sh (Unix).
         run_file("""
