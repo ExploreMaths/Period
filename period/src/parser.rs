@@ -428,6 +428,22 @@ impl Parser {
                 let value = self.parse_type()?;
                 Ok(format!("dictionary of {} to {}", key, value))
             }
+            "function" => {
+                self.expect(TokenKind::LParen, "expected '(' after function")?;
+                let mut args = Vec::new();
+                if !self.check(&TokenKind::RParen) {
+                    args.push(self.parse_type()?);
+                    while self.check(&TokenKind::Comma) {
+                        self.advance();
+                        args.push(self.parse_type()?);
+                    }
+                }
+                self.expect(TokenKind::RParen, "expected ')' after function argument types")?;
+                self.expect(TokenKind::Minus, "expected '->' after function arguments")?;
+                self.expect(TokenKind::Greater, "expected '->' after function arguments")?;
+                let ret = self.parse_type()?;
+                Ok(format!("function({}) -> {}", args.join(", "), ret))
+            }
             _ => Ok(name),
         }
     }
@@ -461,10 +477,11 @@ impl Parser {
             // (Person is the type). If the next token is an identifier, `first` is a
             // type; if it is `of` after `list`/`dictionary`, parse a compound type;
             // if it is `or`/`,`, parse a union type. Otherwise `first` is the name itself.
+            let is_function = first == "function" && self.check(&TokenKind::LParen);
             let is_compound = matches!(first.as_str(), "list" | "dictionary") && self.check(&TokenKind::Of);
             let is_simple_type = matches!(self.peek(0).kind, TokenKind::Ident(_));
             let is_union = matches!(self.peek(0).kind, TokenKind::Or | TokenKind::Comma);
-            if is_compound || is_simple_type || is_union {
+            if is_function || is_compound || is_simple_type || is_union {
                 let first_ty = self.parse_type_from(first)?;
                 let type_ann = self.parse_type_union_rest(first_ty)?;
                 let name = self.expect_ident("expected variable name after type")?;
@@ -937,6 +954,20 @@ mod tests {
             assert_eq!(expr_to_string(&args[0]), "(true and false)");
         } else {
             panic!("expected call expression");
+        }
+    }
+
+    #[test]
+    fn function_type_annotation_is_parsed() {
+        let prog = parse("define map with list of anything values, function(anything) -> anything f returns list of anything:\n    return values.");
+        if let Stmt::Define { params, return_type, .. } = &prog.statements[0] {
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].1.as_deref(), Some("list of anything"));
+            assert_eq!(params[1].1.as_deref(), Some("function(anything) -> anything"));
+            assert_eq!(params[1].0, "f");
+            assert_eq!(return_type.as_deref(), Some("list of anything"));
+        } else {
+            panic!("expected define statement");
         }
     }
 

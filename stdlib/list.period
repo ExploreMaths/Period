@@ -20,32 +20,32 @@ define min with list of number values returns number:
             set m to x.
     return m.
 
-define map with list of anything values, f returns list of anything:
+define map with list of anything values, function(anything) -> anything f returns list of anything:
     let result be [].
     for x in values repeat:
         set result to result + [f with x].
     return result.
 
-define filter with list of anything values, f returns list of anything:
+define filter with list of anything values, function(anything) -> boolean f returns list of anything:
     let result be [].
     for x in values repeat:
         if (f with x) then:
             set result to result + [x].
     return result.
 
-define find with list of anything values, f returns anything:
+define find with list of anything values, function(anything) -> boolean f returns anything:
     for x in values repeat:
         if (f with x) then:
             return x.
     return nothing.
 
-define any with list of anything values, f returns boolean:
+define any with list of anything values, function(anything) -> boolean f returns boolean:
     for x in values repeat:
         if (f with x) then:
             return true.
     return false.
 
-define all with list of anything values, f returns boolean:
+define all with list of anything values, function(anything) -> boolean f returns boolean:
     for x in values repeat:
         if not (f with x) then:
             return false.
