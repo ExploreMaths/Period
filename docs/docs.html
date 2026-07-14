@@ -53,7 +53,7 @@
       <pre><code>cd period
 cargo build --release
 sudo cp target/release/period /usr/local/bin/period</code></pre>
-      <p>Period uses a single tree-walking interpreter for all programs, so the semantics you see in the REPL are exactly the semantics you get in a file.</p>
+      <p>Period compiles every program to bytecode and runs it on a single virtual machine, so the semantics you see in the REPL are exactly the semantics you get in a file.</p>
       <p>After installation, verify it works:</p>
       <pre><code>period --version</code></pre>
       <p>Run your first program:</p>
@@ -210,7 +210,7 @@ ada<span class="period">.</span>greet<span class="period">(</span><span class="s
 
     <section id="types">
       <h2>Type Annotations</h2>
-      <p>Type annotations are optional. When present, they are checked twice: the static checker validates what it can prove before execution, and the runtime re-checks every annotation on every execution path (tree-walk interpreter, bytecode VM, and JIT), so dynamically-typed values can never slip past an annotation silently. Use them on parameters, return values, and variables. Function parameters read most naturally with the type first (<code>number a</code>); variable declarations read most naturally with the type after <code>be</code> (<code>let count be integer 0</code>).</p>
+      <p>Type annotations are optional. When present, they are checked twice: the static checker validates what it can prove before execution, and the runtime re-checks every annotation, so dynamically-typed values can never slip past an annotation silently. Use them on parameters, return values, and variables. Function parameters read most naturally with the type first (<code>number a</code>); variable declarations read most naturally with the type after <code>be</code> (<code>let count be integer 0</code>).</p>
       <pre><code><span class="keyword">define</span> add <span class="keyword">with</span> number a, number b <span class="keyword">returns</span> number<span class="period">:</span>
     <span class="keyword">return</span> a + b<span class="period">.</span>
 

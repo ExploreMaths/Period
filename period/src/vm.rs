@@ -9,7 +9,7 @@ use crate::ast::{BinOp, Span, UnaryOp};
 use crate::bytecode::{CompiledFunction, Op};
 use crate::environment::Environment;
 use crate::interpreter::{Control, Interpreter};
-use crate::value::{bigint_index, range_len, ErrorValue, Integer, VMClassValue, VMFunctionValue, Value};
+use crate::value::{bigint_index, range_len, ErrorValue, Integer, ClassValue, FunctionValue, Value};
 
 pub struct Vm<'a> {
     interpreter: &'a mut Interpreter,
@@ -37,6 +37,7 @@ struct CallFrame {
 }
 
 impl<'a> Vm<'a> {
+    #[allow(dead_code)]
     pub(crate) fn stack_top(&self) -> Option<Value> {
         self.stack.last().cloned()
     }
@@ -202,7 +203,7 @@ impl<'a> Vm<'a> {
                     }
                     (proto, closure, captured)
                 };
-                let value = Value::VMFunction(Box::new(VMFunctionValue {
+                let value = Value::Function(Box::new(FunctionValue {
                     func: proto,
                     closure,
                     upvalues: captured,
@@ -484,7 +485,7 @@ impl<'a> Vm<'a> {
                 } else {
                     None
                 };
-                let class = Value::VMClass(Box::new(VMClassValue {
+                let class = Value::Class(Box::new(ClassValue {
                     name: name_str,
                     init: init_value,
                     methods: method_map,
@@ -690,14 +691,7 @@ impl<'a> Vm<'a> {
                 self.stack.push(result);
                 Ok(true)
             }
-            Value::Function(fv) if fv.params.is_empty() => {
-                // Tree-walker function values are not expected in the VM path; fall back.
-                Err(Control::RuntimeError(
-                    "cannot auto-call tree-walker function in VM".to_string(),
-                    span.clone(),
-                ))
-            }
-            Value::VMFunction(fv) if fv.func.params.is_empty() => {
+            Value::Function(fv) if fv.func.params.is_empty() => {
                 self.call_value(value.clone(), Vec::new(), span)?;
                 Ok(true)
             }
@@ -705,7 +699,8 @@ impl<'a> Vm<'a> {
         }
     }
 
-    pub(crate) fn call_value(&mut self, callee: Value, args: Vec<Value>, span: &Span) -> Result<(), Control> {
+    pub(crate) fn call_value(&mut self, callee: Value, args: Vec<Value>, span: &Span,
+    ) -> Result<(), Control> {
         match callee {
             Value::BuiltIn(bv) => {
                 if args.len() < bv.min_arity || args.len() > bv.max_arity {
@@ -715,7 +710,7 @@ impl<'a> Vm<'a> {
                 self.stack.push(result);
                 Ok(())
             }
-            Value::VMFunction(fv) => {
+            Value::Function(fv) => {
                 if fv.func.params.len() != args.len() {
                     return Err(Control::RuntimeError(
                         format!(
@@ -729,7 +724,7 @@ impl<'a> Vm<'a> {
                 }
                 let slots_start = self.locals.len();
                 self.locals.resize(slots_start + fv.func.local_count, Value::Nothing);
-                // Check parameter type annotations, same as the tree-walk path.
+                // Check parameter type annotations at runtime.
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(ann) = &fv.func.params[i].1 {
                         self.check_type(arg, ann, &fv.func.span.clone())?;
@@ -748,29 +743,9 @@ impl<'a> Vm<'a> {
                 });
                 Ok(())
             }
-            Value::Function(_) => {
-                let closure = self.frames.last().unwrap().closure.clone();
-                let old_env = self.interpreter.env.clone();
-                self.interpreter.env = closure;
-                let result = self.interpreter.call_value(&callee, args, span);
-                self.interpreter.env = old_env;
-                let value = result?;
-                self.stack.push(value);
-                Ok(())
-            }
-            Value::VMClass(_) => {
+            Value::Class(_) => {
                 let instance = self.new_instance(callee, args, span)?;
                 self.stack.push(instance);
-                Ok(())
-            }
-            Value::Class(_) => {
-                let closure = self.frames.last().unwrap().closure.clone();
-                let old_env = self.interpreter.env.clone();
-                self.interpreter.env = closure;
-                let result = self.interpreter.call_value(&callee, args, span);
-                self.interpreter.env = old_env;
-                let value = result?;
-                self.stack.push(value);
                 Ok(())
             }
             _ => Err(Control::RuntimeError(
@@ -993,7 +968,7 @@ impl<'a> Vm<'a> {
             Value::Instance { ref class, ref fields, ref slots } => {
                 if let Some(slots) = slots {
                     if let Some(idx) = match class.as_ref() {
-                        Value::VMClass(cv) => cv.field_names.iter().position(|n| n == name),
+                        Value::Class(cv) => cv.field_names.iter().position(|n| n == name),
                         _ => None,
                     } {
                         return Ok(slots.borrow().get(idx).cloned().unwrap_or(Value::Nothing));
@@ -1006,14 +981,6 @@ impl<'a> Vm<'a> {
                 }
                 match class.as_ref() {
                     Value::Class(cv) => {
-                        if cv.methods.contains_key(name) {
-                            return Err(Control::RuntimeError(
-                                format!("method '{}' must be called with 'tell <object> to {}'", name, name),
-                                span.clone(),
-                            ));
-                        }
-                    }
-                    Value::VMClass(cv) => {
                         if cv.methods.contains_key(name) {
                             return Err(Control::RuntimeError(
                                 format!("method '{}' must be called with 'tell <object> to {}'", name, name),
@@ -1045,7 +1012,7 @@ impl<'a> Vm<'a> {
             Value::Instance { ref class, ref fields, ref slots } => {
                 if let Some(slots) = slots {
                     if let Some(idx) = match class.as_ref() {
-                        Value::VMClass(cv) => cv.field_names.iter().position(|n| n == name),
+                        Value::Class(cv) => cv.field_names.iter().position(|n| n == name),
                         _ => None,
                     } {
                         slots.borrow_mut()[idx] = value;
@@ -1065,7 +1032,7 @@ impl<'a> Vm<'a> {
 
     fn new_instance(&mut self, cls: Value, args: Vec<Value>, span: &Span) -> Result<Value, Control> {
         match cls {
-            Value::VMClass(ref cv) => {
+            Value::Class(ref cv) => {
                 let has_layout = !cv.field_names.is_empty();
                 let slots = if has_layout {
                     Some(Rc::new(RefCell::new(vec![Value::Nothing; cv.field_names.len()])))
@@ -1101,26 +1068,17 @@ impl<'a> Vm<'a> {
                 }
                 Ok(instance)
             }
-            Value::Class(_) => {
-                let closure = self.frames.last().unwrap().closure.clone();
-                let old_env = self.interpreter.env.clone();
-                self.interpreter.env = closure;
-                let result = self.interpreter.call_value(&cls, args, span);
-                self.interpreter.env = old_env;
-                let instance = result?;
-                Ok(instance)
-            }
             _ => Err(Control::RuntimeError(format!("Cannot create instance of {}", cls.type_name()), span.clone())),
         }
     }
 
-    fn call_method(&mut self, obj: Value, name: &str, args: Vec<Value>, span: &Span) -> Result<(), Control> {
+    fn call_method(&mut self, obj: Value, name: &str, args: Vec<Value>, span: &Span,
+    ) -> Result<(), Control> {
         let class = match &obj {
             Value::Instance { class, .. } => class.clone(),
             _ => return Err(Control::RuntimeError(format!("Cannot send message to {}", obj.type_name()), span.clone())),
         };
         let method = match class.as_ref() {
-            Value::VMClass(cv) => cv.methods.get(name).cloned(),
             Value::Class(cv) => cv.methods.get(name).cloned(),
             _ => None,
         };

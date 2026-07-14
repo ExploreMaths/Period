@@ -19,10 +19,8 @@ show greeting.
 
 ## Benchmark
 
-Period is compiled to native code with Cranelift and uses a long-running worker
-process for fast repeated execution. The interpreter also recognizes a few
-specific loop shapes (e.g. `sum = 1 + 2 + ... + N`) and replaces them with
-closed-form arithmetic, so on those particular workloads in
+Period is implemented as a bytecode compiler and virtual machine. The
+interpreter also recognizes a few specific loop shapes (e.g. `sum = 1 + 2 + ... + N`) and replaces them with closed-form arithmetic, so on those particular workloads in
 [`docs/benchmark_long.py`](docs/benchmark_long.py) it runs ahead of C, Rust, Go,
 C# and Java. These are targeted optimizations for those loop shapes, not a
 general performance claim — arbitrary Period code does not run faster than C.

@@ -187,43 +187,33 @@ function findServerExecutable(context) {
         return configured;
     }
 
-    return findExecutable(context, false);
+    return findExecutable(context);
 }
 
 function findRunExecutable(context) {
-    // Running a file should always go through the wrapper (period / period.exe),
-    // even if the language server was configured to use period-core directly.
-    return findExecutable(context, true);
+    return findExecutable(context);
 }
 
-function findExecutable(context, preferWrapper) {
+function findExecutable(context) {
     const isWindows = process.platform === 'win32';
-    const wrapperName = isWindows ? 'period.exe' : 'period';
-    const coreName = isWindows ? 'period-core.exe' : 'period-core';
+    const exeName = isWindows ? 'period.exe' : 'period';
 
     const config = vscode.workspace.getConfiguration('period');
     const configured = config.get('languageServerPath');
     if (configured && fs.existsSync(configured)) {
-        const base = path.basename(configured);
-        if (preferWrapper && base.toLowerCase() === coreName.toLowerCase()) {
-            const wrapper = path.join(path.dirname(configured), wrapperName);
-            if (fs.existsSync(wrapper)) {
-                return wrapper;
-            }
-        }
         return configured;
     }
 
     const extRoot = context.extensionPath;
 
     // Prefer a bundled compiler executable inside the extension folder (development layout).
-    const bundled = path.join(extRoot, wrapperName);
+    const bundled = path.join(extRoot, exeName);
     if (fs.existsSync(bundled)) {
         return bundled;
     }
 
     // Prefer the sibling compiler executable installed by the Windows installer.
-    const sibling = path.join(extRoot, '..', wrapperName);
+    const sibling = path.join(extRoot, '..', exeName);
     if (fs.existsSync(sibling)) {
         return sibling;
     }
@@ -231,14 +221,14 @@ function findExecutable(context, preferWrapper) {
     // Prefer a compiler in the current workspace root (development / source layout).
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
-        const local = path.join(workspaceFolders[0].uri.fsPath, wrapperName);
+        const local = path.join(workspaceFolders[0].uri.fsPath, exeName);
         if (fs.existsSync(local)) {
             return local;
         }
     }
 
     // Fallback: look for the executable on PATH.
-    return wrapperName;
+    return exeName;
 }
 
 async function startClient(context) {

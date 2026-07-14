@@ -6,7 +6,6 @@ use num_bigint::BigInt;
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use num_traits::Zero;
 
-use crate::ast::*;
 use crate::environment::Environment;
 
 /// Arbitrary-precision integer with a fast path for values that fit in i64.
@@ -146,6 +145,7 @@ impl Integer {
         *self = Integer::from_bigint(self.to_bigint() * other.to_bigint());
     }
 
+    #[allow(dead_code)]
     pub fn div(&self, other: &Integer) -> Option<f64> {
         if other.is_zero() {
             return None;
@@ -208,43 +208,22 @@ impl Ord for Integer {
     }
 }
 
-#[derive(Clone)]
-pub struct FunctionValue {
-    pub name: String,
-    pub params: Vec<(String, Option<String>)>,
-    pub return_type: Option<String>,
-    pub body: Vec<Stmt>,
-    pub closure: Rc<RefCell<Environment>>,
-    pub span: Span,
-    pub from_module: bool,
-}
-
 #[derive(Clone, Debug)]
 pub struct ClassValue {
-    pub name: String,
-    pub init: Option<Init>,
-    pub methods: HashMap<String, Value>,
-    pub from_module: bool,
-}
-
-#[derive(Clone, Debug)]
-pub struct VMClassValue {
     pub name: String,
     pub init: Option<Box<Value>>,
     pub methods: HashMap<String, Value>,
     pub field_names: Vec<String>,
     pub field_init: Vec<Option<usize>>,
-    // Kept for parity with Value::Function/ClassValue; the VM variants never read it.
     #[allow(dead_code)]
     pub from_module: bool,
 }
 
 #[derive(Clone)]
-pub struct VMFunctionValue {
+pub struct FunctionValue {
     pub func: Rc<crate::bytecode::CompiledFunction>,
     pub closure: Rc<RefCell<Environment>>,
     pub upvalues: Vec<Rc<RefCell<Value>>>,
-    // Kept for parity with Value::Function; the VM variant never reads it.
     #[allow(dead_code)]
     pub from_module: bool,
 }
@@ -285,15 +264,13 @@ pub enum Value {
         step: Integer,
     },
     Function(Box<FunctionValue>),
-    Class(Box<ClassValue>),
-    VMClass(Box<VMClassValue>),
     Instance {
         class: Box<Value>,
         fields: Option<Rc<RefCell<HashMap<String, Value>>>>,
         slots: Option<Rc<RefCell<Vec<Value>>>>,
     },
     BuiltIn(Box<BuiltInValue>),
-    VMFunction(Box<VMFunctionValue>),
+    Class(Box<ClassValue>),
     Module(Box<ModuleValue>),
     Error(Box<ErrorValue>),
     Box(Rc<RefCell<Value>>),
@@ -334,12 +311,10 @@ impl std::fmt::Debug for Value {
                 items.sort();
                 write!(f, "{{{}}}", items.join(", "))
             }
-            Value::Function(fv) => write!(f, "<function {}>", fv.name),
+            Value::Function(fv) => write!(f, "<function {}>", fv.func.name),
             Value::Class(cv) => write!(f, "<class {}>", cv.name),
-            Value::VMClass(cv) => write!(f, "<class {}>", cv.name),
             Value::Instance { class, .. } => write!(f, "<instance of {:?}>", class),
             Value::BuiltIn(bv) => write!(f, "<built-in {}>", bv.name),
-            Value::VMFunction(fv) => write!(f, "<function {}>", fv.func.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),
             Value::Error(ev) => write!(f, "error: {}", ev.message),
             Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start.to_bigint(), stop.to_bigint(), step.to_bigint()),
@@ -417,8 +392,7 @@ impl Value {
             Value::List(_) => "list",
             Value::Dict(_) => "dictionary",
             Value::Function(_) => "function",
-            Value::VMFunction(_) => "function",
-            Value::Class(_) | Value::VMClass(_) => "class",
+            Value::Class(_) => "class",
             Value::Instance { .. } => "instance",
             Value::BuiltIn(_) => "built-in",
             Value::Module(_) => "module",
@@ -451,10 +425,8 @@ impl std::fmt::Display for Value {
                 items.sort();
                 write!(f, "{{{}}}", items.join(", "))
             }
-            Value::Function(fv) => write!(f, "<function {}>", fv.name),
-            Value::VMFunction(fv) => write!(f, "<function {}>", fv.func.name),
+            Value::Function(fv) => write!(f, "<function {}>", fv.func.name),
             Value::Class(cv) => write!(f, "<class {}>", cv.name),
-            Value::VMClass(cv) => write!(f, "<class {}>", cv.name),
             Value::Instance { class, .. } => write!(f, "<instance of {:?}>", class),
             Value::BuiltIn(bv) => write!(f, "<built-in {}>", bv.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),

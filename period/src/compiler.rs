@@ -9,6 +9,12 @@ use crate::value::Value;
 #[derive(Debug, Clone)]
 pub struct CompileError(pub String);
 
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone)]
 struct Local {
     name: String,
@@ -26,6 +32,7 @@ struct CompilerState {
     captured_globals: HashSet<String>,
     parent: Option<Rc<RefCell<CompilerState>>>,
     temp_counter: usize,
+    force_globals: bool,
 }
 
 impl CompilerState {
@@ -45,6 +52,7 @@ impl CompilerState {
             captured_globals,
             parent,
             temp_counter: 0,
+            force_globals: false,
         };
         for (name, type_ann) in params {
             state.declare_local(&name, type_ann.clone());
@@ -275,12 +283,11 @@ impl Compiler {
         }
     }
 
-    pub fn compile_program(stmts: &[Stmt], is_module: bool) -> Result<CompiledFunction, CompileError> {
-        let mut stmts: Vec<Stmt> = stmts.to_vec();
-        crate::inline::inline_small_functions(&mut stmts, !is_module);
-        let captured_globals = collect_captured_globals(&stmts);
+    pub fn compile_program(stmts: &[Stmt], _is_module: bool, force_globals: bool) -> Result<CompiledFunction, CompileError> {
+        let captured_globals = collect_captured_globals(stmts);
         let compiler = Compiler::new("<main>", Vec::new(), None, Span { line: 1, col: 1 }, captured_globals);
-        for stmt in &stmts {
+        compiler.state.borrow_mut().force_globals = force_globals;
+        for stmt in stmts {
             compiler.compile_stmt(stmt)?;
         }
         compiler.emit(Op::Nothing, Span { line: 1, col: 1 });
@@ -344,11 +351,11 @@ impl Compiler {
                     let idx = self.add_string(ann);
                     self.emit(Op::CheckType(idx), span.clone());
                 }
-                let (scope_depth, captured_globals) = {
+                let (scope_depth, captured_globals, force_globals) = {
                     let state = self.state();
-                    (state.scope_depth, state.captured_globals.clone())
+                    (state.scope_depth, state.captured_globals.clone(), state.force_globals)
                 };
-                if scope_depth == 0 && captured_globals.contains(name) {
+                if scope_depth == 0 && (force_globals || captured_globals.contains(name)) {
                     let slot = if let Some(slot) = self.state().resolve_local(name) {
                         slot
                     } else {

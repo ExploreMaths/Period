@@ -40,8 +40,8 @@
         </div>
         <div class="feature">
           <div class="feature-icon">⚡</div>
-          <h4>Native JIT</h4>
-          <p>Programs compile to native code with Cranelift by default. Numeric loops also get closed-form and periodic optimisations that eliminate whole loops at compile time.</p>
+          <h4>Bytecode VM</h4>
+          <p>Programs compile to Period bytecode and run on a built-in virtual machine. Numeric loops also get closed-form and periodic optimisations that eliminate whole loops at compile time.</p>
         </div>
         <div class="feature">
           <div class="feature-icon">📦</div>
@@ -87,7 +87,7 @@
       <div class="chart-wrapper">
         <canvas id="perfChart"></canvas>
       </div>
-      <p class="chart-note">Benchmarked with <a href="https://github.com/ExploreMaths/Period/blob/main/docs/benchmark_long.py"><code>benchmark_long.py</code></a> (averaged over 10 runs). Workloads: summing 1..N, counting numbers divisible by 3 or 5, counting numbers divisible by 3 and 5, summing numbers divisible by 3 or 5, string concatenation, list growth, function calls, object instantiation, and try/catch. C is compiled with the best available optimizing compiler (MSVC, GCC, Clang) and falls back to the bundled TCC if none are installed; Rust, Go, C# and Java use their normal release builds. Period now compiles all programs through its Cranelift-based JIT by default.</p>
+      <p class="chart-note">Benchmarked with <a href="https://github.com/ExploreMaths/Period/blob/main/docs/benchmark_long.py"><code>benchmark_long.py</code></a> (averaged over 10 runs). Workloads: summing 1..N, counting numbers divisible by 3 or 5, counting numbers divisible by 3 and 5, summing numbers divisible by 3 or 5, string concatenation, list growth, function calls, object instantiation, and try/catch. C is compiled with the best available optimizing compiler (MSVC, GCC, Clang) and falls back to the bundled TCC if none are installed; Rust, Go, C# and Java use their normal release builds. Period runs all programs on its bytecode virtual machine.</p>
     </section>
 
     <section id="hello-period">

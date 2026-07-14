@@ -619,7 +619,7 @@ class TestLanguageFeatures(unittest.TestCase):
             self.assertIn("hello file", result.stdout)
 
     def test_numeric_loop(self):
-        # Pure numeric loops run through the tree-walking interpreter.
+        # Pure numeric loops are recognised by the bytecode compiler.
         run_file(
             """
             let sum be 0.
