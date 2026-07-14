@@ -76,14 +76,31 @@ define slice with values, integer start, integer end:
     return result.
 
 define sort with list of number values returns list of number:
-    -- Simple insertion sort.
+    let n be length with values.
+    if n <= 1 then:
+        return values.
+    let mid be integer with n / 2.
+    let left be slice with values, 0, mid.
+    let right be slice with values, mid, n.
+    return merge with (sort with left), (sort with right).
+
+define merge with list of number left, list of number right returns list of number:
     let result be [].
-    for x in values repeat:
-        let i be 0.
-        let n be length with result.
-        while i < n and result[i] < x repeat:
+    let i be 0.
+    let j be 0.
+    let ln be length with left.
+    let rn be length with right.
+    while i < ln and j < rn repeat:
+        if left[i] <= right[j] then:
+            set result to result + [left[i]].
             set i to i + 1.
-        let before be slice with result, 0, i.
-        let after be slice with result, i, n.
-        set result to before + [x] + after.
+        otherwise:
+            set result to result + [right[j]].
+            set j to j + 1.
+    while i < ln repeat:
+        set result to result + [left[i]].
+        set i to i + 1.
+    while j < rn repeat:
+        set result to result + [right[j]].
+        set j to j + 1.
     return result.

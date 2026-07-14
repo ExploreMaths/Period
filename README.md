@@ -19,13 +19,21 @@ show greeting.
 
 ## Benchmark
 
-Period is implemented as a bytecode compiler and virtual machine. The
-interpreter also recognizes a few specific loop shapes (e.g. `sum = 1 + 2 + ... + N`) and replaces them with closed-form arithmetic, so on those particular workloads in
-[`docs/benchmark_long.py`](docs/benchmark_long.py) it runs ahead of C, Rust, Go,
-C# and Java. These are targeted optimizations for those loop shapes, not a
-general performance claim — arbitrary Period code does not run faster than C.
+Period is a bytecode compiler and virtual machine. The chart below shows a set
+of numeric loop micro-benchmarks ([`docs/benchmark_long.py`](docs/benchmark_long.py)) where the
+implementation recognizes specific shapes — such as `sum = 1 + 2 + ... + N` —
+and evaluates them with closed-form arithmetic instead of iterating. On those
+hand-picked workloads Period appears faster than C, Rust, Go, C# and Java, but
+that is an apples-to-oranges comparison: the other languages are actually doing
+the loop work, while Period is doing the math. It is not evidence that general
+Period code outperforms those languages; for ordinary code it does not.
 
 ![Benchmark results](docs/benchmark_long.svg)
+
+> [!NOTE]
+> The standard library sort is a mergesort, not a closed-form trick. These
+> optimizations apply only to the specific loop patterns exercised in
+> `docs/benchmark_long.py`.
 
 ## Quick Start
 
@@ -108,16 +116,20 @@ Available source modules include `list` (sum, max, min, length helpers) and `tex
 
 ## Package Manager
 
-Period includes a small built-in package manager for sharing modules.
+Period includes a small built-in package manager. Packages are resolved from a
+hosted registry index and downloaded to a local `period_packages/` folder.
 
 ```bash
 # Start a new project
 period init myproject
 
-# Install a package from the registry
+# Install a package from the registry and add it to period.toml
 period install hello
 
-# Install from a URL or local file
+# Install a specific version
+period install hello@1.2.3
+
+# Install from a URL or local file (legacy direct install)
 period install https://example.com/mypkg.period
 period install ./mypkg.period
 
@@ -125,40 +137,30 @@ period install ./mypkg.period
 period update
 ```
 
-The default registry is hosted on GitHub at `https://raw.githubusercontent.com/ExploreMaths/Period/main/registry`. Set the `PERIOD_REGISTRY` environment variable to use a different registry.
+The default registry is hosted at `https://period-lang.github.io/registry`.
+Set the `PERIOD_REGISTRY` environment variable to use a different registry root.
 
 ### Publishing a package
 
-Period uses a GitHub-based static registry. All packages are stored as files in the `registry/` directory of this repository, and changes are submitted through Pull Requests.
-
-For project maintainers with write access (requires Git installed and in PATH):
-
-```bash
-period publish ./mypkg.period --name mypkg --version 1.0.0 --push
-```
-
-This generates the registry files and runs `git add`, `git commit`, and `git push` automatically.
-
-For other contributors, use the standard fork-and-pull-request workflow:
-
-1. Fork `ExploreMaths/Period` on GitHub.
-2. Clone your fork and add the registry as a git remote if needed:
-   ```bash
-   git clone https://github.com/<your-username>/Period.git
-   cd Period
-   git remote add upstream https://github.com/ExploreMaths/Period.git
-   ```
-3. Publish and push to your own fork:
-   ```bash
-   period publish ./mypkg.period --name mypkg --version 1.0.0 --push --remote origin
-   ```
-4. Open a Pull Request on GitHub to merge your changes into `ExploreMaths/Period`.
-
-Once the PR is merged, everyone can install the package with:
+Packages are published by producing a registry entry for a `.period` file. The
+entry can be merged into a local `registry.json` or printed to stdout:
 
 ```bash
-period install mypkg
+period publish ./mypkg.period --name mypkg --version 1.0.0
 ```
+
+To update an existing registry file:
+
+```bash
+period publish ./mypkg.period --name mypkg --version 1.0.0 --registry-file registry.json
+```
+
+The package file itself should be uploaded to a reachable URL (for example, a
+GitHub Release asset). The registry entry's `url` points to that location.
+
+Registry changes are submitted through the registry repository's normal
+workflow (for example, a Pull Request against `period-lang/registry`). The old
+`--push` flag that automatically ran `git add/commit/push` has been removed.
 
 ## Documentation
 

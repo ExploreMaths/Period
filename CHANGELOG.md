@@ -19,9 +19,12 @@
 - The static type checker is more precise: `length`, `number`, and `integer` now have proper parameter signatures instead of accepting `anything`, and inferred return types of conflicting branches produce a union (`number or string`) instead of giving up.
 - `range` now works with arbitrary-precision integers end to end (iteration, indexing, and `length`), instead of rejecting values that do not fit in 64 bits. `for` loops iterate ranges lazily without materializing them.
 - The optional comma after an `if` condition is removed: only `if <condition> then:` is accepted now. This was a grammar concession to typos that complicated the parser for no real benefit.
+- `README.md` benchmark wording now leads with the caveat that the compared workloads are hand-picked loop patterns evaluated with closed-form arithmetic, not a general performance claim. Package manager instructions now describe the hosted-registry model instead of the old `period publish --push` workflow.
+- `stdlib/list.period` `sort` is now a mergesort (O(n log n)) instead of an insertion sort that repeatedly sliced and concatenated sublists.
 
 ### Fixed
 
+- Removed unused `cert.pfx` code-signing certificate from the repository root.
 - Type annotations on parameters and return values are now enforced at runtime on every execution path. Previously, annotated single-expression functions were inlined away (dropping their checks), the generic JIT's `Op::Return` skipped the return-type check, and the JIT call dispatch (`period_call`) and the bytecode VM skipped parameter-annotation checks entirely, so a dynamically-typed value of the wrong type could pass through an annotated function silently.
 - `period/stdlib/` is back in sync with the root `stdlib/` (it was missing `path` and `test` and had a stale `list`), and CI now fails if the two copies drift apart again.
 - New differential test (`run_paths.sh`): every example must produce byte-identical output and exit codes on all execution paths (JIT, bytecode VM via `PERIOD_NO_JIT=1`, tree-walk via `PERIOD_NO_BYTECODE=1`), guarding against semantic divergence between tiers.
