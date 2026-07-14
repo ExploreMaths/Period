@@ -15,7 +15,7 @@ pub enum Op {
     StoreLocal(usize),
     LoadGlobal(usize),
     StoreGlobal(usize),
-    DefineGlobal { name: usize, type_ann: Option<usize> },
+    DefineGlobal { name: usize },
     Closure { func: usize, upvalues: Vec<Upvalue> },
     GetUpvalue(usize),
     SetUpvalue(usize),
@@ -46,7 +46,6 @@ pub enum Op {
     Export(Vec<usize>),
     Read,
     Write,
-    CheckType(usize),
     IncrementLocal(usize),
     AddLocals(usize, usize),
     AppendLocalString { slot: usize, string_idx: usize },
@@ -123,7 +122,6 @@ impl Chunk {
 pub struct CompiledFunction {
     pub name: String,
     pub params: Vec<(String, Option<String>)>,
-    pub return_type: Option<String>,
     pub chunk: Chunk,
     pub local_count: usize,
     pub upvalues: Vec<Upvalue>,
@@ -131,11 +129,10 @@ pub struct CompiledFunction {
 }
 
 impl CompiledFunction {
-    pub fn new(name: impl Into<String>, params: Vec<(String, Option<String>)>, return_type: Option<String>, span: Span) -> Self {
+    pub fn new(name: impl Into<String>, params: Vec<(String, Option<String>)>, span: Span) -> Self {
         Self {
             name: name.into(),
             params,
-            return_type,
             chunk: Chunk::new(),
             local_count: 0,
             upvalues: Vec::new(),

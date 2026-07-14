@@ -39,13 +39,12 @@ impl CompilerState {
     fn new(
         name: impl Into<String>,
         params: Vec<(String, Option<String>)>,
-        return_type: Option<String>,
         span: Span,
         captured_globals: HashSet<String>,
         parent: Option<Rc<RefCell<CompilerState>>>,
     ) -> Self {
         let mut state = Self {
-            function: CompiledFunction::new(name, params.clone(), return_type, span),
+            function: CompiledFunction::new(name, params.clone(), span),
             locals: Vec::new(),
             scope_depth: 0,
             upvalues: Vec::new(),
@@ -258,13 +257,12 @@ impl Compiler {
     pub fn new(
         name: impl Into<String>,
         params: Vec<(String, Option<String>)>,
-        return_type: Option<String>,
         span: Span,
         captured_globals: HashSet<String>,
     ) -> Self {
         Self {
             state: Rc::new(RefCell::new(CompilerState::new(
-                name, params, return_type, span, captured_globals, None,
+                name, params, span, captured_globals, None,
             ))),
         }
     }
@@ -272,20 +270,19 @@ impl Compiler {
     fn new_child(
         name: impl Into<String>,
         params: Vec<(String, Option<String>)>,
-        return_type: Option<String>,
         span: Span,
         enclosing: Rc<RefCell<CompilerState>>,
     ) -> Self {
         Self {
             state: Rc::new(RefCell::new(CompilerState::new(
-                name, params, return_type, span, HashSet::new(), Some(enclosing),
+                name, params, span, HashSet::new(), Some(enclosing),
             ))),
         }
     }
 
     pub fn compile_program(stmts: &[Stmt], _is_module: bool, force_globals: bool) -> Result<CompiledFunction, CompileError> {
         let captured_globals = collect_captured_globals(stmts);
-        let compiler = Compiler::new("<main>", Vec::new(), None, Span { line: 1, col: 1 }, captured_globals);
+        let compiler = Compiler::new("<main>", Vec::new(), Span { line: 1, col: 1 }, captured_globals);
         compiler.state.borrow_mut().force_globals = force_globals;
         for stmt in stmts {
             compiler.compile_stmt(stmt)?;
@@ -347,10 +344,6 @@ impl Compiler {
         match stmt {
             Stmt::Let { name, type_ann, value, span } => {
                 self.compile_expr(value)?;
-                if let Some(ann) = type_ann {
-                    let idx = self.add_string(ann);
-                    self.emit(Op::CheckType(idx), span.clone());
-                }
                 let (scope_depth, captured_globals, force_globals) = {
                     let state = self.state();
                     (state.scope_depth, state.captured_globals.clone(), state.force_globals)
@@ -362,9 +355,8 @@ impl Compiler {
                         self.declare_local(name, type_ann.clone())
                     };
                     let name_idx = self.add_string(name);
-                    let type_ann_idx = type_ann.as_ref().map(|a| self.add_string(a));
                     self.emit(Op::Dup, span.clone());
-                    self.emit(Op::DefineGlobal { name: name_idx, type_ann: type_ann_idx }, span.clone());
+                    self.emit(Op::DefineGlobal { name: name_idx }, span.clone());
                     self.emit(Op::StoreLocal(slot), span.clone());
                 } else {
                     let existing = {
@@ -413,10 +405,6 @@ impl Compiler {
                                     self.emit(op, span.clone());
                                 } else {
                                     self.compile_expr(value)?;
-                                    if let Some(ann) = type_ann {
-                                        let idx = self.add_string(&ann);
-                                        self.emit(Op::CheckType(idx), span.clone());
-                                    }
                                     self.emit(Op::StoreLocal(slot), span.clone());
                                 }
                             }
@@ -524,14 +512,13 @@ impl Compiler {
                 self.leave_scope();
                 self.patch_jump(after_catch);
             }
-            Stmt::Define { name, params, return_type, body, span, .. } => {
+            Stmt::Define { name, params, return_type: _, body, span, .. } => {
                 // Declare the function name as a local *before* compiling the body so
                 // recursive calls resolve to the correct slot.
                 let name_slot = self.declare_local(name, None);
                 let func_compiler = Compiler::new_child(
                     name.clone(),
                     params.clone(),
-                    return_type.clone(),
                     span.clone(),
                     self.state.clone(),
                 );
@@ -551,7 +538,7 @@ impl Compiler {
                     // slot populated as well so local references resolve correctly.
                     self.emit(Op::Dup, span.clone());
                     let name_idx = self.add_string(name);
-                    self.emit(Op::DefineGlobal { name: name_idx, type_ann: None }, span.clone());
+                    self.emit(Op::DefineGlobal { name: name_idx }, span.clone());
                     self.emit(Op::StoreLocal(name_slot), span.clone());
                 } else {
                     self.emit(Op::StoreLocal(name_slot), span.clone());
@@ -564,7 +551,6 @@ impl Compiler {
                     let init_compiler = Compiler::new_child(
                         "<init>",
                         init_params,
-                        None,
                         span.clone(),
                         self.state.clone(),
                     );
@@ -585,13 +571,12 @@ impl Compiler {
 
                 let mut method_name_indices = Vec::new();
                 for m in methods {
-                    if let Stmt::Define { name: mname, params, return_type, body, span: mspan, .. } = m {
+                    if let Stmt::Define { name: mname, params, return_type: _, body, span: mspan, .. } = m {
                         let mut method_params = vec![("this".to_string(), None)];
                         method_params.extend(params.clone());
                         let method_compiler = Compiler::new_child(
                             mname.clone(),
                             method_params,
-                            return_type.clone(),
                             mspan.clone(),
                             self.state.clone(),
                         );
@@ -617,7 +602,7 @@ impl Compiler {
                 let name_idx = self.add_string(name);
                 self.emit(Op::BuildClass { name: name_idx, init: init_idx, methods: method_name_indices, fields: field_indices, field_init }, span.clone());
                 if self.state().scope_depth == 0 {
-                    self.emit(Op::DefineGlobal { name: name_idx, type_ann: None }, span.clone());
+                    self.emit(Op::DefineGlobal { name: name_idx }, span.clone());
                 } else {
                     let slot = self.declare_local(name, None);
                     self.emit(Op::StoreLocal(slot), span.clone());
@@ -639,7 +624,7 @@ impl Compiler {
                 self.emit(Op::Read, span.clone());
                 if self.state().scope_depth == 0 {
                     let name_idx = self.add_string(name);
-                    self.emit(Op::DefineGlobal { name: name_idx, type_ann: None }, span.clone());
+                    self.emit(Op::DefineGlobal { name: name_idx }, span.clone());
                 } else {
                     let slot = self.declare_local(name, None);
                     self.emit(Op::StoreLocal(slot), span.clone());

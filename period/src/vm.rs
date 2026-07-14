@@ -156,27 +156,15 @@ impl<'a> Vm<'a> {
                     f.function.chunk.strings[*idx].clone()
                 };
                 let value = self.stack.pop().expect("stack underflow in store global");
-                let type_ann = {
-                    let f = self.frames.last().unwrap();
-                    f.closure.borrow().get_type(&name)
-                };
-                if let Some(Some(ann)) = type_ann {
-                    self.check_type(&value, &ann, span)?;
-                }
                 self.frames.last().unwrap().closure.borrow().set(&name, value).map_err(Control::Error)?;
             }
-            Op::DefineGlobal { name, type_ann } => {
-                let (name, ann) = {
+            Op::DefineGlobal { name } => {
+                let name = {
                     let f = self.frames.last().unwrap();
-                    let name = f.function.chunk.strings[*name].clone();
-                    let ann = (*type_ann).map(|i| f.function.chunk.strings[i].clone());
-                    (name, ann)
+                    f.function.chunk.strings[*name].clone()
                 };
                 let value = self.stack.pop().expect("stack underflow in define global");
-                if let Some(ref a) = ann {
-                    self.check_type(&value, a, span)?;
-                }
-                self.frames.last().unwrap().closure.borrow().define(&name, value, ann);
+                self.frames.last().unwrap().closure.borrow().define(&name, value, None);
             }
             Op::Closure { func, upvalues } => {
                 let (proto, closure, captured) = {
@@ -263,11 +251,6 @@ impl<'a> Vm<'a> {
             }
             Op::Return => {
                 let value = self.stack.pop().expect("stack underflow in return");
-                // Check return type annotation.
-                let func = self.frames.last().unwrap().function.clone();
-                if let Some(ref ann) = func.return_type {
-                    self.check_type(&value, ann, span)?;
-                }
                 let frame = self.frames.pop().unwrap();
                 self.locals.truncate(frame.slots_start);
                 if self.frames.is_empty() {
@@ -495,14 +478,6 @@ impl<'a> Vm<'a> {
                 }));
                 self.stack.push(class);
             }
-            Op::CheckType(idx) => {
-                let ann = {
-                    let f = self.frames.last().unwrap();
-                    f.function.chunk.strings[*idx].clone()
-                };
-                let value = self.stack.last().expect("stack underflow in check type").clone();
-                self.check_type(&value, &ann, span)?;
-            }
             Op::IncrementLocal(slot) => {
                 match &mut self.locals[frame.slots_start + *slot] {
                     Value::Box(rc) => {
@@ -679,11 +654,6 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn check_type(&mut self, value: &Value, ann: &str, span: &Span) -> Result<(), Control> {
-        let interp: &Interpreter = self.interpreter;
-        interp.check_type(value, ann, span)
-    }
-
     fn try_auto_call(&mut self, value: &Value, span: &Span) -> Result<bool, Control> {
         match value {
             Value::BuiltIn(bv) if bv.min_arity == 0 && bv.max_arity == 0 => {
@@ -724,12 +694,6 @@ impl<'a> Vm<'a> {
                 }
                 let slots_start = self.locals.len();
                 self.locals.resize(slots_start + fv.func.local_count, Value::Nothing);
-                // Check parameter type annotations at runtime.
-                for (i, arg) in args.iter().enumerate() {
-                    if let Some(ann) = &fv.func.params[i].1 {
-                        self.check_type(arg, ann, &fv.func.span.clone())?;
-                    }
-                }
                 for (i, arg) in args.into_iter().enumerate() {
                     self.locals[slots_start + i] = arg;
                 }

@@ -46,16 +46,6 @@ impl Environment {
         None
     }
 
-    pub fn get_type(&self, name: &str) -> Option<Option<String>> {
-        if let Some((_, t)) = self.values.borrow().get(name) {
-            return Some(t.clone());
-        }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().get_type(name);
-        }
-        None
-    }
-
     pub fn set(&self, name: &str, value: Value) -> Result<(), String> {
         let mut values = self.values.borrow_mut();
         if let Some((_, type_ann)) = values.get(name) {

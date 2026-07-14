@@ -411,10 +411,10 @@ class TestLanguageFeatures(unittest.TestCase):
             expected_lines=["42", "hi", "2", "7", "yo"],
         )
 
-    def test_union_type_let_enforced_at_runtime(self):
+    def test_union_type_let_enforced_statically(self):
         out = run_file(
             """
-            define make:
+            define make returns list of anything:
                 return [1, 2].
             let v be make.
             let w be integer or string v.
@@ -422,27 +422,25 @@ class TestLanguageFeatures(unittest.TestCase):
             """,
             should_fail=True,
         )
-        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+        self.assertIn("type mismatch", out)
 
-    def test_annotated_small_function_return_checked_at_runtime(self):
-        # Single-return functions are inlined unless annotated; the return
-        # annotation must still be enforced on every execution path.
+    def test_annotated_small_function_return_checked_statically(self):
         out = run_file(
             """
-            define make:
+            define make returns list of anything:
                 return [1, 2].
-            define bad with x returns integer or string:
-                return x.
-            show bad with make.
+            define bad returns integer or string:
+                return make.
+            show bad.
             """,
             should_fail=True,
         )
-        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+        self.assertIn("return type mismatch", out)
 
-    def test_annotated_small_function_params_checked_at_runtime(self):
+    def test_annotated_small_function_params_checked_statically(self):
         out = run_file(
             """
-            define make:
+            define make returns list of anything:
                 return [1, 2].
             define pick with integer or string x:
                 show x.
@@ -450,7 +448,7 @@ class TestLanguageFeatures(unittest.TestCase):
             """,
             should_fail=True,
         )
-        self.assertIn("Type mismatch: expected 'integer or string', got 'list'", out)
+        self.assertIn("argument 1 type mismatch", out)
 
     def test_list_negative_index(self):
         run_file(
