@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.8 (2026-07-14)
+
 ### Added
 
 - Union type annotations: several types can be combined with `or` (`number or string`, or `integer, number or string` for three or more) on parameters, return values, and variables. A value matches a union when it matches any member; mismatches are reported with the full union name. Checked both statically and at runtime.
