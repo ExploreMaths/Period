@@ -17,9 +17,14 @@ pub enum Type {
     Module(String),
     Range,
     Error,
-    /// Gradual-typing escape hatch: a value whose type is not (yet) known
-    /// statically. Compatible with every type; checked at runtime instead.
+    /// Gradual-typing escape hatch: explicit `anything` annotation.
+    /// Compatible with every type; checked at runtime instead.
     Anything,
+    /// A value whose type is not statically known because no annotation was
+    /// given. Unlike `Anything`, this does not satisfy concrete type
+    /// requirements, so using an unannotated value in a typed position is an
+    /// error.
+    Unknown,
     /// Union of two or more types, written `a or b` or `a, b or c`.
     Union(Vec<Type>),
 }
@@ -44,6 +49,7 @@ impl Type {
             Type::Range => "range".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Anything => "anything".to_string(),
+            Type::Unknown => "unknown".to_string(),
             Type::Union(members) => {
                 let names: Vec<String> = members.iter().map(|m| m.name()).collect();
                 if let Some((last, head)) = names.split_last()
@@ -57,8 +63,15 @@ impl Type {
 
     pub fn is_subtype(&self, other: &Type) -> bool {
         match (self, other) {
+            // Explicit `anything` is compatible with every type, and every type
+            // is compatible with explicit `anything`.
             (Type::Anything, _) => true,
             (_, Type::Anything) => true,
+            // `unknown` represents a missing annotation. It can hold any value,
+            // so every type is a subtype of unknown, but unknown itself is not
+            // a subtype of any concrete type.
+            (_, Type::Unknown) => true,
+            (Type::Unknown, _) => false,
             (Type::Error, _) => true,
             (_, Type::Error) => true,
             (Type::Union(members), other) => members.iter().all(|m| m.is_subtype(other)),

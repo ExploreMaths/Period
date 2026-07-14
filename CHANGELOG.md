@@ -13,6 +13,7 @@
 
 ### Changed
 
+- The static type checker now distinguishes explicit `anything` annotations from unannotated `unknown` values. Unannotated parameters, return values, and variables are no longer statically compatible with concrete type annotations, so passing an unannotated value to a function that expects a specific type is reported as an error. Operators and other dynamic contexts still accept unannotated values.
 - LSP hover shows function and method signatures with a `define` prefix.
 - The gradual-typing escape-hatch type is now called `anything` instead of `unknown`: it appears in error messages and hover, and can be written as an annotation. Semantics are unchanged — it matches every value, and unannotated code is still checked dynamically at runtime.
 - The static type checker is more precise: `length`, `number`, and `integer` now have proper parameter signatures instead of accepting `anything`, and inferred return types of conflicting branches produce a union (`number or string`) instead of giving up.

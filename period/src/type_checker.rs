@@ -37,12 +37,12 @@ impl TypeChecker {
             Type::Range,
         ]);
         builtins.insert("length".to_string(), Type::Function(vec![sized], Box::new(Type::Integer)));
-        builtins.insert("string".to_string(), Type::Function(vec![Type::Anything], Box::new(Type::String)));
+        builtins.insert("string".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::String)));
         let numeric = Type::Union(vec![Type::Integer, Type::Number, Type::String, Type::Boolean]);
         builtins.insert("number".to_string(), Type::Function(vec![numeric.clone()], Box::new(Type::Number)));
         builtins.insert("integer".to_string(), Type::Function(vec![numeric], Box::new(Type::Integer)));
-        builtins.insert("boolean".to_string(), Type::Function(vec![Type::Anything], Box::new(Type::Boolean)));
-        builtins.insert("type".to_string(), Type::Function(vec![Type::Anything], Box::new(Type::String)));
+        builtins.insert("boolean".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::Boolean)));
+        builtins.insert("type".to_string(), Type::Function(vec![Type::Unknown], Box::new(Type::String)));
         // `input` is a zero-arity built-in that is auto-called when used as a value,
         // so its value type is its return type rather than a function type.
         builtins.insert("input".to_string(), Type::String);
@@ -77,7 +77,7 @@ impl TypeChecker {
             Stmt::Define { name, params, return_type, body, .. } => {
                 let arg_types: Vec<Type> = params
                     .iter()
-                    .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything))
+                    .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown))
                     .collect();
                 let ret = return_type.as_deref().map(parse_type_ann).unwrap_or_else(|| Self::infer_return_type(body));
                 let func_type = Type::Function(arg_types, Box::new(ret));
@@ -89,12 +89,12 @@ impl TypeChecker {
                     let mut fields = HashMap::new();
                     let mut param_types = HashMap::new();
                     for (p_name, ann) in params {
-                        let ty = ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything);
+                        let ty = ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown);
                         param_types.insert(p_name.clone(), ty.clone());
                         fields.insert(p_name.clone(), ty);
                     }
                     info.init_params = params.iter()
-                        .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything))
+                        .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown))
                         .collect();
                     // Fields assigned via `set the <name> of this to ...` in init body
                     // should also be visible to the type checker.
@@ -213,18 +213,18 @@ impl TypeChecker {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
                     if lt == Type::String || rt == Type::String { Type::String }
-                    else if (lt == Type::Integer || lt == Type::Anything) && (rt == Type::Integer || rt == Type::Anything) { Type::Integer }
+                    else if (lt == Type::Integer || lt == Type::Anything || lt == Type::Unknown) && (rt == Type::Integer || rt == Type::Anything || rt == Type::Unknown) { Type::Integer }
                     else { Type::Number }
                 }
                 BinOp::Sub | BinOp::Mul | BinOp::Mod => {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
-                    if (lt == Type::Integer || lt == Type::Anything) && (rt == Type::Integer || rt == Type::Anything) { Type::Integer } else { Type::Number }
+                    if (lt == Type::Integer || lt == Type::Anything || lt == Type::Unknown) && (rt == Type::Integer || rt == Type::Anything || rt == Type::Unknown) { Type::Integer } else { Type::Number }
                 }
                 BinOp::Pow => {
                     let lt = Self::infer_expr_type(left);
                     let rt = Self::infer_expr_type(right);
-                    if lt == Type::Integer && (rt == Type::Integer || rt == Type::Anything) {
+                    if lt == Type::Integer && (rt == Type::Integer || rt == Type::Anything || rt == Type::Unknown) {
                         Type::Integer
                     } else {
                         Type::Number
@@ -307,7 +307,7 @@ impl TypeChecker {
                                     Stmt::Define { name, params, return_type, body, .. } => {
                                         let arg_types: Vec<Type> = params
                                             .iter()
-                                            .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything))
+                                            .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown))
                                             .collect();
                                         let ret = return_type.as_deref().map(parse_type_ann).unwrap_or_else(|| Self::infer_return_type(body));
                                         all_exports.push((name.clone(), Type::Function(arg_types, Box::new(ret))));
@@ -385,14 +385,14 @@ impl TypeChecker {
         match stmt {
             Stmt::Let { name, type_ann, value, span } => {
                 let value_ty = self.check_expr(value);
-                let ann_ty = type_ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything);
-                if ann_ty != Type::Anything && !value_ty.is_subtype(&ann_ty) {
+                let ann_ty = type_ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown);
+                if ann_ty != Type::Anything && ann_ty != Type::Unknown && !value_ty.is_subtype(&ann_ty) {
                     self.error(span, format!("type mismatch: expected '{}', got '{}'", ann_ty.name(), value_ty.name()));
                 }
-                if ann_ty != Type::Anything {
+                if ann_ty != Type::Anything && ann_ty != Type::Unknown {
                     self.check_expr_against_ann(value, &ann_ty);
                 }
-                let bind_ty = if ann_ty == Type::Anything { value_ty } else { ann_ty };
+                let bind_ty = if ann_ty == Type::Unknown { value_ty } else { ann_ty };
                 self.define(name, bind_ty);
             }
             Stmt::Set { target, value } => {
@@ -404,7 +404,7 @@ impl TypeChecker {
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 let cond_ty = self.check_expr(cond);
-                if cond_ty != Type::Anything && cond_ty != Type::Boolean && cond_ty != Type::Error {
+                if cond_ty != Type::Anything && cond_ty != Type::Unknown && cond_ty != Type::Boolean && cond_ty != Type::Error {
                     self.error(&cond.span().cloned().unwrap_or(Span { line: 0, col: 0 }), format!("condition must be boolean, got '{}'", cond_ty.name()));
                 }
                 self.check_block(then_branch);
@@ -412,7 +412,7 @@ impl TypeChecker {
             }
             Stmt::While { cond, body } => {
                 let cond_ty = self.check_expr(cond);
-                if cond_ty != Type::Anything && cond_ty != Type::Boolean && cond_ty != Type::Error {
+                if cond_ty != Type::Anything && cond_ty != Type::Unknown && cond_ty != Type::Boolean && cond_ty != Type::Error {
                     self.error(&cond.span().cloned().unwrap_or(Span { line: 0, col: 0 }), format!("while condition must be boolean, got '{}'", cond_ty.name()));
                 }
                 self.check_block(body);
@@ -420,7 +420,7 @@ impl TypeChecker {
             Stmt::For { var, iterable, body } => {
                 let iter_ty = self.check_expr(iterable);
                 match iter_ty {
-                    Type::List(_) | Type::Dict(_, _) | Type::Range | Type::String | Type::Anything | Type::Error => {}
+                    Type::List(_) | Type::Dict(_, _) | Type::Range | Type::String | Type::Anything | Type::Unknown | Type::Error => {}
                     _ => {
                         self.error(&iterable.span().cloned().unwrap_or(Span { line: 0, col: 0 }), format!("cannot iterate over '{}'", iter_ty.name()));
                     }
@@ -447,7 +447,7 @@ impl TypeChecker {
             Stmt::Define { name, params, return_type, body, span, .. } => {
                 let arg_types: Vec<Type> = params
                     .iter()
-                    .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything))
+                    .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown))
                     .collect();
                 let ret = return_type.as_deref().map(parse_type_ann).unwrap_or_else(|| Self::infer_return_type(body));
                 // Redefine with inferred function type in case annotations were missing.
@@ -459,7 +459,7 @@ impl TypeChecker {
                     self.define(p_name, ann.as_deref().map(parse_type_ann).unwrap_or(ty.clone()));
                 }
                 self.check_block(body);
-                if ret != Type::Anything && ret != Type::Nothing && ret != Type::Error && !self.block_returns(body) {
+                if ret != Type::Anything && ret != Type::Unknown && ret != Type::Nothing && ret != Type::Error && !self.block_returns(body) {
                     self.error(span, format!("function '{}' may not return a value on all paths", name));
                 }
                 self.return_types.pop();
@@ -472,7 +472,7 @@ impl TypeChecker {
                 if let Some(Init { params, body, .. }) = init {
                     self.push_scope();
                     for (p_name, ann) in params {
-                        self.define(p_name, ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything));
+                        self.define(p_name, ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown));
                     }
                     self.check_block(body);
                     self.pop_scope();
@@ -481,17 +481,17 @@ impl TypeChecker {
                     if let Stmt::Define { name, params, return_type, body, span, .. } = m {
                         let _arg_types: Vec<Type> = params
                             .iter()
-                            .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything))
+                            .map(|(_, ann)| ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown))
                             .collect();
                         let ret = return_type.as_deref().map(parse_type_ann).unwrap_or_else(|| Self::infer_return_type(body));
                         self.return_types.push(ret.clone());
                         self.push_scope();
                         self.define("this", Type::Instance(class_name.clone()));
                         for (p_name, ann) in params {
-                            self.define(p_name, ann.as_deref().map(parse_type_ann).unwrap_or(Type::Anything));
+                            self.define(p_name, ann.as_deref().map(parse_type_ann).unwrap_or(Type::Unknown));
                         }
                         self.check_block(body);
-                        if ret != Type::Anything && ret != Type::Nothing && ret != Type::Error && !self.block_returns(body) {
+                        if ret != Type::Anything && ret != Type::Unknown && ret != Type::Nothing && ret != Type::Error && !self.block_returns(body) {
                             self.error(span, format!("method '{}' may not return a value on all paths", name));
                         }
                         self.pop_scope();
@@ -590,13 +590,13 @@ impl TypeChecker {
                 let operand_ty = self.check_expr(operand);
                 match op {
                     UnaryOp::Neg => {
-                        if operand_ty != Type::Anything && operand_ty != Type::Integer && operand_ty != Type::Number && operand_ty != Type::Error {
+                        if operand_ty != Type::Anything && operand_ty != Type::Unknown && operand_ty != Type::Integer && operand_ty != Type::Number && operand_ty != Type::Error {
                             self.error(span, format!("'-' requires a number, got '{}'", operand_ty.name()));
                         }
                         if operand_ty == Type::Integer { Type::Integer } else { Type::Number }
                     }
                     UnaryOp::Not => {
-                        if operand_ty != Type::Anything && operand_ty != Type::Boolean && operand_ty != Type::Error {
+                        if operand_ty != Type::Anything && operand_ty != Type::Unknown && operand_ty != Type::Boolean && operand_ty != Type::Error {
                             self.error(span, format!("'not' requires a boolean, got '{}'", operand_ty.name()));
                         }
                         Type::Boolean
@@ -624,7 +624,7 @@ impl TypeChecker {
                 if let Expr::Variable { name, .. } = callee.as_ref()
                     && name == "range" {
                         for (i, got) in arg_types.iter().enumerate() {
-                            if *got != Type::Anything && *got != Type::Integer && *got != Type::Number && *got != Type::Error {
+                            if *got != Type::Anything && *got != Type::Unknown && *got != Type::Integer && *got != Type::Number && *got != Type::Error {
                                 self.error(span, format!("argument {} type mismatch: expected 'integer', got '{}'", i + 1, got.name()));
                             }
                         }
@@ -741,16 +741,16 @@ impl TypeChecker {
                 let idx_ty = self.check_expr(index);
                 match &obj_ty {
                     Type::List(_) | Type::String => {
-                        if idx_ty != Type::Anything && idx_ty != Type::Integer && idx_ty != Type::Error {
+                        if idx_ty != Type::Anything && idx_ty != Type::Unknown && idx_ty != Type::Integer && idx_ty != Type::Error {
                             self.error(&index.span().cloned().unwrap_or(Span { line: 0, col: 0 }), format!("index must be integer, got '{}'", idx_ty.name()));
                         }
                     }
                     Type::Dict(k, _) => {
-                        if idx_ty != Type::Anything && idx_ty != Type::Error && !idx_ty.is_subtype(k) {
+                        if idx_ty != Type::Anything && idx_ty != Type::Unknown && idx_ty != Type::Error && !idx_ty.is_subtype(k) {
                             self.error(&index.span().cloned().unwrap_or(Span { line: 0, col: 0 }), format!("dictionary key type mismatch: expected '{}', got '{}'", k.name(), idx_ty.name()));
                         }
                     }
-                    Type::Anything | Type::Error => {}
+                    Type::Anything | Type::Unknown | Type::Error => {}
                     _ => {
                         self.error(span, format!("cannot index into '{}'", obj_ty.name()));
                     }
@@ -759,7 +759,7 @@ impl TypeChecker {
                     Type::List(t) => *t,
                     Type::Dict(_, v) => *v,
                     Type::String => Type::String,
-                    Type::Anything | Type::Error => Type::Anything,
+                    Type::Anything | Type::Unknown | Type::Error => Type::Anything,
                     _ => Type::Error,
                 }
             }
@@ -798,8 +798,8 @@ impl TypeChecker {
     }
 
     fn merge_types(a: &Type, b: &Type) -> Type {
-        if *a == Type::Anything { return b.clone(); }
-        if *b == Type::Anything { return a.clone(); }
+        if *a == Type::Anything || *a == Type::Unknown { return b.clone(); }
+        if *b == Type::Anything || *b == Type::Unknown { return a.clone(); }
         if a.is_subtype(b) { return b.clone(); }
         if b.is_subtype(a) { return a.clone(); }
         Type::Error
@@ -834,19 +834,22 @@ impl TypeChecker {
     }
 
     fn check_binary(&mut self, op: &BinOp, left: &Type, right: &Type, span: &Span) -> Type {
+        let is_numeric = |t: &Type| matches!(t, Type::Integer | Type::Number | Type::Anything | Type::Unknown | Type::Error);
+        let is_string = |t: &Type| matches!(t, Type::String | Type::Anything | Type::Unknown | Type::Error);
+        let is_boolean = |t: &Type| matches!(t, Type::Boolean | Type::Anything | Type::Unknown | Type::Error);
+        let is_list = |t: &Type| matches!(t, Type::List(_) | Type::Anything | Type::Unknown | Type::Error);
+        let is_string_factor = |t: &Type| matches!(t, Type::Integer | Type::Number | Type::Anything | Type::Unknown | Type::Error);
+        let both_integer_like = |l: &Type, r: &Type| {
+            (matches!(l, Type::Integer | Type::Anything | Type::Unknown | Type::Error))
+                && (matches!(r, Type::Integer | Type::Anything | Type::Unknown | Type::Error))
+        };
         match op {
             BinOp::Add => {
-                if (left == &Type::Integer || left == &Type::Number || left == &Type::Anything || left == &Type::Error)
-                    && (right == &Type::Integer || right == &Type::Number || right == &Type::Anything || right == &Type::Error)
-                {
-                    if (left == &Type::Integer || left == &Type::Anything) && (right == &Type::Integer || right == &Type::Anything) { Type::Integer } else { Type::Number }
-                } else if (left == &Type::String || left == &Type::Anything || left == &Type::Error)
-                    && (right == &Type::String || right == &Type::Anything || right == &Type::Error)
-                {
+                if is_numeric(left) && is_numeric(right) {
+                    if both_integer_like(left, right) { Type::Integer } else { Type::Number }
+                } else if is_string(left) && is_string(right) {
                     Type::String
-                } else if (matches!(left, Type::List(_)) || left == &Type::Anything || left == &Type::Error)
-                    && (matches!(right, Type::List(_)) || right == &Type::Anything || right == &Type::Error)
-                {
+                } else if is_list(left) && is_list(right) {
                     Type::List(Box::new(Type::Anything))
                 } else {
                     self.error(span, format!("invalid operands for '+': '{}' and '{}'", left.name(), right.name()));
@@ -854,29 +857,21 @@ impl TypeChecker {
                 }
             }
             BinOp::Mul => {
-                // String repetition: string * integer or integer * string.
-                let other_is_string_factor = |t: &Type| {
-                    matches!(t, Type::Integer | Type::Number | Type::Anything | Type::Error)
-                };
-                if (left == &Type::String && other_is_string_factor(right))
-                    || (right == &Type::String && other_is_string_factor(left))
+                if (left == &Type::String && is_string_factor(right))
+                    || (right == &Type::String && is_string_factor(left))
                 {
                     Type::String
-                } else if (left == &Type::Integer || left == &Type::Number || left == &Type::Anything || left == &Type::Error)
-                    && (right == &Type::Integer || right == &Type::Number || right == &Type::Anything || right == &Type::Error)
-                {
-                    if (left == &Type::Integer || left == &Type::Anything) && (right == &Type::Integer || right == &Type::Anything) { Type::Integer } else { Type::Number }
+                } else if is_numeric(left) && is_numeric(right) {
+                    if both_integer_like(left, right) { Type::Integer } else { Type::Number }
                 } else {
                     self.error(span, format!("invalid operands for '*': '{}' and '{}'", left.name(), right.name()));
                     Type::Error
                 }
             }
             BinOp::Sub | BinOp::Div | BinOp::Mod | BinOp::Pow => {
-                if (left == &Type::Integer || left == &Type::Number || left == &Type::Anything || left == &Type::Error)
-                    && (right == &Type::Integer || right == &Type::Number || right == &Type::Anything || right == &Type::Error)
-                {
+                if is_numeric(left) && is_numeric(right) {
                     if op == &BinOp::Sub || op == &BinOp::Mod || op == &BinOp::Pow {
-                        if (left == &Type::Integer || left == &Type::Anything) && (right == &Type::Integer || right == &Type::Anything) { Type::Integer } else { Type::Number }
+                        if both_integer_like(left, right) { Type::Integer } else { Type::Number }
                     } else {
                         Type::Number
                     }
@@ -886,9 +881,7 @@ impl TypeChecker {
                 }
             }
             BinOp::And | BinOp::Or => {
-                if (left == &Type::Boolean || left == &Type::Anything || left == &Type::Error)
-                    && (right == &Type::Boolean || right == &Type::Anything || right == &Type::Error)
-                {
+                if is_boolean(left) && is_boolean(right) {
                     Type::Boolean
                 } else {
                     self.error(span, format!("'{}' requires booleans, got '{}' and '{}'", op_name(op), left.name(), right.name()));
