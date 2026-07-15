@@ -63,12 +63,18 @@ impl CompilerState {
         let parent = self.parent.as_ref()?.clone();
         let local_slot = parent.borrow().resolve_local(name);
         if let Some(slot) = local_slot {
-            return Some(self.add_upvalue(Upvalue { is_local: true, index: slot }));
+            return Some(self.add_upvalue(Upvalue {
+                is_local: true,
+                index: slot,
+            }));
         }
         let parent_has_parent = parent.borrow().parent.is_some();
         if parent_has_parent {
             if let Some(idx) = parent.borrow_mut().resolve_upvalue(name) {
-                return Some(self.add_upvalue(Upvalue { is_local: false, index: idx }));
+                return Some(self.add_upvalue(Upvalue {
+                    is_local: false,
+                    index: idx,
+                }));
             }
         }
         None
@@ -78,7 +84,12 @@ impl CompilerState {
         self.declare_local_at_depth(name, type_ann, self.scope_depth)
     }
 
-    fn declare_local_at_depth(&mut self, name: &str, type_ann: Option<String>, depth: usize) -> usize {
+    fn declare_local_at_depth(
+        &mut self,
+        name: &str,
+        type_ann: Option<String>,
+        depth: usize,
+    ) -> usize {
         let slot = self.locals.len();
         self.locals.push(Local {
             name: name.to_string(),
@@ -106,7 +117,11 @@ impl CompilerState {
     }
 
     fn add_upvalue(&mut self, upvalue: Upvalue) -> usize {
-        if let Some(idx) = self.upvalues.iter().position(|u| u.is_local == upvalue.is_local && u.index == upvalue.index) {
+        if let Some(idx) = self
+            .upvalues
+            .iter()
+            .position(|u| u.is_local == upvalue.is_local && u.index == upvalue.index)
+        {
             return idx;
         }
         let idx = self.upvalues.len();
@@ -152,9 +167,15 @@ fn collect_this_fields_in_stmt(stmt: &Stmt, fields: &mut Vec<String>) {
         }
         Stmt::Let { value, .. }
         | Stmt::Show(value)
-        | Stmt::Return { value: Some(value), .. }
+        | Stmt::Return {
+            value: Some(value), ..
+        }
         | Stmt::Expr(value) => collect_this_fields_in_expr(value, fields),
-        Stmt::If { cond, then_branch, else_branch } => {
+        Stmt::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
             collect_this_fields_in_expr(cond, fields);
             collect_this_fields_in_stmts(then_branch, fields);
             collect_this_fields_in_stmts(else_branch, fields);
@@ -167,7 +188,9 @@ fn collect_this_fields_in_stmt(stmt: &Stmt, fields: &mut Vec<String>) {
             collect_this_fields_in_expr(iterable, fields);
             collect_this_fields_in_stmts(body, fields);
         }
-        Stmt::Try { body, catch_body, .. } => {
+        Stmt::Try {
+            body, catch_body, ..
+        } => {
             collect_this_fields_in_stmts(body, fields);
             collect_this_fields_in_stmts(catch_body, fields);
         }
@@ -176,10 +199,13 @@ fn collect_this_fields_in_stmt(stmt: &Stmt, fields: &mut Vec<String>) {
             if let Some(init) = init {
                 collect_this_fields_in_stmts(&init.body, fields);
             }
-            for m in methods { collect_this_fields_in_stmt(m, fields); }
+            for m in methods {
+                collect_this_fields_in_stmt(m, fields);
+            }
         }
-        Stmt::Read { path, .. }
-        | Stmt::Write { path, .. } => collect_this_fields_in_expr(path, fields),
+        Stmt::Read { path, .. } | Stmt::Write { path, .. } => {
+            collect_this_fields_in_expr(path, fields)
+        }
         Stmt::Init(init) => collect_this_fields_in_stmts(&init.body, fields),
         _ => {}
     }
@@ -200,7 +226,9 @@ fn collect_this_fields_in_expr(expr: &Expr, fields: &mut Vec<String>) {
         Expr::Unary { operand, .. } => collect_this_fields_in_expr(operand, fields),
         Expr::Call { callee, args, .. } => {
             collect_this_fields_in_expr(callee, fields);
-            for a in args { collect_this_fields_in_expr(a, fields); }
+            for a in args {
+                collect_this_fields_in_expr(a, fields);
+            }
         }
         Expr::Index { object, index, .. } => {
             collect_this_fields_in_expr(object, fields);
@@ -208,14 +236,20 @@ fn collect_this_fields_in_expr(expr: &Expr, fields: &mut Vec<String>) {
         }
         Expr::New { class, args, .. } => {
             collect_this_fields_in_expr(class, fields);
-            for a in args { collect_this_fields_in_expr(a, fields); }
+            for a in args {
+                collect_this_fields_in_expr(a, fields);
+            }
         }
         Expr::Tell { object, args, .. } => {
             collect_this_fields_in_expr(object, fields);
-            for a in args { collect_this_fields_in_expr(a, fields); }
+            for a in args {
+                collect_this_fields_in_expr(a, fields);
+            }
         }
         Expr::List(items, _) => {
-            for item in items { collect_this_fields_in_expr(item, fields); }
+            for item in items {
+                collect_this_fields_in_expr(item, fields);
+            }
         }
         Expr::Dict(entries, _) => {
             for (k, v) in entries {
@@ -238,7 +272,10 @@ fn analyze_class_init(init: &Option<Init>, field_names: &[String]) -> Option<Vec
         if let Stmt::Set { target, value, .. } = stmt {
             if let AssignTarget::Property { object, name, .. } = target {
                 if is_this_var(object) {
-                    if let Expr::Variable { name: param_name, .. } = value {
+                    if let Expr::Variable {
+                        name: param_name, ..
+                    } = value
+                    {
                         let field_idx = field_names.iter().position(|n| n == name)?;
                         let param_idx = init.params.iter().position(|(p, _)| p == param_name)?;
                         mapping[field_idx] = Some(param_idx);
@@ -262,7 +299,11 @@ impl Compiler {
     ) -> Self {
         Self {
             state: Rc::new(RefCell::new(CompilerState::new(
-                name, params, span, captured_globals, None,
+                name,
+                params,
+                span,
+                captured_globals,
+                None,
             ))),
         }
     }
@@ -275,14 +316,27 @@ impl Compiler {
     ) -> Self {
         Self {
             state: Rc::new(RefCell::new(CompilerState::new(
-                name, params, span, HashSet::new(), Some(enclosing),
+                name,
+                params,
+                span,
+                HashSet::new(),
+                Some(enclosing),
             ))),
         }
     }
 
-    pub fn compile_program(stmts: &[Stmt], _is_module: bool, force_globals: bool) -> Result<CompiledFunction, CompileError> {
+    pub fn compile_program(
+        stmts: &[Stmt],
+        _is_module: bool,
+        force_globals: bool,
+    ) -> Result<CompiledFunction, CompileError> {
         let captured_globals = collect_captured_globals(stmts);
-        let compiler = Compiler::new("<main>", Vec::new(), Span { line: 1, col: 1 }, captured_globals);
+        let compiler = Compiler::new(
+            "<main>",
+            Vec::new(),
+            Span { line: 1, col: 1 },
+            captured_globals,
+        );
         compiler.state.borrow_mut().force_globals = force_globals;
         for stmt in stmts {
             compiler.compile_stmt(stmt)?;
@@ -342,11 +396,20 @@ impl Compiler {
 
     fn compile_stmt(&self, stmt: &Stmt) -> Result<(), CompileError> {
         match stmt {
-            Stmt::Let { name, type_ann, value, span } => {
+            Stmt::Let {
+                name,
+                type_ann,
+                value,
+                span,
+            } => {
                 self.compile_expr(value)?;
                 let (scope_depth, captured_globals, force_globals) = {
                     let state = self.state();
-                    (state.scope_depth, state.captured_globals.clone(), state.force_globals)
+                    (
+                        state.scope_depth,
+                        state.captured_globals.clone(),
+                        state.force_globals,
+                    )
                 };
                 if scope_depth == 0 && (force_globals || captured_globals.contains(name)) {
                     let slot = if let Some(slot) = self.state().resolve_local(name) {
@@ -361,7 +424,9 @@ impl Compiler {
                 } else {
                     let existing = {
                         let state = self.state();
-                        state.resolve_local(name).map(|s| (s, state.locals[s].depth))
+                        state
+                            .resolve_local(name)
+                            .map(|s| (s, state.locals[s].depth))
                     };
                     if let Some((slot, depth)) = existing {
                         if depth == scope_depth {
@@ -376,70 +441,94 @@ impl Compiler {
                     }
                 }
             }
-            Stmt::Set { target, value } => {
-                match target {
-                    AssignTarget::Variable { name, span } => {
-                        match self.resolve_variable(name) {
-                            VariableRef::Local(slot) => {
-                                let type_ann = self.state().locals[slot].type_ann.clone();
-                                let local_name = self.state().locals[slot].name.clone();
-                                let mut append_op: Option<Op> = None;
-                                if let Expr::Binary { op: BinOp::Add, left, right, .. } = value {
-                                    if Self::is_var_named(left, &local_name) {
-                                        match right.as_ref() {
-                                            Expr::String(s, _) if type_ann.as_deref().map_or(true, |a| a == "string") => {
-                                                let string_idx = self.add_string(s);
-                                                append_op = Some(Op::AppendLocalString { slot, string_idx });
-                                            }
-                                            Expr::List(items, _) if items.len() == 1 && type_ann.as_deref().map_or(true, |a| a == "list") => {
-                                                self.compile_expr(&items[0])?;
-                                                append_op = Some(Op::AppendLocalList { slot });
-                                            }
-                                            _ => {}
-                                        }
+            Stmt::Set { target, value } => match target {
+                AssignTarget::Variable { name, span } => match self.resolve_variable(name) {
+                    VariableRef::Local(slot) => {
+                        let type_ann = self.state().locals[slot].type_ann.clone();
+                        let local_name = self.state().locals[slot].name.clone();
+                        let mut append_op: Option<Op> = None;
+                        if let Expr::Binary {
+                            op: BinOp::Add,
+                            left,
+                            right,
+                            ..
+                        } = value
+                        {
+                            if Self::is_var_named(left, &local_name) {
+                                match right.as_ref() {
+                                    Expr::String(s, _)
+                                        if type_ann.as_deref().map_or(true, |a| a == "string") =>
+                                    {
+                                        let string_idx = self.add_string(s);
+                                        append_op =
+                                            Some(Op::AppendLocalString { slot, string_idx });
                                     }
+                                    Expr::List(items, _)
+                                        if items.len() == 1
+                                            && type_ann
+                                                .as_deref()
+                                                .map_or(true, |a| a == "list") =>
+                                    {
+                                        self.compile_expr(&items[0])?;
+                                        append_op = Some(Op::AppendLocalList { slot });
+                                    }
+                                    _ => {}
                                 }
-                                if let Some(op) = append_op {
-                                    self.emit(op, span.clone());
-                                } else if let Some(op) = self.try_peephole_set(slot, value) {
-                                    self.emit(op, span.clone());
-                                } else {
-                                    self.compile_expr(value)?;
-                                    self.emit(Op::StoreLocal(slot), span.clone());
-                                }
-                            }
-                            VariableRef::Upvalue(slot) => {
-                                self.compile_expr(value)?;
-                                self.emit(Op::SetUpvalue(slot), span.clone());
-                            }
-                            VariableRef::Global => {
-                                self.compile_expr(value)?;
-                                let idx = self.add_string(name);
-                                self.emit(Op::StoreGlobal(idx), span.clone());
                             }
                         }
+                        if let Some(op) = append_op {
+                            self.emit(op, span.clone());
+                        } else if let Some(op) = self.try_peephole_set(slot, value) {
+                            self.emit(op, span.clone());
+                        } else {
+                            self.compile_expr(value)?;
+                            self.emit(Op::StoreLocal(slot), span.clone());
+                        }
                     }
-                    AssignTarget::Index { object, index, span } => {
+                    VariableRef::Upvalue(slot) => {
                         self.compile_expr(value)?;
-                        self.compile_expr(object)?;
-                        self.compile_expr(index)?;
-                        self.emit(Op::IndexSet, span.clone());
+                        self.emit(Op::SetUpvalue(slot), span.clone());
                     }
-                    AssignTarget::Property { object, name, span } => {
+                    VariableRef::Global => {
                         self.compile_expr(value)?;
-                        self.compile_expr(object)?;
                         let idx = self.add_string(name);
-                        self.emit(Op::PropertySet(idx), span.clone());
+                        self.emit(Op::StoreGlobal(idx), span.clone());
                     }
+                },
+                AssignTarget::Index {
+                    object,
+                    index,
+                    span,
+                } => {
+                    self.compile_expr(value)?;
+                    self.compile_expr(object)?;
+                    self.compile_expr(index)?;
+                    self.emit(Op::IndexSet, span.clone());
                 }
-            }
+                AssignTarget::Property { object, name, span } => {
+                    self.compile_expr(value)?;
+                    self.compile_expr(object)?;
+                    let idx = self.add_string(name);
+                    self.emit(Op::PropertySet(idx), span.clone());
+                }
+            },
             Stmt::Show(expr) => {
-                let span = expr.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+                let span = expr
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 self.compile_expr(expr)?;
                 self.emit(Op::Show, span);
             }
-            Stmt::If { cond, then_branch, else_branch } => {
-                let span = cond.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+            Stmt::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
+                let span = cond
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 self.compile_expr(cond)?;
                 let then_jump = self.emit(Op::JumpIfFalse(0), span.clone());
                 self.enter_scope();
@@ -465,7 +554,10 @@ impl Compiler {
                 }
             }
             Stmt::While { cond, body } => {
-                let span = cond.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+                let span = cond
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 let loop_start = self.state().function.chunk.ops.len();
                 self.compile_expr(cond)?;
                 let exit_jump = self.emit(Op::JumpIfFalse(0), span.clone());
@@ -477,7 +569,11 @@ impl Compiler {
                 self.emit(Op::Loop(loop_start), span.clone());
                 self.patch_jump(exit_jump);
             }
-            Stmt::For { var, iterable, body } => {
+            Stmt::For {
+                var,
+                iterable,
+                body,
+            } => {
                 let range = self.try_compile_range(iterable)?;
                 if let Some((start, stop, step)) = range {
                     self.compile_for_range(var, start, stop, step, body)?;
@@ -493,7 +589,11 @@ impl Compiler {
                 }
                 self.emit(Op::Return, span.clone());
             }
-            Stmt::Try { body, catch_var, catch_body } => {
+            Stmt::Try {
+                body,
+                catch_var,
+                catch_body,
+            } => {
                 let span = Span { line: 1, col: 1 };
                 let catch_slot = self.declare_local(catch_var, None);
                 let try_begin = self.emit(Op::TryBegin(0, catch_slot), span.clone());
@@ -512,7 +612,14 @@ impl Compiler {
                 self.leave_scope();
                 self.patch_jump(after_catch);
             }
-            Stmt::Define { name, params, return_type: _, body, span, .. } => {
+            Stmt::Define {
+                name,
+                params,
+                return_type: _,
+                body,
+                span,
+                ..
+            } => {
                 // Declare the function name as a local *before* compiling the body so
                 // recursive calls resolve to the correct slot.
                 let name_slot = self.declare_local(name, None);
@@ -525,13 +632,22 @@ impl Compiler {
                 for stmt in body {
                     func_compiler.compile_stmt(stmt)?;
                 }
-                let end_span = Span { line: span.line, col: span.col };
+                let end_span = Span {
+                    line: span.line,
+                    col: span.col,
+                };
                 func_compiler.emit(Op::Nothing, end_span.clone());
                 func_compiler.emit(Op::Return, end_span);
                 let compiled = func_compiler.finish();
                 let upvalues = compiled.upvalues.clone();
                 let func_idx = self.add_function(compiled);
-                self.emit(Op::Closure { func: func_idx, upvalues }, span.clone());
+                self.emit(
+                    Op::Closure {
+                        func: func_idx,
+                        upvalues,
+                    },
+                    span.clone(),
+                );
                 if self.state().scope_depth == 0 {
                     // Top-level functions are globals so they can be exported from
                     // modules and referenced by imported modules. Keep the local
@@ -544,7 +660,13 @@ impl Compiler {
                     self.emit(Op::StoreLocal(name_slot), span.clone());
                 }
             }
-            Stmt::Class { name, init, methods, span, .. } => {
+            Stmt::Class {
+                name,
+                init,
+                methods,
+                span,
+                ..
+            } => {
                 let init_idx = if let Some(init) = init {
                     let mut init_params = vec![("this".to_string(), None)];
                     init_params.extend(init.params.clone());
@@ -557,13 +679,22 @@ impl Compiler {
                     for stmt in &init.body {
                         init_compiler.compile_stmt(stmt)?;
                     }
-                    let end_span = Span { line: span.line, col: span.col };
+                    let end_span = Span {
+                        line: span.line,
+                        col: span.col,
+                    };
                     init_compiler.emit(Op::Nothing, end_span.clone());
                     init_compiler.emit(Op::Return, end_span);
                     let compiled = init_compiler.finish();
                     let upvalues = compiled.upvalues.clone();
                     let idx = self.add_function(compiled);
-                    self.emit(Op::Closure { func: idx, upvalues }, span.clone());
+                    self.emit(
+                        Op::Closure {
+                            func: idx,
+                            upvalues,
+                        },
+                        span.clone(),
+                    );
                     Some(idx)
                 } else {
                     None
@@ -571,7 +702,15 @@ impl Compiler {
 
                 let mut method_name_indices = Vec::new();
                 for m in methods {
-                    if let Stmt::Define { name: mname, params, return_type: _, body, span: mspan, .. } = m {
+                    if let Stmt::Define {
+                        name: mname,
+                        params,
+                        return_type: _,
+                        body,
+                        span: mspan,
+                        ..
+                    } = m
+                    {
                         let mut method_params = vec![("this".to_string(), None)];
                         method_params.extend(params.clone());
                         let method_compiler = Compiler::new_child(
@@ -583,24 +722,43 @@ impl Compiler {
                         for stmt in body {
                             method_compiler.compile_stmt(stmt)?;
                         }
-                        let end_span = Span { line: mspan.line, col: mspan.col };
+                        let end_span = Span {
+                            line: mspan.line,
+                            col: mspan.col,
+                        };
                         method_compiler.emit(Op::Nothing, end_span.clone());
                         method_compiler.emit(Op::Return, end_span);
                         let compiled = method_compiler.finish();
                         let upvalues = compiled.upvalues.clone();
                         let idx = self.add_function(compiled);
-                        self.emit(Op::Closure { func: idx, upvalues }, mspan.clone());
+                        self.emit(
+                            Op::Closure {
+                                func: idx,
+                                upvalues,
+                            },
+                            mspan.clone(),
+                        );
                         method_name_indices.push(self.add_string(mname));
                     }
                 }
 
                 let field_names = collect_class_fields(init);
-                let field_indices: Vec<usize> = field_names.iter().map(|n| self.add_string(n)).collect();
+                let field_indices: Vec<usize> =
+                    field_names.iter().map(|n| self.add_string(n)).collect();
                 let field_init = analyze_class_init(init, &field_names)
                     .map(|m| m.into_iter().map(|o| o.unwrap_or(usize::MAX)).collect())
                     .unwrap_or_else(|| vec![usize::MAX; field_names.len()]);
                 let name_idx = self.add_string(name);
-                self.emit(Op::BuildClass { name: name_idx, init: init_idx, methods: method_name_indices, fields: field_indices, field_init }, span.clone());
+                self.emit(
+                    Op::BuildClass {
+                        name: name_idx,
+                        init: init_idx,
+                        methods: method_name_indices,
+                        fields: field_indices,
+                        field_init,
+                    },
+                    span.clone(),
+                );
                 if self.state().scope_depth == 0 {
                     self.emit(Op::DefineGlobal { name: name_idx }, span.clone());
                 } else {
@@ -619,7 +777,10 @@ impl Compiler {
                 self.emit(Op::Export(indices), Span { line: 1, col: 1 });
             }
             Stmt::Read { name, path } => {
-                let span = path.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+                let span = path
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 self.compile_expr(path)?;
                 self.emit(Op::Read, span.clone());
                 if self.state().scope_depth == 0 {
@@ -631,14 +792,20 @@ impl Compiler {
                 }
             }
             Stmt::Write { content, path } => {
-                let span = path.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+                let span = path
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 self.compile_expr(content)?;
                 self.compile_expr(path)?;
                 self.emit(Op::Write, span);
             }
             Stmt::Expr(expr) => {
                 self.compile_expr(expr)?;
-                let span = expr.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+                let span = expr
+                    .span()
+                    .cloned()
+                    .unwrap_or_else(|| Span { line: 1, col: 1 });
                 self.emit(Op::Pop, span);
             }
             Stmt::Pass => {}
@@ -661,7 +828,12 @@ impl Compiler {
     fn trim_locals(&self) {
         let scope_depth = self.state().scope_depth;
         loop {
-            let should_pop = self.state().locals.last().map(|l| l.depth > scope_depth).unwrap_or(false);
+            let should_pop = self
+                .state()
+                .locals
+                .last()
+                .map(|l| l.depth > scope_depth)
+                .unwrap_or(false);
             if !should_pop {
                 break;
             }
@@ -695,10 +867,20 @@ impl Compiler {
         let stop_expr = if let Some(stop) = stop {
             stop
         } else {
-            start.clone().ok_or_else(|| CompileError("internal error: for-range missing start and stop".to_string()))?
+            start.clone().ok_or_else(|| {
+                CompileError("internal error: for-range missing start and stop".to_string())
+            })?
         };
-        let start_expr: Expr = if let Some(start) = start { start } else { Expr::Integer(num_bigint::BigInt::from(0), span.clone()) };
-        let step_expr: Expr = if let Some(s) = step { s } else { Expr::Integer(num_bigint::BigInt::from(1), span.clone()) };
+        let start_expr: Expr = if let Some(start) = start {
+            start
+        } else {
+            Expr::Integer(num_bigint::BigInt::from(0), span.clone())
+        };
+        let step_expr: Expr = if let Some(s) = step {
+            s
+        } else {
+            Expr::Integer(num_bigint::BigInt::from(1), span.clone())
+        };
 
         self.compile_expr(&start_expr)?;
         self.compile_expr(&stop_expr)?;
@@ -749,8 +931,16 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_for_iter(&self, var: &str, iterable: &Expr, body: &[Stmt]) -> Result<(), CompileError> {
-        let span = iterable.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+    fn compile_for_iter(
+        &self,
+        var: &str,
+        iterable: &Expr,
+        body: &[Stmt],
+    ) -> Result<(), CompileError> {
+        let span = iterable
+            .span()
+            .cloned()
+            .unwrap_or_else(|| Span { line: 1, col: 1 });
         self.compile_expr(iterable)?;
         self.emit(Op::IterInit, span.clone());
 
@@ -795,7 +985,10 @@ impl Compiler {
     }
 
     fn compile_expr(&self, expr: &Expr) -> Result<(), CompileError> {
-        let span = expr.span().cloned().unwrap_or_else(|| Span { line: 1, col: 1 });
+        let span = expr
+            .span()
+            .cloned()
+            .unwrap_or_else(|| Span { line: 1, col: 1 });
         match expr {
             Expr::Integer(n, _) => {
                 let idx = self.add_constant(Value::big_integer(n.clone()));
@@ -815,17 +1008,24 @@ impl Compiler {
             Expr::Nothing(_) | Expr::Ellipsis => {
                 self.emit(Op::Nothing, span);
             }
-            Expr::Variable { name, span } => {
-                match self.resolve_variable(name) {
-                    VariableRef::Local(slot) => { self.emit(Op::LoadLocal(slot), span.clone()); }
-                    VariableRef::Upvalue(slot) => { self.emit(Op::GetUpvalue(slot), span.clone()); }
-                    VariableRef::Global => {
-                        let idx = self.add_string(name);
-                        self.emit(Op::LoadGlobal(idx), span.clone());
-                    }
+            Expr::Variable { name, span } => match self.resolve_variable(name) {
+                VariableRef::Local(slot) => {
+                    self.emit(Op::LoadLocal(slot), span.clone());
                 }
-            }
-            Expr::Binary { op, left, right, span } => {
+                VariableRef::Upvalue(slot) => {
+                    self.emit(Op::GetUpvalue(slot), span.clone());
+                }
+                VariableRef::Global => {
+                    let idx = self.add_string(name);
+                    self.emit(Op::LoadGlobal(idx), span.clone());
+                }
+            },
+            Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            } => {
                 if *op == BinOp::And || *op == BinOp::Or {
                     // Use a temporary local so control-flow joins do not need to
                     // pass a value on the evaluation stack across basic blocks.
@@ -859,7 +1059,11 @@ impl Compiler {
                 }
                 self.emit(Op::Call(args.len() as u8), span.clone());
             }
-            Expr::Index { object, index, span } => {
+            Expr::Index {
+                object,
+                index,
+                span,
+            } => {
                 self.compile_expr(object)?;
                 self.compile_expr(index)?;
                 self.emit(Op::Index, span.clone());
@@ -876,13 +1080,24 @@ impl Compiler {
                 }
                 self.emit(Op::New(args.len() as u8), span.clone());
             }
-            Expr::Tell { object, method, args, span } => {
+            Expr::Tell {
+                object,
+                method,
+                args,
+                span,
+            } => {
                 self.compile_expr(object)?;
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
                 let idx = self.add_string(method);
-                self.emit(Op::Tell { name: idx, arg_count: args.len() as u8 }, span.clone());
+                self.emit(
+                    Op::Tell {
+                        name: idx,
+                        arg_count: args.len() as u8,
+                    },
+                    span.clone(),
+                );
             }
             Expr::Qualified { name, module, span } => {
                 let module_idx = self.add_string(module);
@@ -906,11 +1121,18 @@ impl Compiler {
         Ok(())
     }
 
-    fn try_compile_range(&self, iterable: &Expr) -> Result<Option<(Option<Expr>, Option<Expr>, Option<Expr>)>, CompileError> {
+    fn try_compile_range(
+        &self,
+        iterable: &Expr,
+    ) -> Result<Option<(Option<Expr>, Option<Expr>, Option<Expr>)>, CompileError> {
         if let Expr::Call { callee, args, .. } = iterable {
             if let Expr::Variable { name, .. } = callee.as_ref() {
                 if name == "range" && args.len() >= 1 && args.len() <= 3 {
-                    return Ok(Some((args.get(0).cloned(), args.get(1).cloned(), args.get(2).cloned())));
+                    return Ok(Some((
+                        args.get(0).cloned(),
+                        args.get(1).cloned(),
+                        args.get(2).cloned(),
+                    )));
                 }
             }
         }
@@ -923,11 +1145,21 @@ impl Compiler {
                 return None;
             }
         }
-        if let Expr::Binary { op: BinOp::Add, left, right, .. } = value {
-            if Self::is_var_named(left, &self.state().locals[slot].name) && Self::is_literal_one(right) {
+        if let Expr::Binary {
+            op: BinOp::Add,
+            left,
+            right,
+            ..
+        } = value
+        {
+            if Self::is_var_named(left, &self.state().locals[slot].name)
+                && Self::is_literal_one(right)
+            {
                 return Some(Op::IncrementLocal(slot));
             }
-            if Self::is_var_named(right, &self.state().locals[slot].name) && Self::is_literal_one(left) {
+            if Self::is_var_named(right, &self.state().locals[slot].name)
+                && Self::is_literal_one(left)
+            {
                 return Some(Op::IncrementLocal(slot));
             }
             if Self::is_var_named(left, &self.state().locals[slot].name) {
@@ -949,7 +1181,8 @@ impl Compiler {
     }
 
     fn declare_local_at_depth(&self, name: &str, type_ann: Option<String>, depth: usize) -> usize {
-        self.state_mut().declare_local_at_depth(name, type_ann, depth)
+        self.state_mut()
+            .declare_local_at_depth(name, type_ann, depth)
     }
 
     fn is_var_named(expr: &Expr, name: &str) -> bool {
@@ -987,7 +1220,12 @@ fn collect_captured_globals(stmts: &[Stmt]) -> HashSet<String> {
     captured
 }
 
-fn scan_stmts_for_captured(stmts: &[Stmt], top_level: &HashSet<String>, locals: &mut HashSet<String>, captured: &mut HashSet<String>) {
+fn scan_stmts_for_captured(
+    stmts: &[Stmt],
+    top_level: &HashSet<String>,
+    locals: &mut HashSet<String>,
+    captured: &mut HashSet<String>,
+) {
     for stmt in stmts {
         match stmt {
             Stmt::Let { name, value, .. } => {
@@ -1004,10 +1242,18 @@ fn scan_stmts_for_captured(stmts: &[Stmt], top_level: &HashSet<String>, locals: 
                     scan_expr_for_captured(object, top_level, locals, captured);
                 }
             }
-            Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return { value: Some(expr), .. } => {
+            Stmt::Show(expr)
+            | Stmt::Expr(expr)
+            | Stmt::Return {
+                value: Some(expr), ..
+            } => {
                 scan_expr_for_captured(expr, top_level, locals, captured);
             }
-            Stmt::If { cond, then_branch, else_branch } => {
+            Stmt::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
                 scan_expr_for_captured(cond, top_level, locals, captured);
                 scan_stmts_for_captured(then_branch, top_level, &mut locals.clone(), captured);
                 scan_stmts_for_captured(else_branch, top_level, &mut locals.clone(), captured);
@@ -1016,13 +1262,19 @@ fn scan_stmts_for_captured(stmts: &[Stmt], top_level: &HashSet<String>, locals: 
                 scan_expr_for_captured(cond, top_level, locals, captured);
                 scan_stmts_for_captured(body, top_level, &mut locals.clone(), captured);
             }
-            Stmt::For { var, iterable, body } => {
+            Stmt::For {
+                var,
+                iterable,
+                body,
+            } => {
                 scan_expr_for_captured(iterable, top_level, locals, captured);
                 let mut body_locals = locals.clone();
                 body_locals.insert(var.clone());
                 scan_stmts_for_captured(body, top_level, &mut body_locals, captured);
             }
-            Stmt::Try { body, catch_body, .. } => {
+            Stmt::Try {
+                body, catch_body, ..
+            } => {
                 scan_stmts_for_captured(body, top_level, &mut locals.clone(), captured);
                 scan_stmts_for_captured(catch_body, top_level, &mut locals.clone(), captured);
             }
@@ -1032,7 +1284,12 @@ fn scan_stmts_for_captured(stmts: &[Stmt], top_level: &HashSet<String>, locals: 
     }
 }
 
-fn scan_expr_for_captured(expr: &Expr, top_level: &HashSet<String>, locals: &HashSet<String>, captured: &mut HashSet<String>) {
+fn scan_expr_for_captured(
+    expr: &Expr,
+    top_level: &HashSet<String>,
+    locals: &HashSet<String>,
+    captured: &mut HashSet<String>,
+) {
     match expr {
         Expr::Variable { name, .. } => {
             if top_level.contains(name) && !locals.contains(name) {

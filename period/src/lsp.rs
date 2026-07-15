@@ -4,14 +4,13 @@ use std::sync::{Arc, Mutex};
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
-    CompletionResponse, Diagnostic, DiagnosticSeverity, GotoDefinitionParams, Hover, HoverContents,
-    HoverParams, HoverProviderCapability, Location, MarkupContent, MarkupKind,
-    Position, PublishDiagnosticsParams, Range, SemanticToken, SemanticTokens,
+    CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
+    Diagnostic, DiagnosticSeverity, GotoDefinitionParams, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, Location, MarkupContent, MarkupKind, Position,
+    PublishDiagnosticsParams, Range, SemanticToken, SemanticTokenType, SemanticTokens,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensServerCapabilities, SemanticTokenType, ServerCapabilities,
-    TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncCapability,
-    TextDocumentSyncKind, Url,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentContentChangeEvent,
+    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
 
 use crate::ast::*;
@@ -137,12 +136,18 @@ fn handle_request(
     Ok(())
 }
 
-fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, String>>>) -> Option<Url> {
+fn handle_notification(
+    not: Notification,
+    documents: &Arc<Mutex<HashMap<Url, String>>>,
+) -> Option<Url> {
     match not.method.as_str() {
         "textDocument/didOpen" => {
             if let Ok(params) = serde_json::from_value::<DidOpenTextDocumentParams>(not.params) {
                 let uri = params.text_document.uri.clone();
-                documents.lock().unwrap_or_else(|e| e.into_inner()).insert(params.text_document.uri, params.text_document.text);
+                documents
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(params.text_document.uri, params.text_document.text);
                 return Some(uri);
             }
         }
@@ -159,7 +164,10 @@ fn handle_notification(not: Notification, documents: &Arc<Mutex<HashMap<Url, Str
         }
         "textDocument/didClose" => {
             if let Ok(params) = serde_json::from_value::<DidCloseTextDocumentParams>(not.params) {
-                documents.lock().unwrap_or_else(|e| e.into_inner()).remove(&params.text_document.uri);
+                documents
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&params.text_document.uri);
                 return Some(params.text_document.uri);
             }
         }
@@ -185,7 +193,11 @@ fn apply_content_changes(current: &str, changes: Vec<TextDocumentContentChangeEv
 }
 
 fn get_doc_text(documents: &Arc<Mutex<HashMap<Url, String>>>, uri: &Url) -> Option<String> {
-    documents.lock().unwrap_or_else(|e| e.into_inner()).get(uri).cloned()
+    documents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(uri)
+        .cloned()
 }
 
 fn position_to_offset(text: &str, pos: Position) -> usize {
@@ -311,7 +323,10 @@ fn hover(
         }
         let code = if sym.kind == CompletionItemKind::MODULE {
             format!("import {}.", sym.name)
-        } else if matches!(sym.kind, CompletionItemKind::FUNCTION | CompletionItemKind::METHOD) {
+        } else if matches!(
+            sym.kind,
+            CompletionItemKind::FUNCTION | CompletionItemKind::METHOD
+        ) {
             format!("define {}", sym.detail)
         } else {
             sym.detail.clone()
@@ -355,13 +370,16 @@ fn interpolated_ident_at(
                     }
                     let offset_in_expr = offset_in_string.saturating_sub(current + 1);
                     let sub_tokens = lex_tokens(s).ok()?;
-                    if let Some(sub_token) = find_token(&sub_tokens, Position {
-                        line: 0,
-                        character: offset_in_expr,
-                    })
-                        && let TokenKind::Ident(name) = &sub_token.kind {
-                            return Some(name.clone());
-                        }
+                    if let Some(sub_token) = find_token(
+                        &sub_tokens,
+                        Position {
+                            line: 0,
+                            character: offset_in_expr,
+                        },
+                    ) && let TokenKind::Ident(name) = &sub_token.kind
+                    {
+                        return Some(name.clone());
+                    }
                 }
                 current += part_len;
             }
@@ -372,30 +390,66 @@ fn interpolated_ident_at(
 
 fn keyword_doc(kind: &TokenKind) -> Option<&'static str> {
     Some(match kind {
-        TokenKind::Show => "```period\nshow <expression>.\n```\n\nPrint the value of an expression.",
+        TokenKind::Show => {
+            "```period\nshow <expression>.\n```\n\nPrint the value of an expression."
+        }
         TokenKind::Let => "```period\nlet <name> be <expression>.\n```\n\nDeclare a new variable.",
-        TokenKind::Set => "```period\nset <target> to <expression>.\n```\n\nAssign a new value to an existing variable, index, or property.",
-        TokenKind::If => "```period\nif <condition> then:\n    ...\n```\n\nConditionally execute a block.",
+        TokenKind::Set => {
+            "```period\nset <target> to <expression>.\n```\n\nAssign a new value to an existing variable, index, or property."
+        }
+        TokenKind::If => {
+            "```period\nif <condition> then:\n    ...\n```\n\nConditionally execute a block."
+        }
         TokenKind::Then => "Part of an `if` statement: `if <condition> then:`.",
-        TokenKind::Otherwise => "```period\notherwise:\n    ...\n```\n\nElse branch of an `if` statement.",
-        TokenKind::While => "```period\nwhile <condition> repeat:\n    ...\n```\n\nLoop while a condition is true.",
+        TokenKind::Otherwise => {
+            "```period\notherwise:\n    ...\n```\n\nElse branch of an `if` statement."
+        }
+        TokenKind::While => {
+            "```period\nwhile <condition> repeat:\n    ...\n```\n\nLoop while a condition is true."
+        }
         TokenKind::Repeat => "Part of a `while` loop: `while <condition> repeat:`.",
-        TokenKind::For => "```period\nfor <var> in <iterable> repeat:\n    ...\n```\n\nIterate over a list or range.",
+        TokenKind::For => {
+            "```period\nfor <var> in <iterable> repeat:\n    ...\n```\n\nIterate over a list or range."
+        }
         TokenKind::In => "Part of a `for` loop: `for <var> in <iterable>`.",
-        TokenKind::Define => "```period\ndefine <name> with <params> returns <type>:\n    ...\n```\n\nDefine a function.",
-        TokenKind::With => "Used in function definitions and calls: `define <name> with <params>.` / `<name> with <args>.`",
-        TokenKind::Returns => "Used in function signatures: `define <name> with <params> returns <type>:`.",
-        TokenKind::Return => "```period\nreturn <expression>.\n```\n\nReturn a value from a function.",
+        TokenKind::Define => {
+            "```period\ndefine <name> with <params> returns <type>:\n    ...\n```\n\nDefine a function."
+        }
+        TokenKind::With => {
+            "Used in function definitions and calls: `define <name> with <params>.` / `<name> with <args>.`"
+        }
+        TokenKind::Returns => {
+            "Used in function signatures: `define <name> with <params> returns <type>:`."
+        }
+        TokenKind::Return => {
+            "```period\nreturn <expression>.\n```\n\nReturn a value from a function."
+        }
         TokenKind::Class => "```period\nclass <Name>:\n    ...\n```\n\nDefine a class.",
         TokenKind::New => "```period\nnew <Class>.\n```\n\nCreate a new instance of a class.",
-        TokenKind::Import => "```period\nimport <module>.\n```\n\nImport a built-in or standard-library module. For local files use a POSIX-style relative path (e.g. `import ./helper.` or `import ../utils/helper.`).",
-        TokenKind::From => "```period\n<name> from <module>.\n```\n\nUse or import a specific name from a module.",
-        TokenKind::Tell => "```period\ntell <object> to <method> with <args>.\n```\n\nSend a message to an object.",
-        TokenKind::Read => "```period\nread <variable> from <path>.\n```\n\nRead the contents of a file into a variable.",
-        TokenKind::Write => "```period\nwrite <content> to <path>.\n```\n\nWrite a string to a file.",
-        TokenKind::Try => "```period\ntry:\n    ...\ncatch err:\n    ...\n```\n\nRun a block and handle runtime errors in the catch block.",
-        TokenKind::Catch => "```period\ncatch <variable>:\n    ...\n```\n\nHandle an error raised in the matching try block.",
-        TokenKind::Export => "```period\nexport name1, name2.\n```\n\nMark top-level names as public when this file is imported.",
+        TokenKind::Import => {
+            "```period\nimport <module>.\n```\n\nImport a built-in or standard-library module. For local files use a POSIX-style relative path (e.g. `import ./helper.` or `import ../utils/helper.`)."
+        }
+        TokenKind::From => {
+            "```period\n<name> from <module>.\n```\n\nUse or import a specific name from a module."
+        }
+        TokenKind::Tell => {
+            "```period\ntell <object> to <method> with <args>.\n```\n\nSend a message to an object."
+        }
+        TokenKind::Read => {
+            "```period\nread <variable> from <path>.\n```\n\nRead the contents of a file into a variable."
+        }
+        TokenKind::Write => {
+            "```period\nwrite <content> to <path>.\n```\n\nWrite a string to a file."
+        }
+        TokenKind::Try => {
+            "```period\ntry:\n    ...\ncatch err:\n    ...\n```\n\nRun a block and handle runtime errors in the catch block."
+        }
+        TokenKind::Catch => {
+            "```period\ncatch <variable>:\n    ...\n```\n\nHandle an error raised in the matching try block."
+        }
+        TokenKind::Export => {
+            "```period\nexport name1, name2.\n```\n\nMark top-level names as public when this file is imported."
+        }
         _ => return None,
     })
 }
@@ -438,7 +492,10 @@ fn completion(
         None => return Ok(None),
     };
 
-    let line_text = text.lines().nth(params.text_document_position.position.line as usize).unwrap_or("");
+    let line_text = text
+        .lines()
+        .nth(params.text_document_position.position.line as usize)
+        .unwrap_or("");
 
     // An import statement ending with '.' is complete; don't offer completions after it,
     // otherwise pressing Enter would insert the first exported name (e.g. 'abs').
@@ -529,8 +586,14 @@ fn span_to_range(span: &Span, len: u32) -> Range {
     let start_col = (span.col as u32).saturating_sub(1);
     let end_col = start_col + len;
     Range {
-        start: Position { line, character: start_col },
-        end: Position { line, character: end_col },
+        start: Position {
+            line,
+            character: start_col,
+        },
+        end: Position {
+            line,
+            character: end_col,
+        },
     }
 }
 
@@ -592,7 +655,10 @@ fn semantic_tokens(
         prev_col = col;
     }
 
-    Ok(Some(SemanticTokens { result_id: None, data }))
+    Ok(Some(SemanticTokens {
+        result_id: None,
+        data,
+    }))
 }
 
 fn lex_tokens_lossy(source: &str) -> Vec<Token> {
@@ -603,7 +669,9 @@ fn lex_tokens_lossy(source: &str) -> Vec<Token> {
             Ok(t) => {
                 let eof = matches!(t.kind, TokenKind::Eof);
                 tokens.push(t);
-                if eof { break; }
+                if eof {
+                    break;
+                }
             }
             Err(_) => break,
         }
@@ -611,7 +679,9 @@ fn lex_tokens_lossy(source: &str) -> Vec<Token> {
     tokens
 }
 
-fn definitions_from_program(program: &Program) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
+fn definitions_from_program(
+    program: &Program,
+) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
     let mut functions = HashSet::new();
     let mut classes = HashSet::new();
     let mut methods = HashSet::new();
@@ -620,7 +690,11 @@ fn definitions_from_program(program: &Program) -> (HashSet<String>, HashSet<Stri
             Stmt::Define { name, .. } => {
                 functions.insert(name.clone());
             }
-            Stmt::Class { name, methods: class_methods, .. } => {
+            Stmt::Class {
+                name,
+                methods: class_methods,
+                ..
+            } => {
                 classes.insert(name.clone());
                 for m in class_methods {
                     if let Stmt::Define { name: mname, .. } = m {
@@ -637,7 +711,9 @@ fn definitions_from_program(program: &Program) -> (HashSet<String>, HashSet<Stri
 // Heuristic definition collection used when the document has syntax errors:
 // a `define` at a class body's indent depth is a method, any other `define`
 // is a function, and the name after `class` is a type.
-fn definitions_from_tokens(tokens: &[Token]) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
+fn definitions_from_tokens(
+    tokens: &[Token],
+) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
     let mut functions = HashSet::new();
     let mut classes = HashSet::new();
     let mut methods = HashSet::new();
@@ -661,7 +737,9 @@ fn definitions_from_tokens(tokens: &[Token]) -> (HashSet<String>, HashSet<String
                 // A class header only starts a body if an Indent follows;
                 // otherwise (EOF, syntax error) drop the pending state so a
                 // later unrelated indented block is not treated as its body.
-                let next = tokens[i + 1..].iter().find(|t| !matches!(t.kind, TokenKind::Newline));
+                let next = tokens[i + 1..]
+                    .iter()
+                    .find(|t| !matches!(t.kind, TokenKind::Newline));
                 if !matches!(next.map(|t| &t.kind), Some(TokenKind::Indent)) {
                     pending_class = false;
                 }
@@ -669,19 +747,21 @@ fn definitions_from_tokens(tokens: &[Token]) -> (HashSet<String>, HashSet<String
             TokenKind::Class => {
                 pending_class = true;
                 if let Some(t) = tokens.get(i + 1)
-                    && let TokenKind::Ident(n) = &t.kind {
-                        classes.insert(n.clone());
-                    }
+                    && let TokenKind::Ident(n) = &t.kind
+                {
+                    classes.insert(n.clone());
+                }
             }
             TokenKind::Define => {
                 if let Some(t) = tokens.get(i + 1)
-                    && let TokenKind::Ident(n) = &t.kind {
-                        if class_body_depths.contains(&depth) {
-                            methods.insert(n.clone());
-                        } else {
-                            functions.insert(n.clone());
-                        }
+                    && let TokenKind::Ident(n) = &t.kind
+                {
+                    if class_body_depths.contains(&depth) {
+                        methods.insert(n.clone());
+                    } else {
+                        functions.insert(n.clone());
                     }
+                }
             }
             _ => {}
         }
@@ -708,7 +788,10 @@ fn next_ident(start: usize, tokens: &[Token]) -> Option<usize> {
 
 fn prev_significant(start: usize, tokens: &[Token]) -> Option<usize> {
     for i in (0..start).rev() {
-        if !matches!(tokens[i].kind, TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline) {
+        if !matches!(
+            tokens[i].kind,
+            TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline
+        ) {
             return Some(i);
         }
     }
@@ -716,9 +799,17 @@ fn prev_significant(start: usize, tokens: &[Token]) -> Option<usize> {
 }
 
 fn next_significant(start: usize, tokens: &[Token]) -> Option<usize> {
-    tokens.iter().enumerate().skip(start).find(|(_, t)| {
-        !matches!(t.kind, TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline)
-    }).map(|(i, _)| i)
+    tokens
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find(|(_, t)| {
+            !matches!(
+                t.kind,
+                TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline
+            )
+        })
+        .map(|(i, _)| i)
 }
 
 fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
@@ -730,44 +821,48 @@ fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
                 // let [type] name be value.  The identifier just before 'be' is the variable.
                 if let Some(be_idx) = find_keyword_after(i, tokens, &TokenKind::Be)
                     && let Some(name_idx) = prev_ident_before(be_idx, tokens)
-                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
-                            defs.push((name, tokens[name_idx].span.clone()));
-                        }
+                    && let Some(name) = ident_name(&tokens[name_idx].kind)
+                {
+                    defs.push((name, tokens[name_idx].span.clone()));
+                }
             }
             TokenKind::Read => {
                 // read name from path.
                 if let Some(from_idx) = find_keyword_after(i, tokens, &TokenKind::From)
                     && let Some(name_idx) = prev_ident_before(from_idx, tokens)
-                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
-                            defs.push((name, tokens[name_idx].span.clone()));
-                        }
+                    && let Some(name) = ident_name(&tokens[name_idx].kind)
+                {
+                    defs.push((name, tokens[name_idx].span.clone()));
+                }
             }
             TokenKind::Catch => {
                 // catch var:
                 if let Some(colon_idx) = find_keyword_after(i, tokens, &TokenKind::Colon)
                     && let Some(name_idx) = prev_ident_before(colon_idx, tokens)
-                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
-                            defs.push((name, tokens[name_idx].span.clone()));
-                        }
+                    && let Some(name) = ident_name(&tokens[name_idx].kind)
+                {
+                    defs.push((name, tokens[name_idx].span.clone()));
+                }
             }
             TokenKind::For => {
                 // for var in iterable
                 if let Some(in_idx) = find_keyword_after(i, tokens, &TokenKind::In)
                     && let Some(name_idx) = prev_ident_before(in_idx, tokens)
-                        && let Some(name) = ident_name(&tokens[name_idx].kind) {
-                            defs.push((name, tokens[name_idx].span.clone()));
-                        }
+                    && let Some(name) = ident_name(&tokens[name_idx].kind)
+                {
+                    defs.push((name, tokens[name_idx].span.clone()));
+                }
             }
             TokenKind::Define | TokenKind::Class => {
                 if let Some(name_idx) = next_ident(i + 1, tokens)
-                    && let Some(name) = ident_name(&tokens[name_idx].kind) {
-                        defs.push((name, tokens[name_idx].span.clone()));
-                    }
-            }
-            TokenKind::With
-                if is_definition_with(i, tokens) => {
-                    collect_params(i + 1, tokens, &mut defs);
+                    && let Some(name) = ident_name(&tokens[name_idx].kind)
+                {
+                    defs.push((name, tokens[name_idx].span.clone()));
                 }
+            }
+            TokenKind::With if is_definition_with(i, tokens) => {
+                collect_params(i + 1, tokens, &mut defs);
+            }
             _ => {}
         }
         i += 1;
@@ -776,9 +871,15 @@ fn collect_local_definitions(tokens: &[Token]) -> Vec<(String, Span)> {
 }
 
 fn find_keyword_after(start: usize, tokens: &[Token], target: &TokenKind) -> Option<usize> {
-    tokens.iter().enumerate().skip(start).find(|(_, t)| {
-        !matches!(t.kind, TokenKind::Eof) && std::mem::discriminant(&t.kind) == std::mem::discriminant(target)
-    }).map(|(i, _)| i)
+    tokens
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find(|(_, t)| {
+            !matches!(t.kind, TokenKind::Eof)
+                && std::mem::discriminant(&t.kind) == std::mem::discriminant(target)
+        })
+        .map(|(i, _)| i)
 }
 
 fn prev_ident_before(start: usize, tokens: &[Token]) -> Option<usize> {
@@ -798,9 +899,10 @@ fn is_definition_with(idx: usize, tokens: &[Token]) -> bool {
         }
         // define name with ...
         if let Some(prev2) = prev_significant(prev, tokens)
-            && matches!(tokens[prev2].kind, TokenKind::Define) {
-                return true;
-            }
+            && matches!(tokens[prev2].kind, TokenKind::Define)
+        {
+            return true;
+        }
     }
     false
 }
@@ -831,7 +933,9 @@ fn lex_tokens(source: &str) -> Result<Vec<Token>, String> {
         let t = lexer.next_token()?;
         let eof = matches!(t.kind, TokenKind::Eof);
         tokens.push(t);
-        if eof { break; }
+        if eof {
+            break;
+        }
     }
     Ok(tokens)
 }
@@ -839,7 +943,10 @@ fn lex_tokens(source: &str) -> Result<Vec<Token>, String> {
 fn try_parse(source: &str) -> Result<Program, Vec<Diagnostic>> {
     match semantic::try_parse(source) {
         Ok(p) => Ok(p),
-        Err(errors) => Err(errors.iter().map(|e| parse_error_to_diagnostic(e)).collect()),
+        Err(errors) => Err(errors
+            .iter()
+            .map(|e| parse_error_to_diagnostic(e))
+            .collect()),
     }
 }
 
@@ -883,8 +990,14 @@ fn parse_error_to_diagnostic(msg: &str) -> Diagnostic {
 
     Diagnostic {
         range: Range {
-            start: Position { line: line.saturating_sub(1), character: start_char },
-            end: Position { line: line.saturating_sub(1), character: end_char },
+            start: Position {
+                line: line.saturating_sub(1),
+                character: start_char,
+            },
+            end: Position {
+                line: line.saturating_sub(1),
+                character: end_char,
+            },
         },
         severity: Some(DiagnosticSeverity::ERROR),
         code: None,
@@ -911,33 +1024,56 @@ fn publish_diagnostics(
     let current_path = uri.to_file_path().ok().map(|p| p.as_path().to_path_buf());
     match try_parse(&text) {
         Ok(program) => {
-            let (errors, warnings) = semantic::program_diagnostics(&program, current_path.as_deref());
+            let (errors, warnings) =
+                semantic::program_diagnostics(&program, current_path.as_deref());
             for (span, msg) in errors {
-                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::ERROR));
+                diagnostics.push(make_diagnostic(
+                    &span,
+                    quoted_name(&msg),
+                    &msg,
+                    DiagnosticSeverity::ERROR,
+                ));
             }
             for (span, msg) in warnings {
-                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::WARNING));
+                diagnostics.push(make_diagnostic(
+                    &span,
+                    quoted_name(&msg),
+                    &msg,
+                    DiagnosticSeverity::WARNING,
+                ));
             }
             let mut tc = type_checker::TypeChecker::new();
             let (type_errors, type_warnings) = tc.check(&program);
             for (span, msg) in type_warnings {
-                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::WARNING));
+                diagnostics.push(make_diagnostic(
+                    &span,
+                    quoted_name(&msg),
+                    &msg,
+                    DiagnosticSeverity::WARNING,
+                ));
             }
             for (span, msg) in type_errors {
-                diagnostics.push(make_diagnostic(&span, quoted_name(&msg), &msg, DiagnosticSeverity::ERROR));
+                diagnostics.push(make_diagnostic(
+                    &span,
+                    quoted_name(&msg),
+                    &msg,
+                    DiagnosticSeverity::ERROR,
+                ));
             }
         }
         Err(ds) => diagnostics.extend(ds),
     }
 
-    connection.sender.send(Message::Notification(Notification::new(
-        "textDocument/publishDiagnostics".to_string(),
-        serde_json::to_value(PublishDiagnosticsParams {
-            uri,
-            diagnostics,
-            version: None,
-        })?,
-    )))?;
+    connection
+        .sender
+        .send(Message::Notification(Notification::new(
+            "textDocument/publishDiagnostics".to_string(),
+            serde_json::to_value(PublishDiagnosticsParams {
+                uri,
+                diagnostics,
+                version: None,
+            })?,
+        )))?;
     Ok(())
 }
 
@@ -957,7 +1093,13 @@ fn token_len(kind: &TokenKind) -> u32 {
         }
         TokenKind::Integer(n) => format!("{}", n).len() as u32,
         TokenKind::Number(n) => format!("{}", n).len() as u32,
-        TokenKind::Bool(b) => if *b { 4 } else { 5 },
+        TokenKind::Bool(b) => {
+            if *b {
+                4
+            } else {
+                5
+            }
+        }
         TokenKind::Nothing => 7,
         TokenKind::Let => 3,
         TokenKind::Set => 3,
@@ -992,17 +1134,31 @@ fn token_len(kind: &TokenKind) -> u32 {
         TokenKind::Export => 6,
         TokenKind::Returns => 7,
         TokenKind::Ellipsis => 3,
-        TokenKind::Comma | TokenKind::Dot | TokenKind::Colon
-        | TokenKind::LParen | TokenKind::RParen | TokenKind::LBracket | TokenKind::RBracket
-        | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Plus | TokenKind::Minus
-        | TokenKind::Star | TokenKind::Slash | TokenKind::Percent | TokenKind::Power => 1,
+        TokenKind::Comma
+        | TokenKind::Dot
+        | TokenKind::Colon
+        | TokenKind::LParen
+        | TokenKind::RParen
+        | TokenKind::LBracket
+        | TokenKind::RBracket
+        | TokenKind::LBrace
+        | TokenKind::RBrace
+        | TokenKind::Plus
+        | TokenKind::Minus
+        | TokenKind::Star
+        | TokenKind::Slash
+        | TokenKind::Percent
+        | TokenKind::Power => 1,
         TokenKind::EqEq | TokenKind::NotEq | TokenKind::LessEq | TokenKind::GreaterEq => 2,
         TokenKind::Less | TokenKind::Greater => 1,
         TokenKind::Indent | TokenKind::Dedent | TokenKind::Newline | TokenKind::Eof => 0,
     }
 }
 
-fn find_token(tokens: &[crate::lexer::Token], pos: lsp_types::Position) -> Option<crate::lexer::Token> {
+fn find_token(
+    tokens: &[crate::lexer::Token],
+    pos: lsp_types::Position,
+) -> Option<crate::lexer::Token> {
     for token in tokens {
         let line = (token.span.line as u32).saturating_sub(1);
         if line != pos.line {
@@ -1030,7 +1186,11 @@ fn format_params(params: &[(String, Option<String>)]) -> String {
         .join(", ")
 }
 
-fn function_detail(name: &str, params: &[(String, Option<String>)], return_type: &Option<String>) -> String {
+fn function_detail(
+    name: &str,
+    params: &[(String, Option<String>)],
+    return_type: &Option<String>,
+) -> String {
     let param_str = format_params(params);
     let ret = return_type.clone().unwrap_or_else(|| "nothing".to_string());
     if params.is_empty() {
@@ -1056,15 +1216,21 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
 
     // First pass: collect function return types.
     for stmt in &program.statements {
-        if let Stmt::Define { name, return_type, .. } = stmt
-            && let Some(ret) = return_type {
+        if let Stmt::Define {
+            name, return_type, ..
+        } = stmt
+            && let Some(ret) = return_type
+        {
+            func_returns.insert(name.clone(), ret.clone());
+        }
+        for method in class_methods(stmt) {
+            if let Stmt::Define {
+                name, return_type, ..
+            } = method
+                && let Some(ret) = return_type
+            {
                 func_returns.insert(name.clone(), ret.clone());
             }
-        for method in class_methods(stmt) {
-            if let Stmt::Define { name, return_type, .. } = method
-                && let Some(ret) = return_type {
-                    func_returns.insert(name.clone(), ret.clone());
-                }
         }
     }
 
@@ -1079,7 +1245,14 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
                     kind: CompletionItemKind::VARIABLE,
                 });
             }
-            Stmt::Define { name, params, return_type, docstring, body, .. } => {
+            Stmt::Define {
+                name,
+                params,
+                return_type,
+                docstring,
+                body,
+                ..
+            } => {
                 let eff_ret = effective_return_type(return_type, body, &func_returns);
                 symbols.push(SymbolInfo {
                     name: name.clone(),
@@ -1088,7 +1261,13 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
                     kind: CompletionItemKind::FUNCTION,
                 });
             }
-            Stmt::Class { name, init, methods, docstring, .. } => {
+            Stmt::Class {
+                name,
+                init,
+                methods,
+                docstring,
+                ..
+            } => {
                 symbols.push(SymbolInfo {
                     name: name.clone(),
                     detail: format!("class {}", name),
@@ -1104,7 +1283,15 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
                     });
                 }
                 for m in methods {
-                    if let Stmt::Define { name: mname, params, return_type, docstring, body, .. } = m {
+                    if let Stmt::Define {
+                        name: mname,
+                        params,
+                        return_type,
+                        docstring,
+                        body,
+                        ..
+                    } = m
+                    {
                         let eff_ret = effective_return_type(return_type, body, &func_returns);
                         symbols.push(SymbolInfo {
                             name: mname.clone(),
@@ -1120,11 +1307,16 @@ fn index_program(program: &Program) -> Vec<SymbolInfo> {
                     imports.push(path.clone());
                     if semantic::is_valid_module(path, None) {
                         let mut exports = module_exports(path);
-                        let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                        let export_names: Vec<String> =
+                            exports.iter().map(|e| e.name.clone()).collect();
                         symbols.push(SymbolInfo {
                             name: path.clone(),
                             detail: format!("module {}", path),
-                            docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                            docstring: Some(format!(
+                                "Built-in module `{}`. Exports: {}.",
+                                path,
+                                export_names.join(", ")
+                            )),
                             kind: CompletionItemKind::MODULE,
                         });
                         symbols.append(&mut exports);
@@ -1196,7 +1388,9 @@ fn effective_return_type(
     body: &[Stmt],
     func_returns: &HashMap<String, String>,
 ) -> Option<String> {
-    return_type.clone().or_else(|| infer_return_type(body, func_returns))
+    return_type
+        .clone()
+        .or_else(|| infer_return_type(body, func_returns))
 }
 
 /// Infer a function's return type from its `return` statements. Distinct
@@ -1228,12 +1422,18 @@ fn collect_return_exprs<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Expr>) {
     for stmt in stmts {
         match stmt {
             Stmt::Return { value: Some(e), .. } => out.push(e),
-            Stmt::If { then_branch, else_branch, .. } => {
+            Stmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 collect_return_exprs(then_branch, out);
                 collect_return_exprs(else_branch, out);
             }
             Stmt::While { body, .. } | Stmt::For { body, .. } => collect_return_exprs(body, out),
-            Stmt::Try { body, catch_body, .. } => {
+            Stmt::Try {
+                body, catch_body, ..
+            } => {
                 collect_return_exprs(body, out);
                 collect_return_exprs(catch_body, out);
             }
@@ -1250,13 +1450,23 @@ fn collect_return_exprs<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Expr>) {
 fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<SymbolInfo> {
     let mut func_returns: HashMap<String, String> = HashMap::new();
     for stmt in &program.statements {
-        if let Stmt::Define { name: n, return_type, .. } = stmt
-            && let Some(ret) = return_type {
+        if let Stmt::Define {
+            name: n,
+            return_type,
+            ..
+        } = stmt
+            && let Some(ret) = return_type
+        {
             func_returns.insert(n.clone(), ret.clone());
         }
         for method in class_methods(stmt) {
-            if let Stmt::Define { name: n, return_type, .. } = method
-                && let Some(ret) = return_type {
+            if let Stmt::Define {
+                name: n,
+                return_type,
+                ..
+            } = method
+                && let Some(ret) = return_type
+            {
                 func_returns.insert(n.clone(), ret.clone());
             }
         }
@@ -1269,7 +1479,14 @@ fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<Symbo
     // the cursor position within the top-level scope.
     for stmt in &program.statements {
         match stmt {
-            Stmt::Define { name: n, params, return_type, docstring, body, .. } if n == name => {
+            Stmt::Define {
+                name: n,
+                params,
+                return_type,
+                docstring,
+                body,
+                ..
+            } if n == name => {
                 let eff_ret = effective_return_type(return_type, body, &func_returns);
                 result.push(SymbolInfo {
                     name: n.clone(),
@@ -1278,7 +1495,13 @@ fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<Symbo
                     kind: CompletionItemKind::FUNCTION,
                 });
             }
-            Stmt::Class { name: n, init, methods, docstring, .. } if n == name => {
+            Stmt::Class {
+                name: n,
+                init,
+                methods,
+                docstring,
+                ..
+            } if n == name => {
                 result.push(SymbolInfo {
                     name: n.clone(),
                     detail: format!("class {}", n),
@@ -1297,7 +1520,15 @@ fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<Symbo
                     }
                 }
                 for m in methods {
-                    if let Stmt::Define { name: mname, params, return_type, docstring, body, .. } = m {
+                    if let Stmt::Define {
+                        name: mname,
+                        params,
+                        return_type,
+                        docstring,
+                        body,
+                        ..
+                    } = m
+                    {
                         if mname == name {
                             let eff_ret = effective_return_type(return_type, body, &func_returns);
                             result.push(SymbolInfo {
@@ -1314,11 +1545,16 @@ fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<Symbo
                 for (path, _) in paths {
                     if path == name && semantic::is_valid_module(path, None) {
                         let exports = module_exports(path);
-                        let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                        let export_names: Vec<String> =
+                            exports.iter().map(|e| e.name.clone()).collect();
                         result.push(SymbolInfo {
                             name: path.clone(),
                             detail: format!("module {}", path),
-                            docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                            docstring: Some(format!(
+                                "Built-in module `{}`. Exports: {}.",
+                                path,
+                                export_names.join(", ")
+                            )),
                             kind: CompletionItemKind::MODULE,
                         });
                     }
@@ -1335,7 +1571,14 @@ fn resolve_symbols_at(program: &Program, name: &str, pos: Position) -> Vec<Symbo
         }
     }
 
-    resolve_scope_symbols(&program.statements, name, pos, &func_returns, &mut result, true);
+    resolve_scope_symbols(
+        &program.statements,
+        name,
+        pos,
+        &func_returns,
+        &mut result,
+        true,
+    );
     result
 }
 
@@ -1357,12 +1600,21 @@ fn resolve_scope_symbols(
 
         if contains {
             match stmt {
-                Stmt::Define { name: _n, params, body, .. } => {
+                Stmt::Define {
+                    name: _n,
+                    params,
+                    body,
+                    ..
+                } => {
                     for (param_name, param_type) in params {
                         if param_name == name {
                             result.push(SymbolInfo {
                                 name: param_name.clone(),
-                                detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
+                                detail: format!(
+                                    "{}: {}",
+                                    param_name,
+                                    param_type.as_deref().unwrap_or("anything")
+                                ),
                                 docstring: None,
                                 kind: CompletionItemKind::VARIABLE,
                             });
@@ -1376,7 +1628,11 @@ fn resolve_scope_symbols(
                             if param_name == name {
                                 result.push(SymbolInfo {
                                     name: param_name.clone(),
-                                    detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
+                                    detail: format!(
+                                        "{}: {}",
+                                        param_name,
+                                        param_type.as_deref().unwrap_or("anything")
+                                    ),
                                     docstring: None,
                                     kind: CompletionItemKind::VARIABLE,
                                 });
@@ -1386,12 +1642,22 @@ fn resolve_scope_symbols(
                     }
                     for m in methods {
                         if stmt_contains_pos(m, pos) {
-                            if let Stmt::Define { name: _n, params, body, .. } = m {
+                            if let Stmt::Define {
+                                name: _n,
+                                params,
+                                body,
+                                ..
+                            } = m
+                            {
                                 for (param_name, param_type) in params {
                                     if param_name == name {
                                         result.push(SymbolInfo {
                                             name: param_name.clone(),
-                                            detail: format!("{}: {}", param_name, param_type.as_deref().unwrap_or("anything")),
+                                            detail: format!(
+                                                "{}: {}",
+                                                param_name,
+                                                param_type.as_deref().unwrap_or("anything")
+                                            ),
                                             docstring: None,
                                             kind: CompletionItemKind::VARIABLE,
                                         });
@@ -1402,14 +1668,23 @@ fn resolve_scope_symbols(
                         }
                     }
                 }
-                Stmt::If { then_branch, else_branch, .. } => {
+                Stmt::If {
+                    then_branch,
+                    else_branch,
+                    ..
+                } => {
                     if branch_contains_pos(then_branch, pos) {
                         resolve_scope_symbols(then_branch, name, pos, func_returns, result, false);
                     } else if branch_contains_pos(else_branch, pos) {
                         resolve_scope_symbols(else_branch, name, pos, func_returns, result, false);
                     }
                 }
-                Stmt::Try { body, catch_var, catch_body, .. } => {
+                Stmt::Try {
+                    body,
+                    catch_var,
+                    catch_body,
+                    ..
+                } => {
                     if branch_contains_pos(body, pos) {
                         resolve_scope_symbols(body, name, pos, func_returns, result, false);
                     } else if branch_contains_pos(catch_body, pos) {
@@ -1474,7 +1749,14 @@ fn add_matching_def(
                 kind: CompletionItemKind::VARIABLE,
             });
         }
-        Stmt::Define { name: n, params, return_type, docstring, body, .. } if n == name && !is_top_level => {
+        Stmt::Define {
+            name: n,
+            params,
+            return_type,
+            docstring,
+            body,
+            ..
+        } if n == name && !is_top_level => {
             let eff_ret = effective_return_type(return_type, body, func_returns);
             result.push(SymbolInfo {
                 name: n.clone(),
@@ -1483,7 +1765,13 @@ fn add_matching_def(
                 kind: CompletionItemKind::FUNCTION,
             });
         }
-        Stmt::Class { name: n, init, methods, docstring, .. } if !is_top_level => {
+        Stmt::Class {
+            name: n,
+            init,
+            methods,
+            docstring,
+            ..
+        } if !is_top_level => {
             if n == name {
                 result.push(SymbolInfo {
                     name: n.clone(),
@@ -1504,7 +1792,15 @@ fn add_matching_def(
                 }
             }
             for m in methods {
-                if let Stmt::Define { name: mname, params, return_type, docstring, body, .. } = m {
+                if let Stmt::Define {
+                    name: mname,
+                    params,
+                    return_type,
+                    docstring,
+                    body,
+                    ..
+                } = m
+                {
                     if mname == name {
                         let eff_ret = effective_return_type(return_type, body, func_returns);
                         result.push(SymbolInfo {
@@ -1521,11 +1817,16 @@ fn add_matching_def(
             for (path, _) in paths {
                 if path == name && semantic::is_valid_module(path, None) {
                     let exports = module_exports(path);
-                    let export_names: Vec<String> = exports.iter().map(|e| e.name.clone()).collect();
+                    let export_names: Vec<String> =
+                        exports.iter().map(|e| e.name.clone()).collect();
                     result.push(SymbolInfo {
                         name: path.clone(),
                         detail: format!("module {}", path),
-                        docstring: Some(format!("Built-in module `{}`. Exports: {}.", path, export_names.join(", "))),
+                        docstring: Some(format!(
+                            "Built-in module `{}`. Exports: {}.",
+                            path,
+                            export_names.join(", ")
+                        )),
                         kind: CompletionItemKind::MODULE,
                     });
                 }
@@ -1576,7 +1877,11 @@ fn stmt_start_line(stmt: &Stmt) -> Option<usize> {
         Stmt::While { cond, .. } => cond.span().map(|s| s.line),
         Stmt::For { iterable, .. } => iterable.span().map(|s| s.line),
         Stmt::Try { body, .. } => body.first().and_then(stmt_start_line),
-        Stmt::Show(e) | Stmt::Expr(e) | Stmt::Set { value: e, .. } | Stmt::Write { content: e, .. } | Stmt::Read { path: e, .. } => e.span().map(|s| s.line),
+        Stmt::Show(e)
+        | Stmt::Expr(e)
+        | Stmt::Set { value: e, .. }
+        | Stmt::Write { content: e, .. }
+        | Stmt::Read { path: e, .. } => e.span().map(|s| s.line),
         Stmt::Import(paths) => paths.first().map(|(_, span)| span.line),
         _ => None,
     }
@@ -1593,7 +1898,11 @@ fn stmt_end_line(stmt: &Stmt) -> Option<usize> {
             });
             last_method_end.or(Some(span.line))
         }
-        Stmt::If { then_branch, else_branch, .. } => {
+        Stmt::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
             let then_end = then_branch.last().and_then(stmt_end_line);
             let else_end = else_branch.last().and_then(stmt_end_line);
             match (then_end, else_end) {
@@ -1605,7 +1914,11 @@ fn stmt_end_line(stmt: &Stmt) -> Option<usize> {
         }
         Stmt::While { body, .. } | Stmt::For { body, .. } => body.last().and_then(stmt_end_line),
         Stmt::Try { catch_body, .. } => catch_body.last().and_then(stmt_end_line),
-        Stmt::Show(e) | Stmt::Expr(e) | Stmt::Set { value: e, .. } | Stmt::Write { content: e, .. } | Stmt::Read { path: e, .. } => e.span().map(|s| s.line),
+        Stmt::Show(e)
+        | Stmt::Expr(e)
+        | Stmt::Set { value: e, .. }
+        | Stmt::Write { content: e, .. }
+        | Stmt::Read { path: e, .. } => e.span().map(|s| s.line),
         Stmt::Import(paths) => paths.last().map(|(_, span)| span.line),
         _ => None,
     }
@@ -1634,10 +1947,13 @@ fn exports_from_path(module: &str, path: &std::path::Path) -> Option<Vec<SymbolI
 
     let mut func_returns: HashMap<String, String> = HashMap::new();
     for stmt in &program.statements {
-        if let Stmt::Define { name, return_type, .. } = stmt
-            && let Some(ret) = return_type {
-                func_returns.insert(name.clone(), ret.clone());
-            }
+        if let Stmt::Define {
+            name, return_type, ..
+        } = stmt
+            && let Some(ret) = return_type
+        {
+            func_returns.insert(name.clone(), ret.clone());
+        }
     }
 
     let mut exports = Vec::new();
@@ -1652,7 +1968,14 @@ fn exports_from_path(module: &str, path: &std::path::Path) -> Option<Vec<SymbolI
                     kind: CompletionItemKind::VARIABLE,
                 });
             }
-            Stmt::Define { name, params, return_type, docstring, body, .. } => {
+            Stmt::Define {
+                name,
+                params,
+                return_type,
+                docstring,
+                body,
+                ..
+            } => {
                 let eff_ret = effective_return_type(return_type, body, &func_returns);
                 exports.push(SymbolInfo {
                     name: name.clone(),
@@ -1661,7 +1984,13 @@ fn exports_from_path(module: &str, path: &std::path::Path) -> Option<Vec<SymbolI
                     kind: CompletionItemKind::FUNCTION,
                 });
             }
-            Stmt::Class { name, init, methods, docstring, .. } => {
+            Stmt::Class {
+                name,
+                init,
+                methods,
+                docstring,
+                ..
+            } => {
                 exports.push(SymbolInfo {
                     name: name.clone(),
                     detail: format!("{}::class {}", module, name),
@@ -1677,11 +2006,23 @@ fn exports_from_path(module: &str, path: &std::path::Path) -> Option<Vec<SymbolI
                     });
                 }
                 for m in methods {
-                    if let Stmt::Define { name: mname, params, return_type, docstring, body, .. } = m {
+                    if let Stmt::Define {
+                        name: mname,
+                        params,
+                        return_type,
+                        docstring,
+                        body,
+                        ..
+                    } = m
+                    {
                         let eff_ret = effective_return_type(return_type, body, &func_returns);
                         exports.push(SymbolInfo {
                             name: mname.clone(),
-                            detail: format!("{}::{}", module, function_detail(mname, params, &eff_ret)),
+                            detail: format!(
+                                "{}::{}",
+                                module,
+                                function_detail(mname, params, &eff_ret)
+                            ),
                             docstring: docstring.clone(),
                             kind: CompletionItemKind::METHOD,
                         });
@@ -1710,28 +2051,86 @@ fn module_exports(module: &str) -> Vec<SymbolInfo> {
             builtin_fn("sin", "number", "number", "Return the sine of a value."),
             builtin_fn("cos", "number", "number", "Return the cosine of a value."),
             builtin_fn("tan", "number", "number", "Return the tangent of a value."),
-            builtin_fn("sqrt", "number", "number", "Return the square root of a value."),
+            builtin_fn(
+                "sqrt",
+                "number",
+                "number",
+                "Return the square root of a value.",
+            ),
             builtin_fn("abs", "number", "number", "Return the absolute value."),
-            builtin_fn("floor", "number", "number", "Round down to the nearest integer."),
-            builtin_fn("ceil", "number", "number", "Round up to the nearest integer."),
+            builtin_fn(
+                "floor",
+                "number",
+                "number",
+                "Round down to the nearest integer.",
+            ),
+            builtin_fn(
+                "ceil",
+                "number",
+                "number",
+                "Round up to the nearest integer.",
+            ),
         ],
         "string" => vec![
-            builtin_fn("upper", "string", "string", "Convert a string to uppercase."),
-            builtin_fn("lower", "string", "string", "Convert a string to lowercase."),
+            builtin_fn(
+                "upper",
+                "string",
+                "string",
+                "Convert a string to uppercase.",
+            ),
+            builtin_fn(
+                "lower",
+                "string",
+                "string",
+                "Convert a string to lowercase.",
+            ),
         ],
         "random" => vec![
-            builtin_fn("random", "", "number", "Return a random number between 0 and 1."),
-            builtin_fn("seed", "integer value", "nothing", "Re-seed the random number generator so subsequent random calls are reproducible."),
+            builtin_fn(
+                "random",
+                "",
+                "number",
+                "Return a random number between 0 and 1.",
+            ),
+            builtin_fn(
+                "seed",
+                "integer value",
+                "nothing",
+                "Re-seed the random number generator so subsequent random calls are reproducible.",
+            ),
         ],
-        "time" => vec![
-            builtin_fn("now", "", "number", "Return the current Unix timestamp."),
-        ],
+        "time" => vec![builtin_fn(
+            "now",
+            "",
+            "number",
+            "Return the current Unix timestamp.",
+        )],
         "system" => vec![
-            builtin_fn("run", "command", "string", "Run a shell command and return its standard output."),
-            builtin_fn("open", "target", "nothing", "Open a URL or file with the system default handler."),
+            builtin_fn(
+                "run",
+                "command",
+                "string",
+                "Run a shell command and return its standard output.",
+            ),
+            builtin_fn(
+                "open",
+                "target",
+                "nothing",
+                "Open a URL or file with the system default handler.",
+            ),
             builtin_fn("alert", "message", "nothing", "Show a modal message box."),
-            builtin_fn("confirm", "message", "boolean", "Show a yes/no dialog and return the user's choice."),
-            builtin_fn("notify", "title, message", "nothing", "Show a desktop notification."),
+            builtin_fn(
+                "confirm",
+                "message",
+                "boolean",
+                "Show a yes/no dialog and return the user's choice.",
+            ),
+            builtin_fn(
+                "notify",
+                "title, message",
+                "nothing",
+                "Show a desktop notification.",
+            ),
         ],
         _ => Vec::new(),
     };
@@ -1746,12 +2145,27 @@ fn module_exports(module: &str) -> Vec<SymbolInfo> {
 
 fn all_builtins() -> Vec<SymbolInfo> {
     let mut out = vec![
-        builtin_fn("length", "value", "integer", "Return the length of a string or list."),
+        builtin_fn(
+            "length",
+            "value",
+            "integer",
+            "Return the length of a string or list.",
+        ),
         builtin_fn("string", "value", "string", "Convert a value to a string."),
         builtin_fn("number", "value", "number", "Convert a value to a number."),
-        builtin_fn("type", "value", "string", "Return the type name of a value."),
+        builtin_fn(
+            "type",
+            "value",
+            "string",
+            "Return the type name of a value.",
+        ),
         builtin_fn("input", "", "string", "Read a line of input from the user."),
-        builtin_fn("range", "stop", "range", "Return a lazy range of integers from 0 to stop-1."),
+        builtin_fn(
+            "range",
+            "stop",
+            "range",
+            "Return a lazy range of integers from 0 to stop-1.",
+        ),
     ];
     out.extend(module_exports("math"));
     out.extend(module_exports("string"));
@@ -1832,21 +2246,33 @@ fn module_from_line(line: &str) -> Option<String> {
 /// no quoted name is present.
 fn quoted_name(message: &str) -> &str {
     if let Some(start) = message.find('\'')
-        && let Some(end) = message[start + 1..].find('\'') {
-            return &message[start + 1..start + 1 + end];
-        }
+        && let Some(end) = message[start + 1..].find('\'')
+    {
+        return &message[start + 1..start + 1 + end];
+    }
     ""
 }
 
-fn make_diagnostic(span: &Span, name: &str, message: &str, severity: DiagnosticSeverity) -> Diagnostic {
+fn make_diagnostic(
+    span: &Span,
+    name: &str,
+    message: &str,
+    severity: DiagnosticSeverity,
+) -> Diagnostic {
     let line = span.line.saturating_sub(1) as u32;
     let len = name.len() as u32;
     let start_col = span.col.saturating_sub(1) as u32;
     let end_col = start_col + len;
     Diagnostic {
         range: Range {
-            start: Position { line, character: start_col },
-            end: Position { line, character: end_col },
+            start: Position {
+                line,
+                character: start_col,
+            },
+            end: Position {
+                line,
+                character: end_col,
+            },
         },
         severity: Some(severity),
         code: None,
@@ -1872,14 +2298,19 @@ mod tests {
         let range = span_to_range(&span, 4);
         assert_eq!(range.start.line, 0);
         assert_eq!(range.start.character, 5); // 0-indexed start of "abcd"
-        assert_eq!(range.end.character, 9);   // just past "abcd"
+        assert_eq!(range.end.character, 9); // just past "abcd"
     }
 
     #[test]
     fn diagnostic_range_covers_name() {
         // For "show abcd." the undefined variable "abcd" starts at column 6.
         let span = Span { line: 1, col: 6 };
-        let diag = make_diagnostic(&span, "abcd", "undefined variable 'abcd'", DiagnosticSeverity::ERROR);
+        let diag = make_diagnostic(
+            &span,
+            "abcd",
+            "undefined variable 'abcd'",
+            DiagnosticSeverity::ERROR,
+        );
         assert_eq!(diag.range.start.line, 0);
         assert_eq!(diag.range.start.character, 5);
         assert_eq!(diag.range.end.character, 9);
@@ -1889,7 +2320,14 @@ mod tests {
     fn hover_ignores_later_top_level_let() {
         let source = "show a.\nlet a be 1.";
         let program = try_parse(source).expect("test source should parse");
-        let symbols = resolve_symbols_at(&program, "a", Position { line: 0, character: 5 });
+        let symbols = resolve_symbols_at(
+            &program,
+            "a",
+            Position {
+                line: 0,
+                character: 5,
+            },
+        );
         assert!(symbols.is_empty());
     }
 
@@ -1897,7 +2335,14 @@ mod tests {
     fn hover_finds_earlier_variable_in_same_scope() {
         let source = "let a be 1.\nshow a.";
         let program = try_parse(source).expect("test source should parse");
-        let symbols = resolve_symbols_at(&program, "a", Position { line: 1, character: 5 });
+        let symbols = resolve_symbols_at(
+            &program,
+            "a",
+            Position {
+                line: 1,
+                character: 5,
+            },
+        );
         assert_eq!(symbols.len(), 1);
         assert_eq!(symbols[0].detail, "a: integer");
     }
@@ -1906,7 +2351,14 @@ mod tests {
     fn hover_does_not_leak_function_local_to_outer_scope() {
         let source = "define f with x:\n    let a be 1.\nshow a.";
         let program = try_parse(source).expect("test source should parse");
-        let symbols = resolve_symbols_at(&program, "a", Position { line: 2, character: 5 });
+        let symbols = resolve_symbols_at(
+            &program,
+            "a",
+            Position {
+                line: 2,
+                character: 5,
+            },
+        );
         assert!(symbols.is_empty());
     }
 }

@@ -7,7 +7,10 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
-use rustyline::{Cmd, ConditionalEventHandler, Event, EventContext, EventHandler, Helper, KeyCode, KeyEvent, Modifiers};
+use rustyline::{
+    Cmd, ConditionalEventHandler, Event, EventContext, EventHandler, Helper, KeyCode, KeyEvent,
+    Modifiers,
+};
 
 use crate::ast;
 use crate::interpreter;
@@ -24,7 +27,9 @@ struct ReplState {
 
 impl ReplState {
     fn new() -> Self {
-        Self { indent_stack: vec![0] }
+        Self {
+            indent_stack: vec![0],
+        }
     }
 
     fn current_indent(&self) -> usize {
@@ -69,7 +74,10 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = String::new();
 
     loop {
-        let current_indent = state.lock().unwrap_or_else(|e| e.into_inner()).current_indent();
+        let current_indent = state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .current_indent();
         let prompt = format!("{:>3} | ", session_line_offset + line_no);
         let initial = " ".repeat(current_indent);
         let line = match editor.readline_with_initial(&prompt, (&initial, "")) {
@@ -137,7 +145,13 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
             line_no += 1;
             continue;
         }
-        if state.lock().unwrap_or_else(|e| e.into_inner()).indent_stack.len() > 1 {
+        if state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .indent_stack
+            .len()
+            > 1
+        {
             // We are still inside an open block; keep reading lines until the
             // block is closed by a dedent or blank line.
             line_no += 1;
@@ -163,7 +177,9 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                 let current_path = env::current_dir().ok();
                 let mut trial_history = repl_history.clone();
                 trial_history.extend(program.statements.clone());
-                let trial_program = ast::Program { statements: trial_history };
+                let trial_program = ast::Program {
+                    statements: trial_history,
+                };
                 let mut had_error = false;
                 let (sem_errors, sem_warnings) =
                     semantic::program_diagnostics(&trial_program, current_path.as_deref());
@@ -206,7 +222,12 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                     out
                 };
                 for (span, msg) in fresh(&sem_warnings) {
-                    reporting::report_source_warning("<repl>", &source_for_display, &offset_span(&span), &msg);
+                    reporting::report_source_warning(
+                        "<repl>",
+                        &source_for_display,
+                        &offset_span(&span),
+                        &msg,
+                    );
                 }
                 for (span, msg) in sem_errors {
                     reporting::report_source_error("<repl>", &source_for_display, &span, &msg);
@@ -214,7 +235,12 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 if !had_error {
                     for (span, msg) in fresh(&type_warnings) {
-                        reporting::report_source_warning("<repl>", &source_for_display, &offset_span(&span), &msg);
+                        reporting::report_source_warning(
+                            "<repl>",
+                            &source_for_display,
+                            &offset_span(&span),
+                            &msg,
+                        );
                     }
                     for (span, msg) in type_errors {
                         reporting::report_source_error("<repl>", &source_for_display, &span, &msg);
@@ -239,7 +265,12 @@ pub fn run_repl() -> Result<(), Box<dyn std::error::Error>> {
                                 );
                             }
                             interpreter::Control::Error(msg) => {
-                                reporting::report_runtime_error("<repl>", &source_for_display, &msg, None);
+                                reporting::report_runtime_error(
+                                    "<repl>",
+                                    &source_for_display,
+                                    &msg,
+                                    None,
+                                );
                             }
                             _ => eprintln!("runtime error: {:?}", ctrl),
                         }
@@ -312,22 +343,19 @@ struct EmptyLineHandler {
 }
 
 impl ConditionalEventHandler for EmptyLineHandler {
-    fn handle(
-        &self,
-        evt: &Event,
-        _n: usize,
-        _positive: bool,
-        ctx: &EventContext,
-    ) -> Option<Cmd> {
+    fn handle(&self, evt: &Event, _n: usize, _positive: bool, ctx: &EventContext) -> Option<Cmd> {
         if let Event::KeySeq(keys) = evt {
-            if keys.len() == 1
-                && keys[0].0 == KeyCode::Enter
-                && ctx.line().trim().is_empty()
-            {
+            if keys.len() == 1 && keys[0].0 == KeyCode::Enter && ctx.line().trim().is_empty() {
                 // At the base level, an empty Enter does nothing and the cursor
                 // stays on the same line. Inside a block, let it through so the
                 // main loop can dedent.
-                if self.state.lock().unwrap_or_else(|e| e.into_inner()).current_indent() == 0 {
+                if self
+                    .state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .current_indent()
+                    == 0
+                {
                     return Some(Cmd::Noop);
                 }
             }
@@ -356,9 +384,39 @@ impl Hinter for ReplHelper {
 impl Helper for ReplHelper {}
 
 const KEYWORDS: &[&str] = &[
-    "let", "set", "show", "if", "then", "otherwise", "else", "while", "repeat", "for", "in",
-    "define", "with", "return", "be", "to", "and", "or", "not", "class", "init", "new", "tell",
-    "the", "of", "import", "from", "returns", "read", "write", "try", "catch", "export",
+    "let",
+    "set",
+    "show",
+    "if",
+    "then",
+    "otherwise",
+    "else",
+    "while",
+    "repeat",
+    "for",
+    "in",
+    "define",
+    "with",
+    "return",
+    "be",
+    "to",
+    "and",
+    "or",
+    "not",
+    "class",
+    "init",
+    "new",
+    "tell",
+    "the",
+    "of",
+    "import",
+    "from",
+    "returns",
+    "read",
+    "write",
+    "try",
+    "catch",
+    "export",
 ];
 
 fn highlight_period_line(line: &str) -> String {
@@ -468,7 +526,6 @@ fn highlight_period_line(line: &str) -> String {
     }
     out
 }
-
 
 /// If the last non-empty line of the REPL buffer is a standalone `.`, merge it
 /// onto the previous non-empty line. This lets users terminate a statement by

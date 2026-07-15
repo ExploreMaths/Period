@@ -32,8 +32,7 @@ impl RegistryIndex {
             .map_err(|e| format!("failed to fetch registry from '{}': {}", url, e))?
             .into_string()
             .map_err(|e| format!("failed to read registry from '{}': {}", url, e))?;
-        serde_json::from_str(&text)
-            .map_err(|e| format!("invalid registry at '{}': {}", url, e))
+        serde_json::from_str(&text).map_err(|e| format!("invalid registry at '{}': {}", url, e))
     }
 }
 
@@ -47,7 +46,10 @@ impl RegistryIndex {
 /// - `1.2.3`, `1.2`, `1` — plain versions are treated as caret constraints
 ///   (`1.2.3` means `^1.2.3`), matching the usual dependency-management
 ///   convention.
-pub fn select_version(constraint: &str, available: &BTreeMap<String, RegistryVersion>) -> Result<String, String> {
+pub fn select_version(
+    constraint: &str,
+    available: &BTreeMap<String, RegistryVersion>,
+) -> Result<String, String> {
     let req = VersionReq::parse(constraint)?;
     let mut best: Option<Version> = None;
     let mut best_string = String::new();
@@ -80,16 +82,32 @@ pub struct Version {
 impl Version {
     pub fn parse(s: &str) -> Result<Self, String> {
         let s = s.trim();
-        let (core, prerelease) = s.split_once('-').map(|(c, p)| (c, Some(p))).unwrap_or((s, None));
+        let (core, prerelease) = s
+            .split_once('-')
+            .map(|(c, p)| (c, Some(p)))
+            .unwrap_or((s, None));
         let parts: Vec<&str> = core.split('.').collect();
         if parts.is_empty() || parts.len() > 3 {
             return Err(format!("invalid version '{}'", s));
         }
         let major = parse_number(parts[0], s)?;
-        let minor = parts.get(1).map(|p| parse_number(p, s)).transpose()?.unwrap_or(0);
-        let patch = parts.get(2).map(|p| parse_number(p, s)).transpose()?.unwrap_or(0);
+        let minor = parts
+            .get(1)
+            .map(|p| parse_number(p, s))
+            .transpose()?
+            .unwrap_or(0);
+        let patch = parts
+            .get(2)
+            .map(|p| parse_number(p, s))
+            .transpose()?
+            .unwrap_or(0);
         let prerelease = prerelease.map(|p| p.to_string());
-        Ok(Version { major, minor, patch, prerelease })
+        Ok(Version {
+            major,
+            minor,
+            patch,
+            prerelease,
+        })
     }
 
     pub fn as_triple(&self) -> (u64, u64, u64) {
@@ -100,7 +118,10 @@ impl Version {
         match self.as_triple().cmp(&other.as_triple()) {
             std::cmp::Ordering::Greater => true,
             std::cmp::Ordering::Less => false,
-            std::cmp::Ordering::Equal => compare_prerelease(&self.prerelease, &other.prerelease) == std::cmp::Ordering::Greater,
+            std::cmp::Ordering::Equal => {
+                compare_prerelease(&self.prerelease, &other.prerelease)
+                    == std::cmp::Ordering::Greater
+            }
         }
     }
 }
@@ -178,7 +199,9 @@ impl VersionReq {
     pub fn matches(&self, version: &Version) -> bool {
         match self {
             VersionReq::Wildcard => true,
-            VersionReq::Exact(req) => req.as_triple() == version.as_triple() && req.prerelease == version.prerelease,
+            VersionReq::Exact(req) => {
+                req.as_triple() == version.as_triple() && req.prerelease == version.prerelease
+            }
             VersionReq::Caret(req) => caret_matches(req, version),
             VersionReq::Tilde(req) => tilde_matches(req, version),
         }
@@ -214,36 +237,54 @@ mod tests {
 
     fn versions() -> BTreeMap<String, RegistryVersion> {
         let mut versions = BTreeMap::new();
-        versions.insert("1.0.0".to_string(), RegistryVersion {
-            url: "a".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
-        versions.insert("1.2.0".to_string(), RegistryVersion {
-            url: "b".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
-        versions.insert("1.2.3".to_string(), RegistryVersion {
-            url: "c".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
-        versions.insert("2.0.0".to_string(), RegistryVersion {
-            url: "d".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
-        versions.insert("2.1.0".to_string(), RegistryVersion {
-            url: "e".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
-        versions.insert("0.5.1".to_string(), RegistryVersion {
-            url: "f".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
+        versions.insert(
+            "1.0.0".to_string(),
+            RegistryVersion {
+                url: "a".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
+        versions.insert(
+            "1.2.0".to_string(),
+            RegistryVersion {
+                url: "b".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
+        versions.insert(
+            "1.2.3".to_string(),
+            RegistryVersion {
+                url: "c".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
+        versions.insert(
+            "2.0.0".to_string(),
+            RegistryVersion {
+                url: "d".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
+        versions.insert(
+            "2.1.0".to_string(),
+            RegistryVersion {
+                url: "e".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
+        versions.insert(
+            "0.5.1".to_string(),
+            RegistryVersion {
+                url: "f".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
         versions
     }
 
@@ -296,11 +337,14 @@ mod tests {
     #[test]
     fn select_wildcard_with_single_version() {
         let mut versions = BTreeMap::new();
-        versions.insert("0.5.1".to_string(), RegistryVersion {
-            url: "a".to_string(),
-            checksum: None,
-            dependencies: BTreeMap::new(),
-        });
+        versions.insert(
+            "0.5.1".to_string(),
+            RegistryVersion {
+                url: "a".to_string(),
+                checksum: None,
+                dependencies: BTreeMap::new(),
+            },
+        );
         assert_eq!(select_version("*", &versions).unwrap(), "0.5.1");
     }
 
@@ -318,7 +362,8 @@ mod tests {
                 }
             }
         }"#;
-        let index: RegistryIndex = serde_json::from_str(json).expect("registry JSON should deserialize");
+        let index: RegistryIndex =
+            serde_json::from_str(json).expect("registry JSON should deserialize");
         assert_eq!(index.schema_version, "1");
         let list = index.packages.get("list").expect("list package");
         let version = list.get("1.0.0").expect("1.0.0 version");
@@ -331,10 +376,30 @@ mod tests {
 
     #[test]
     fn version_parsing_and_comparison() {
-        assert!(Version::parse("1.2.3").unwrap().is_greater_than(&Version::parse("1.2.2").unwrap()));
-        assert!(!Version::parse("1.2.3").unwrap().is_greater_than(&Version::parse("1.2.3").unwrap()));
-        assert!(Version::parse("2.0.0").unwrap().is_greater_than(&Version::parse("1.9.9").unwrap()));
-        assert!(Version::parse("1.0.0").unwrap().is_greater_than(&Version::parse("1.0.0-alpha").unwrap()));
-        assert!(Version::parse("1.0.0-alpha.2").unwrap().is_greater_than(&Version::parse("1.0.0-alpha.1").unwrap()));
+        assert!(
+            Version::parse("1.2.3")
+                .unwrap()
+                .is_greater_than(&Version::parse("1.2.2").unwrap())
+        );
+        assert!(
+            !Version::parse("1.2.3")
+                .unwrap()
+                .is_greater_than(&Version::parse("1.2.3").unwrap())
+        );
+        assert!(
+            Version::parse("2.0.0")
+                .unwrap()
+                .is_greater_than(&Version::parse("1.9.9").unwrap())
+        );
+        assert!(
+            Version::parse("1.0.0")
+                .unwrap()
+                .is_greater_than(&Version::parse("1.0.0-alpha").unwrap())
+        );
+        assert!(
+            Version::parse("1.0.0-alpha.2")
+                .unwrap()
+                .is_greater_than(&Version::parse("1.0.0-alpha.1").unwrap())
+        );
     }
 }

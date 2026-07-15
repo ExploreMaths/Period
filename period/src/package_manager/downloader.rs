@@ -18,8 +18,8 @@ pub fn download(url: &str, dest: &Path) -> Result<Vec<u8>, String> {
         fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create directory {}: {}", parent.display(), e))?;
     }
-    let mut file = fs::File::create(dest)
-        .map_err(|e| format!("cannot create {}: {}", dest.display(), e))?;
+    let mut file =
+        fs::File::create(dest).map_err(|e| format!("cannot create {}: {}", dest.display(), e))?;
     file.write_all(&bytes)
         .map_err(|e| format!("cannot write {}: {}", dest.display(), e))?;
     Ok(bytes)
@@ -37,6 +37,9 @@ pub fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), String> {
     if actual.eq_ignore_ascii_case(expected) {
         Ok(())
     } else {
-        Err(format!("checksum mismatch: expected {} got {}", expected, actual))
+        Err(format!(
+            "checksum mismatch: expected {} got {}",
+            expected, actual
+        ))
     }
 }

@@ -15,8 +15,13 @@ pub enum Op {
     StoreLocal(usize),
     LoadGlobal(usize),
     StoreGlobal(usize),
-    DefineGlobal { name: usize },
-    Closure { func: usize, upvalues: Vec<Upvalue> },
+    DefineGlobal {
+        name: usize,
+    },
+    Closure {
+        func: usize,
+        upvalues: Vec<Upvalue>,
+    },
     GetUpvalue(usize),
     SetUpvalue(usize),
     Binary(BinOp),
@@ -35,8 +40,17 @@ pub enum Op {
     PropertyGet(usize),
     PropertySet(usize),
     New(u8),
-    Tell { name: usize, arg_count: u8 },
-    BuildClass { name: usize, init: Option<usize>, methods: Vec<usize>, fields: Vec<usize>, field_init: Vec<usize> },
+    Tell {
+        name: usize,
+        arg_count: u8,
+    },
+    BuildClass {
+        name: usize,
+        init: Option<usize>,
+        methods: Vec<usize>,
+        fields: Vec<usize>,
+        field_init: Vec<usize>,
+    },
     IterInit,
     Length,
     TryBegin(usize, usize),
@@ -48,8 +62,13 @@ pub enum Op {
     Write,
     IncrementLocal(usize),
     AddLocals(usize, usize),
-    AppendLocalString { slot: usize, string_idx: usize },
-    AppendLocalList { slot: usize },
+    AppendLocalString {
+        slot: usize,
+        string_idx: usize,
+    },
+    AppendLocalList {
+        slot: usize,
+    },
 }
 
 #[derive(Clone, Debug)]

@@ -53,9 +53,10 @@ impl Type {
             Type::Union(members) => {
                 let names: Vec<String> = members.iter().map(|m| m.name()).collect();
                 if let Some((last, head)) = names.split_last()
-                    && !head.is_empty() {
-                        return format!("{} or {}", head.join(", "), last);
-                    }
+                    && !head.is_empty()
+                {
+                    return format!("{} or {}", head.join(", "), last);
+                }
                 names.into_iter().next().unwrap_or_default()
             }
         }
@@ -82,7 +83,10 @@ impl Type {
             (Type::Instance(a), Type::Instance(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 a_args.len() == b_args.len()
-                    && b_args.iter().zip(a_args.iter()).all(|(b, a)| b.is_subtype(a))
+                    && b_args
+                        .iter()
+                        .zip(a_args.iter())
+                        .all(|(b, a)| b.is_subtype(a))
                     && a_ret.is_subtype(b_ret)
             }
             _ => self == other,
@@ -123,12 +127,10 @@ pub fn parse_type_ann(ann: &str) -> Type {
         "list" if parts.len() >= 3 && parts[1] == "of" => {
             Type::List(Box::new(parse_type_ann(&parts[2..].join(" "))))
         }
-        "dictionary" if parts.len() >= 5 && parts[1] == "of" && parts[3] == "to" => {
-            Type::Dict(
-                Box::new(parse_type_ann(parts[2])),
-                Box::new(parse_type_ann(&parts[4..].join(" "))),
-            )
-        }
+        "dictionary" if parts.len() >= 5 && parts[1] == "of" && parts[3] == "to" => Type::Dict(
+            Box::new(parse_type_ann(parts[2])),
+            Box::new(parse_type_ann(&parts[4..].join(" "))),
+        ),
         "range" => Type::Range,
         "anything" => Type::Anything,
         name => Type::Instance(name.to_string()),
@@ -244,7 +246,10 @@ mod tests {
 
     #[test]
     fn parse_class_instance_type() {
-        assert_eq!(parse_type_ann("Person"), Type::Instance("Person".to_string()));
+        assert_eq!(
+            parse_type_ann("Person"),
+            Type::Instance("Person".to_string())
+        );
     }
 
     #[test]

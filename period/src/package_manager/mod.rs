@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 
 use crate::package_manager::downloader::{download, sha256_hex, verify_checksum};
 use crate::package_manager::lockfile::{LockedPackage, PeriodLock};
-use crate::package_manager::manifest::{default_manifest, DependencySpec, PeriodToml};
-pub use crate::package_manager::publisher::{publish, PublishOptions};
-use crate::package_manager::registry::{default_registry, RegistryIndex};
+use crate::package_manager::manifest::{DependencySpec, PeriodToml, default_manifest};
+pub use crate::package_manager::publisher::{PublishOptions, publish};
+use crate::package_manager::registry::{RegistryIndex, default_registry};
 use crate::package_manager::resolver::Resolver;
 
 pub const MANIFEST_FILE: &str = "period.toml";
@@ -22,9 +22,11 @@ pub const PACKAGES_DIR: &str = "period_packages";
 
 /// Initialise a new Period project in the given directory.
 pub fn init_project_at(dir: &Path, name: Option<&str>) -> Result<(), String> {
-    let project_name = name
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "project".to_string()));
+    let project_name = name.map(|s| s.to_string()).unwrap_or_else(|| {
+        dir.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "project".to_string())
+    });
 
     let manifest_path = dir.join(MANIFEST_FILE);
     if manifest_path.exists() {
@@ -65,7 +67,11 @@ pub fn install_package(name_or_url: &str) -> Result<(), String> {
     if is_url(name_or_url) {
         // Direct URL install: keep legacy behaviour.
         let filename = name_or_url.rsplit('/').next().unwrap_or("package.period");
-        let filename = if filename.is_empty() { "package.period" } else { filename };
+        let filename = if filename.is_empty() {
+            "package.period"
+        } else {
+            filename
+        };
         let dest = PathBuf::from(PACKAGES_DIR).join(filename);
         download_url(name_or_url, &dest)?;
         println!("Installed {} -> {}", name_or_url, dest.display());
@@ -82,15 +88,23 @@ pub fn install_package(name_or_url: &str) -> Result<(), String> {
         fs::create_dir_all(PACKAGES_DIR)
             .map_err(|e| format!("cannot create {}: {}", PACKAGES_DIR, e))?;
         let dest = PathBuf::from(PACKAGES_DIR).join(&filename);
-        fs::copy(&as_path, &dest)
-            .map_err(|e| format!("cannot copy {} to {}: {}", as_path.display(), dest.display(), e))?;
+        fs::copy(&as_path, &dest).map_err(|e| {
+            format!(
+                "cannot copy {} to {}: {}",
+                as_path.display(),
+                dest.display(),
+                e
+            )
+        })?;
         println!("Installed {} -> {}", as_path.display(), dest.display());
         return Ok(());
     }
 
     let mut manifest = load_manifest()?;
     let (name, version) = parse_package_spec(name_or_url);
-    manifest.dependencies.insert(name.clone(), DependencySpec::Version(version.to_string()));
+    manifest
+        .dependencies
+        .insert(name.clone(), DependencySpec::Version(version.to_string()));
     manifest.save(&PathBuf::from(MANIFEST_FILE))?;
     println!("Added {} = \"{}\" to {}", name, version, MANIFEST_FILE);
 
@@ -108,13 +122,15 @@ fn download_url(url: &str, dest: &Path) -> Result<(), String> {
             path = &path[1..];
         }
         let path = path.replace('/', "\\");
-        let bytes = fs::read(&path)
-            .map_err(|e| format!("cannot read local file '{}': {}", path, e))?;
-        let parent = dest.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(dest);
+        let bytes =
+            fs::read(&path).map_err(|e| format!("cannot read local file '{}': {}", path, e))?;
+        let parent = dest
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(dest);
         fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create directory '{}': {}", parent.display(), e))?;
-        fs::write(dest, bytes)
-            .map_err(|e| format!("cannot write {}: {}", dest.display(), e))?;
+        fs::write(dest, bytes).map_err(|e| format!("cannot write {}: {}", dest.display(), e))?;
         Ok(())
     } else {
         download(url, dest)?;
@@ -143,7 +159,11 @@ fn parse_package_spec(spec: &str) -> (String, String) {
 
 fn resolve_and_download(manifest: &PeriodToml, force: bool) -> Result<(), String> {
     let registry = default_registry();
-    let lockfile = if force { None } else { load_lockfile_from(&env::current_dir().unwrap_or_else(|_| PathBuf::from("."))) };
+    let lockfile = if force {
+        None
+    } else {
+        load_lockfile_from(&env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    };
     let lock_ref = lockfile.as_ref();
     let mut resolver = Resolver::new(&registry, lock_ref);
     let packages = resolver.resolve(manifest)?;
@@ -153,7 +173,11 @@ fn resolve_and_download(manifest: &PeriodToml, force: bool) -> Result<(), String
 
     let mut lock = PeriodLock::default();
     for pkg in &packages {
-        let url = pkg.source.strip_prefix("registry+").or_else(|| pkg.source.strip_prefix("git+")).unwrap_or(&pkg.source);
+        let url = pkg
+            .source
+            .strip_prefix("registry+")
+            .or_else(|| pkg.source.strip_prefix("git+"))
+            .unwrap_or(&pkg.source);
         let bytes = if pkg.file_path.is_file() {
             // If the file already exists, read it and verify its checksum before
             // deciding whether to re-download.
@@ -181,11 +205,20 @@ fn resolve_and_download(manifest: &PeriodToml, force: bool) -> Result<(), String
             source: pkg.source.clone(),
             checksum,
         });
-        println!("Installed {} {} -> {}", pkg.name, pkg.version, pkg.file_path.display());
+        println!(
+            "Installed {} {} -> {}",
+            pkg.name,
+            pkg.version,
+            pkg.file_path.display()
+        );
     }
 
     lock.save(&PathBuf::from(LOCKFILE_FILE))?;
-    println!("Wrote {} with {} package(s)", LOCKFILE_FILE, lock.packages.len());
+    println!(
+        "Wrote {} with {} package(s)",
+        LOCKFILE_FILE,
+        lock.packages.len()
+    );
     Ok(())
 }
 
@@ -198,7 +231,11 @@ pub fn search(query: &str) -> Result<(), String> {
     for (name, versions) in &index.packages {
         if name.to_lowercase().contains(&query_lower) {
             found = true;
-            let latest = versions.keys().last().map(|s| s.as_str()).unwrap_or("unknown");
+            let latest = versions
+                .keys()
+                .last()
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
             println!("{} @ {}", name, latest);
         }
     }
@@ -218,9 +255,12 @@ pub fn info(spec: &str) -> Result<(), String> {
         .get(&name)
         .ok_or_else(|| format!("package '{}' not found in registry", name))?;
     let version = crate::package_manager::registry::select_version(constraint.as_str(), versions)?;
-    let entry = versions
-        .get(&version)
-        .ok_or_else(|| format!("selected version '{}' disappeared for package '{}'", version, name))?;
+    let entry = versions.get(&version).ok_or_else(|| {
+        format!(
+            "selected version '{}' disappeared for package '{}'",
+            version, name
+        )
+    })?;
     println!("{} @ {}", name, version);
     println!("  source: {}", entry.url);
     if let Some(checksum) = &entry.checksum {
@@ -247,12 +287,18 @@ pub fn load_lockfile_from(root: &Path) -> Option<PeriodLock> {
 /// backwards compatibility with direct URL installs.
 pub fn package_path_in(name: &str, root: &Path) -> Option<PathBuf> {
     if let Some(lock) = load_lockfile_from(root) {
-        return lock.packages.iter().find(|p| p.name == name).map(|_| {
-            PathBuf::from(PACKAGES_DIR).join(format!("{}.period", name))
-        });
+        return lock
+            .packages
+            .iter()
+            .find(|p| p.name == name)
+            .map(|_| PathBuf::from(PACKAGES_DIR).join(format!("{}.period", name)));
     }
     let loose = PathBuf::from(PACKAGES_DIR).join(format!("{}.period", name));
-    if root.join(&loose).is_file() { Some(loose) } else { None }
+    if root.join(&loose).is_file() {
+        Some(loose)
+    } else {
+        None
+    }
 }
 
 /// Return the file path for an installed package by name, using the current directory
@@ -289,7 +335,8 @@ mod tests {
                 checksum: "sha256:abcd".to_string(),
             }],
         };
-        lock.save(&tmp.join(LOCKFILE_FILE)).expect("lockfile should save");
+        lock.save(&tmp.join(LOCKFILE_FILE))
+            .expect("lockfile should save");
 
         let path = package_path_in("foo", &tmp);
 
@@ -301,7 +348,8 @@ mod tests {
     fn package_path_falls_back_to_loose_file() {
         let tmp = std::env::temp_dir().join(format!("period-loose-test-{}", std::process::id()));
         fs::create_dir_all(&tmp.join(PACKAGES_DIR)).expect("should create packages dir");
-        fs::write(&tmp.join(PACKAGES_DIR).join("bar.period"), "export x.").expect("should write loose package file");
+        fs::write(&tmp.join(PACKAGES_DIR).join("bar.period"), "export x.")
+            .expect("should write loose package file");
 
         let path = package_path_in("bar", &tmp);
 

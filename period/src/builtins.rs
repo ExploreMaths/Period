@@ -8,19 +8,99 @@ use num_bigint::BigInt;
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 
 use crate::environment::Environment;
-use crate::value::{range_len, BuiltInValue, Integer, Value};
+use crate::value::{BuiltInValue, Integer, Value, range_len};
 
 pub fn install_builtins(env: &Environment) {
-    env.define_untyped("length", Value::BuiltIn(Box::new(BuiltInValue { name: "length".to_string(), min_arity: 1, max_arity: 1, func: builtin_length })));
-    env.define_untyped("string", Value::BuiltIn(Box::new(BuiltInValue { name: "string".to_string(), min_arity: 1, max_arity: 1, func: builtin_string })));
-    env.define_untyped("number", Value::BuiltIn(Box::new(BuiltInValue { name: "number".to_string(), min_arity: 1, max_arity: 1, func: builtin_number })));
-    env.define_untyped("integer", Value::BuiltIn(Box::new(BuiltInValue { name: "integer".to_string(), min_arity: 1, max_arity: 1, func: builtin_integer })));
-    env.define_untyped("boolean", Value::BuiltIn(Box::new(BuiltInValue { name: "boolean".to_string(), min_arity: 1, max_arity: 1, func: builtin_boolean })));
-    env.define_untyped("type", Value::BuiltIn(Box::new(BuiltInValue { name: "type".to_string(), min_arity: 1, max_arity: 1, func: builtin_type })));
-    env.define_untyped("input", Value::BuiltIn(Box::new(BuiltInValue { name: "input".to_string(), min_arity: 0, max_arity: 0, func: builtin_input })));
-    env.define_untyped("range", Value::BuiltIn(Box::new(BuiltInValue { name: "range".to_string(), min_arity: 1, max_arity: 3, func: builtin_range })));
-    env.define_untyped("error", Value::BuiltIn(Box::new(BuiltInValue { name: "error".to_string(), min_arity: 1, max_arity: 1, func: builtin_error })));
-    env.define_untyped("append", Value::BuiltIn(Box::new(BuiltInValue { name: "append".to_string(), min_arity: 2, max_arity: 2, func: builtin_append })));
+    env.define_untyped(
+        "length",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "length".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_length,
+        })),
+    );
+    env.define_untyped(
+        "string",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "string".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_string,
+        })),
+    );
+    env.define_untyped(
+        "number",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "number".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_number,
+        })),
+    );
+    env.define_untyped(
+        "integer",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "integer".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_integer,
+        })),
+    );
+    env.define_untyped(
+        "boolean",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "boolean".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_boolean,
+        })),
+    );
+    env.define_untyped(
+        "type",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "type".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_type,
+        })),
+    );
+    env.define_untyped(
+        "input",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "input".to_string(),
+            min_arity: 0,
+            max_arity: 0,
+            func: builtin_input,
+        })),
+    );
+    env.define_untyped(
+        "range",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "range".to_string(),
+            min_arity: 1,
+            max_arity: 3,
+            func: builtin_range,
+        })),
+    );
+    env.define_untyped(
+        "error",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "error".to_string(),
+            min_arity: 1,
+            max_arity: 1,
+            func: builtin_error,
+        })),
+    );
+    env.define_untyped(
+        "append",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "append".to_string(),
+            min_arity: 2,
+            max_arity: 2,
+            func: builtin_append,
+        })),
+    );
 }
 
 fn builtin_append(args: &[Value]) -> Result<Value, String> {
@@ -51,7 +131,11 @@ fn builtin_number(args: &[Value]) -> Result<Value, String> {
     match &args[0] {
         Value::Integer(n) => Ok(Value::Number(n.to_f64())),
         Value::Number(n) => Ok(Value::Number(*n)),
-        Value::String(s) => s.parse::<f64>().map(Value::Number).or_else(|_| s.parse::<BigInt>().map(Value::big_integer)).map_err(|_| "Cannot convert to number".to_string()),
+        Value::String(s) => s
+            .parse::<f64>()
+            .map(Value::Number)
+            .or_else(|_| s.parse::<BigInt>().map(Value::big_integer))
+            .map_err(|_| "Cannot convert to number".to_string()),
         Value::Bool(true) => Ok(Value::Number(1.0)),
         Value::Bool(false) => Ok(Value::Number(0.0)),
         _ => Err("Cannot convert to number".to_string()),
@@ -62,7 +146,10 @@ fn builtin_integer(args: &[Value]) -> Result<Value, String> {
     match &args[0] {
         Value::Integer(n) => Ok(Value::Integer(n.clone())),
         Value::Number(n) => Ok(Value::integer(*n as i64)),
-        Value::String(s) => s.parse::<BigInt>().map(Value::big_integer).map_err(|_| "Cannot convert to integer".to_string()),
+        Value::String(s) => s
+            .parse::<BigInt>()
+            .map(Value::big_integer)
+            .map_err(|_| "Cannot convert to integer".to_string()),
         Value::Bool(true) => Ok(Value::integer(1)),
         Value::Bool(false) => Ok(Value::integer(0)),
         _ => Err("Cannot convert to integer".to_string()),
@@ -93,13 +180,18 @@ fn builtin_type(args: &[Value]) -> Result<Value, String> {
 
 fn builtin_input(_: &[Value]) -> Result<Value, String> {
     let mut s = String::new();
-    io::stdout().flush().map_err(|e| format!("cannot flush stdout: {}", e))?;
+    io::stdout()
+        .flush()
+        .map_err(|e| format!("cannot flush stdout: {}", e))?;
     io::stdin().read_line(&mut s).map_err(|e| e.to_string())?;
     Ok(Value::String(s.trim_end().to_string()))
 }
 
 fn builtin_error(args: &[Value]) -> Result<Value, String> {
-    Err(match &args[0] { Value::String(s) => s.clone(), v => v.to_string() })
+    Err(match &args[0] {
+        Value::String(s) => s.clone(),
+        v => v.to_string(),
+    })
 }
 
 fn builtin_range(args: &[Value]) -> Result<Value, String> {
@@ -121,13 +213,17 @@ fn builtin_range(args: &[Value]) -> Result<Value, String> {
         3 => (to_i(&args[0])?, to_i(&args[1])?, to_i(&args[2])?),
         _ => unreachable!(),
     };
-    if step.is_zero() { return Err("range step cannot be zero".to_string()); }
+    if step.is_zero() {
+        return Err("range step cannot be zero".to_string());
+    }
     Ok(Value::Range { start, stop, step })
 }
 
 fn make_module(values: Vec<(&str, Value)>) -> Rc<RefCell<Environment>> {
     let env = Environment::new();
-    for (name, value) in values { env.borrow().define_untyped(name, value); }
+    for (name, value) in values {
+        env.borrow().define_untyped(name, value);
+    }
     env
 }
 
@@ -135,7 +231,11 @@ pub fn make_math_module() -> Rc<RefCell<Environment>> {
     macro_rules! unary_float {
         ($name:ident, $f:path) => {
             fn $name(args: &[Value]) -> Result<Value, String> {
-                let n = match &args[0] { Value::Integer(i) => i.to_f64(), Value::Number(n) => *n, _ => return Err("expected number".to_string()) };
+                let n = match &args[0] {
+                    Value::Integer(i) => i.to_f64(),
+                    Value::Number(n) => *n,
+                    _ => return Err("expected number".to_string()),
+                };
                 Ok(Value::Number($f(n)))
             }
         };
@@ -148,13 +248,69 @@ pub fn make_math_module() -> Rc<RefCell<Environment>> {
     unary_float!(floor_fn, f64::floor);
     unary_float!(ceil_fn, f64::ceil);
     make_module(vec![
-        ("sin", Value::BuiltIn(Box::new(BuiltInValue { name: "sin".to_string(), min_arity: 1, max_arity: 1, func: sin_fn }))),
-        ("cos", Value::BuiltIn(Box::new(BuiltInValue { name: "cos".to_string(), min_arity: 1, max_arity: 1, func: cos_fn }))),
-        ("tan", Value::BuiltIn(Box::new(BuiltInValue { name: "tan".to_string(), min_arity: 1, max_arity: 1, func: tan_fn }))),
-        ("sqrt", Value::BuiltIn(Box::new(BuiltInValue { name: "sqrt".to_string(), min_arity: 1, max_arity: 1, func: sqrt_fn }))),
-        ("abs", Value::BuiltIn(Box::new(BuiltInValue { name: "abs".to_string(), min_arity: 1, max_arity: 1, func: abs_fn }))),
-        ("floor", Value::BuiltIn(Box::new(BuiltInValue { name: "floor".to_string(), min_arity: 1, max_arity: 1, func: floor_fn }))),
-        ("ceil", Value::BuiltIn(Box::new(BuiltInValue { name: "ceil".to_string(), min_arity: 1, max_arity: 1, func: ceil_fn }))),
+        (
+            "sin",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "sin".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: sin_fn,
+            })),
+        ),
+        (
+            "cos",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "cos".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: cos_fn,
+            })),
+        ),
+        (
+            "tan",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "tan".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: tan_fn,
+            })),
+        ),
+        (
+            "sqrt",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "sqrt".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: sqrt_fn,
+            })),
+        ),
+        (
+            "abs",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "abs".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: abs_fn,
+            })),
+        ),
+        (
+            "floor",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "floor".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: floor_fn,
+            })),
+        ),
+        (
+            "ceil",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "ceil".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: ceil_fn,
+            })),
+        ),
         ("pi", Value::Number(std::f64::consts::PI)),
     ])
 }
@@ -162,7 +318,9 @@ pub fn make_math_module() -> Rc<RefCell<Environment>> {
 pub fn make_random_module() -> Rc<RefCell<Environment>> {
     static STATE: Mutex<(bool, u64)> = Mutex::new((false, 0));
     fn random_fn(_: &[Value]) -> Result<Value, String> {
-        let mut guard = STATE.lock().map_err(|e| format!("random state poisoned: {}", e))?;
+        let mut guard = STATE
+            .lock()
+            .map_err(|e| format!("random state poisoned: {}", e))?;
         let (seeded, seed) = &mut *guard;
         if !*seeded {
             *seed = SystemTime::now()
@@ -178,109 +336,224 @@ pub fn make_random_module() -> Rc<RefCell<Environment>> {
     fn seed_fn(args: &[Value]) -> Result<Value, String> {
         let n = match &args[0] {
             Value::Integer(i) => i.to_bigint(),
-            Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n)
-                .ok_or_else(|| "seed must be a finite number".to_string())?,
+            Value::Number(n) if n.fract() == 0.0 => {
+                BigInt::from_f64(*n).ok_or_else(|| "seed must be a finite number".to_string())?
+            }
             _ => return Err("seed must be an integer".to_string()),
         };
         // Reduce to the low 64 bits so any integer, however large, is accepted.
         let seed = (n & BigInt::from(u64::MAX)).to_u64().unwrap_or(0);
-        let mut guard = STATE.lock().map_err(|e| format!("random state poisoned: {}", e))?;
+        let mut guard = STATE
+            .lock()
+            .map_err(|e| format!("random state poisoned: {}", e))?;
         guard.0 = true;
         guard.1 = seed;
         Ok(Value::Nothing)
     }
     make_module(vec![
-        ("random", Value::BuiltIn(Box::new(BuiltInValue { name: "random".to_string(), min_arity: 0, max_arity: 0, func: random_fn }))),
-        ("seed", Value::BuiltIn(Box::new(BuiltInValue { name: "seed".to_string(), min_arity: 1, max_arity: 1, func: seed_fn }))),
+        (
+            "random",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "random".to_string(),
+                min_arity: 0,
+                max_arity: 0,
+                func: random_fn,
+            })),
+        ),
+        (
+            "seed",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "seed".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: seed_fn,
+            })),
+        ),
     ])
 }
 
 pub fn make_string_module() -> Rc<RefCell<Environment>> {
     make_module(vec![
-        ("upper", Value::BuiltIn(Box::new(BuiltInValue { name: "upper".to_string(), min_arity: 1, max_arity: 1, func: |args| {
-            match &args[0] { Value::String(s) => Ok(Value::String(s.to_uppercase())), _ => Err("expected string".to_string()) }
-        }}))),
-        ("lower", Value::BuiltIn(Box::new(BuiltInValue { name: "lower".to_string(), min_arity: 1, max_arity: 1, func: |args| {
-            match &args[0] { Value::String(s) => Ok(Value::String(s.to_lowercase())), _ => Err("expected string".to_string()) }
-        }}))),
-        ("trim", Value::BuiltIn(Box::new(BuiltInValue { name: "trim".to_string(), min_arity: 1, max_arity: 1, func: |args| {
-            match &args[0] { Value::String(s) => Ok(Value::String(s.trim().to_string())), _ => Err("expected string".to_string()) }
-        }}))),
-        ("split", Value::BuiltIn(Box::new(BuiltInValue { name: "split".to_string(), min_arity: 2, max_arity: 2, func: |args| {
-            match (&args[0], &args[1]) {
-                (Value::String(s), Value::String(delim)) => {
-                    let parts: Vec<Value> = s.split(delim).map(|p| Value::String(p.to_string())).collect();
-                    Ok(Value::List(Rc::new(RefCell::new(parts))))
-                }
-                _ => Err("expected string and delimiter".to_string())
-            }
-        }}))),
-        ("contains", Value::BuiltIn(Box::new(BuiltInValue { name: "contains".to_string(), min_arity: 2, max_arity: 2, func: |args| {
-            match (&args[0], &args[1]) {
-                (Value::String(s), Value::String(sub)) => Ok(Value::Bool(s.contains(sub))),
-                _ => Err("expected string and substring".to_string())
-            }
-        }}))),
-        ("starts_with", Value::BuiltIn(Box::new(BuiltInValue { name: "starts_with".to_string(), min_arity: 2, max_arity: 2, func: |args| {
-            match (&args[0], &args[1]) {
-                (Value::String(s), Value::String(prefix)) => Ok(Value::Bool(s.starts_with(prefix))),
-                _ => Err("expected string and prefix".to_string())
-            }
-        }}))),
-        ("ends_with", Value::BuiltIn(Box::new(BuiltInValue { name: "ends_with".to_string(), min_arity: 2, max_arity: 2, func: |args| {
-            match (&args[0], &args[1]) {
-                (Value::String(s), Value::String(suffix)) => Ok(Value::Bool(s.ends_with(suffix))),
-                _ => Err("expected string and suffix".to_string())
-            }
-        }}))),
-        ("replace", Value::BuiltIn(Box::new(BuiltInValue { name: "replace".to_string(), min_arity: 3, max_arity: 3, func: |args| {
-            match (&args[0], &args[1], &args[2]) {
-                (Value::String(s), Value::String(from), Value::String(to)) => Ok(Value::String(s.replace(from, to))),
-                _ => Err("expected string, from, and to".to_string())
-            }
-        }}))),
-        ("slice", Value::BuiltIn(Box::new(BuiltInValue { name: "slice".to_string(), min_arity: 2, max_arity: 2, func: |args| {
-            match (&args[0], &args[1]) {
-                (Value::String(s), Value::Integer(start)) => {
-                    let chars: Vec<char> = s.chars().collect();
-                    let len = chars.len();
-                    let start = start.to_i64().ok_or("slice start too large")?;
-                    let start = if start < 0 { len.saturating_sub((-start) as usize) } else { start as usize };
-                    let start = start.min(len);
-                    Ok(Value::String(chars[start..].iter().collect()))
-                }
-                _ => Err("expected string and integer start".to_string())
-            }
-        }}))),
-        ("substring", Value::BuiltIn(Box::new(BuiltInValue { name: "substring".to_string(), min_arity: 3, max_arity: 3, func: |args| {
-            match (&args[0], &args[1], &args[2]) {
-                (Value::String(s), Value::Integer(start), Value::Integer(end)) => {
-                    let chars: Vec<char> = s.chars().collect();
-                    let len = chars.len();
-                    let start = start.to_i64().ok_or("substring start too large")?;
-                    let start = if start < 0 { len.saturating_sub((-start) as usize) } else { start as usize };
-                    let end = end.to_i64().ok_or("substring end too large")?;
-                    let end = if end < 0 { len.saturating_sub((-end) as usize) } else { end as usize };
-                    let end = end.min(len);
-                    let start = start.min(end);
-                    Ok(Value::String(chars[start..end].iter().collect()))
-                }
-                _ => Err("expected string, integer start, and integer end".to_string())
-            }
-        }}))),
+        (
+            "upper",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "upper".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(s) => Ok(Value::String(s.to_uppercase())),
+                    _ => Err("expected string".to_string()),
+                },
+            })),
+        ),
+        (
+            "lower",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "lower".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(s) => Ok(Value::String(s.to_lowercase())),
+                    _ => Err("expected string".to_string()),
+                },
+            })),
+        ),
+        (
+            "trim",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "trim".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(s) => Ok(Value::String(s.trim().to_string())),
+                    _ => Err("expected string".to_string()),
+                },
+            })),
+        ),
+        (
+            "split",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "split".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(delim)) => {
+                        let parts: Vec<Value> = s
+                            .split(delim)
+                            .map(|p| Value::String(p.to_string()))
+                            .collect();
+                        Ok(Value::List(Rc::new(RefCell::new(parts))))
+                    }
+                    _ => Err("expected string and delimiter".to_string()),
+                },
+            })),
+        ),
+        (
+            "contains",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "contains".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(sub)) => Ok(Value::Bool(s.contains(sub))),
+                    _ => Err("expected string and substring".to_string()),
+                },
+            })),
+        ),
+        (
+            "starts_with",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "starts_with".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(prefix)) => {
+                        Ok(Value::Bool(s.starts_with(prefix)))
+                    }
+                    _ => Err("expected string and prefix".to_string()),
+                },
+            })),
+        ),
+        (
+            "ends_with",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "ends_with".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(suffix)) => {
+                        Ok(Value::Bool(s.ends_with(suffix)))
+                    }
+                    _ => Err("expected string and suffix".to_string()),
+                },
+            })),
+        ),
+        (
+            "replace",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "replace".to_string(),
+                min_arity: 3,
+                max_arity: 3,
+                func: |args| match (&args[0], &args[1], &args[2]) {
+                    (Value::String(s), Value::String(from), Value::String(to)) => {
+                        Ok(Value::String(s.replace(from, to)))
+                    }
+                    _ => Err("expected string, from, and to".to_string()),
+                },
+            })),
+        ),
+        (
+            "slice",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "slice".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(s), Value::Integer(start)) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let len = chars.len();
+                        let start = start.to_i64().ok_or("slice start too large")?;
+                        let start = if start < 0 {
+                            len.saturating_sub((-start) as usize)
+                        } else {
+                            start as usize
+                        };
+                        let start = start.min(len);
+                        Ok(Value::String(chars[start..].iter().collect()))
+                    }
+                    _ => Err("expected string and integer start".to_string()),
+                },
+            })),
+        ),
+        (
+            "substring",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "substring".to_string(),
+                min_arity: 3,
+                max_arity: 3,
+                func: |args| match (&args[0], &args[1], &args[2]) {
+                    (Value::String(s), Value::Integer(start), Value::Integer(end)) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let len = chars.len();
+                        let start = start.to_i64().ok_or("substring start too large")?;
+                        let start = if start < 0 {
+                            len.saturating_sub((-start) as usize)
+                        } else {
+                            start as usize
+                        };
+                        let end = end.to_i64().ok_or("substring end too large")?;
+                        let end = if end < 0 {
+                            len.saturating_sub((-end) as usize)
+                        } else {
+                            end as usize
+                        };
+                        let end = end.min(len);
+                        let start = start.min(end);
+                        Ok(Value::String(chars[start..end].iter().collect()))
+                    }
+                    _ => Err("expected string, integer start, and integer end".to_string()),
+                },
+            })),
+        ),
     ])
 }
 
 pub fn make_time_module() -> Rc<RefCell<Environment>> {
-    make_module(vec![
-        ("now", Value::BuiltIn(Box::new(BuiltInValue { name: "now".to_string(), min_arity: 0, max_arity: 0, func: |_| {
-            let secs = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs_f64())
-                .map_err(|e| format!("system clock error: {}", e))?;
-            Ok(Value::Number(secs))
-        }}))),
-    ])
+    make_module(vec![(
+        "now",
+        Value::BuiltIn(Box::new(BuiltInValue {
+            name: "now".to_string(),
+            min_arity: 0,
+            max_arity: 0,
+            func: |_| {
+                let secs = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs_f64())
+                    .map_err(|e| format!("system clock error: {}", e))?;
+                Ok(Value::Number(secs))
+            },
+        })),
+    )])
 }
 
 fn expect_string_arg(arg: &Value, what: &str) -> Result<String, String> {
@@ -299,7 +572,8 @@ fn platform_message_box(message: &str, yes_no: bool) -> Result<i32, String> {
     use std::ffi::c_void;
     #[link(name = "user32")]
     unsafe extern "system" {
-        fn MessageBoxW(hwnd: *mut c_void, text: *const u16, caption: *const u16, utype: u32) -> i32;
+        fn MessageBoxW(hwnd: *mut c_void, text: *const u16, caption: *const u16, utype: u32)
+        -> i32;
     }
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -327,7 +601,10 @@ fn platform_message_box(message: &str, yes_no: bool) -> Result<i32, String> {
             escaped
         )
     } else {
-        format!("display dialog \"{}\" buttons {{\"OK\"}} with title \"Period\"", escaped)
+        format!(
+            "display dialog \"{}\" buttons {{\"OK\"}} with title \"Period\"",
+            escaped
+        )
     };
     let output = std::process::Command::new("osascript")
         .args(["-e", &script])
@@ -338,7 +615,11 @@ fn platform_message_box(message: &str, yes_no: bool) -> Result<i32, String> {
         return Ok(2);
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(if yes_no && !stdout.contains("Yes") { 2 } else { 1 })
+    Ok(if yes_no && !stdout.contains("Yes") {
+        2
+    } else {
+        1
+    })
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -372,7 +653,13 @@ fn platform_notify(title: &str, message: &str) -> Result<(), String> {
         ps_escape(message)
     );
     let status = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
         .status();
     match status {
         Ok(s) if s.success() => Ok(()),
@@ -415,17 +702,19 @@ pub fn make_system_module() -> Rc<RefCell<Environment>> {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes"))
             .unwrap_or(false);
         if !allowed {
-            return Err(
-                "system.run is disabled by default for safety. \
+            return Err("system.run is disabled by default for safety. \
                  Set PERIOD_ALLOW_SYSTEM_RUN=1 to enable shell command execution."
-                    .to_string(),
-            );
+                .to_string());
         }
 
         let output = if cfg!(target_os = "windows") {
-            std::process::Command::new("cmd").args(["/C", &command]).output()
+            std::process::Command::new("cmd")
+                .args(["/C", &command])
+                .output()
         } else {
-            std::process::Command::new("sh").args(["-c", &command]).output()
+            std::process::Command::new("sh")
+                .args(["-c", &command])
+                .output()
         }
         .map_err(|e| format!("cannot run command: {}", e))?;
         let mut out = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -438,7 +727,9 @@ pub fn make_system_module() -> Rc<RefCell<Environment>> {
     fn open_fn(args: &[Value]) -> Result<Value, String> {
         let target = expect_string_arg(&args[0], "target")?;
         let result = if cfg!(target_os = "windows") {
-            std::process::Command::new("cmd").args(["/C", "start", "", &target]).spawn()
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", &target])
+                .spawn()
         } else if cfg!(target_os = "macos") {
             std::process::Command::new("open").arg(&target).spawn()
         } else {
@@ -469,10 +760,50 @@ pub fn make_system_module() -> Rc<RefCell<Environment>> {
     }
 
     make_module(vec![
-        ("run", Value::BuiltIn(Box::new(BuiltInValue { name: "run".to_string(), min_arity: 1, max_arity: 1, func: run_fn }))),
-        ("open", Value::BuiltIn(Box::new(BuiltInValue { name: "open".to_string(), min_arity: 1, max_arity: 1, func: open_fn }))),
-        ("alert", Value::BuiltIn(Box::new(BuiltInValue { name: "alert".to_string(), min_arity: 1, max_arity: 1, func: alert_fn }))),
-        ("confirm", Value::BuiltIn(Box::new(BuiltInValue { name: "confirm".to_string(), min_arity: 1, max_arity: 1, func: confirm_fn }))),
-        ("notify", Value::BuiltIn(Box::new(BuiltInValue { name: "notify".to_string(), min_arity: 2, max_arity: 2, func: notify_fn }))),
+        (
+            "run",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "run".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: run_fn,
+            })),
+        ),
+        (
+            "open",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "open".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: open_fn,
+            })),
+        ),
+        (
+            "alert",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "alert".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: alert_fn,
+            })),
+        ),
+        (
+            "confirm",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "confirm".to_string(),
+                min_arity: 1,
+                max_arity: 1,
+                func: confirm_fn,
+            })),
+        ),
+        (
+            "notify",
+            Value::BuiltIn(Box::new(BuiltInValue {
+                name: "notify".to_string(),
+                min_arity: 2,
+                max_arity: 2,
+                func: notify_fn,
+            })),
+        ),
     ])
 }

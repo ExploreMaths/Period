@@ -18,7 +18,13 @@ fn source_caret_block(source: &str, span: &Span, underline_len: usize) -> Option
     let prefix = format!("    {} | ", span.line);
     let indent = prefix.len() + span.col.saturating_sub(1);
     let marker = "^".repeat(underline_len.max(1));
-    Some(format!("{}{}\n{}{}", prefix, src_line, " ".repeat(indent), marker))
+    Some(format!(
+        "{}{}\n{}{}",
+        prefix,
+        src_line,
+        " ".repeat(indent),
+        marker
+    ))
 }
 
 /// Report a source-level error with file location and caret.
@@ -40,7 +46,10 @@ pub fn report_source_warning(path: &str, source: &str, span: &Span, msg: &str) {
 /// Report a runtime error produced by the interpreter.
 pub fn report_runtime_error(path: &str, source: &str, msg: &str, span: Option<&Span>) {
     if let Some(span) = span {
-        eprintln!("{}:{}:{}: runtime error: {}", path, span.line, span.col, msg);
+        eprintln!(
+            "{}:{}:{}: runtime error: {}",
+            path, span.line, span.col, msg
+        );
         if let Some(block) = source_caret_block(source, span, quoted_token_len(msg)) {
             eprintln!("{}", block);
         }
@@ -120,7 +129,8 @@ mod tests {
         // "undefined variable 'ab'" should underline both characters.
         let len = quoted_token_len("undefined variable 'ab'");
         assert_eq!(len, 2);
-        let block = source_caret_block(source, &span, len).expect("caret block should be generated");
+        let block =
+            source_caret_block(source, &span, len).expect("caret block should be generated");
         let lines: Vec<&str> = block.lines().collect();
         assert_eq!(lines[1], "             ^^");
     }

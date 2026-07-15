@@ -70,10 +70,7 @@ pub fn publish(options: PublishOptions<'_>) -> Result<(), String> {
 
     if let Some(registry_file) = options.registry_file {
         let mut index = load_or_create_registry(registry_file)?;
-        let package_entry = index
-            .packages
-            .entry(package_name.clone())
-            .or_default();
+        let package_entry = index.packages.entry(package_name.clone()).or_default();
         if package_entry.contains_key(&package_version) {
             return Err(format!(
                 "package '{} {}' already exists in registry",
@@ -94,11 +91,9 @@ pub fn publish(options: PublishOptions<'_>) -> Result<(), String> {
             package_version
         );
     } else {
-        let snippet = serde_json::to_string_pretty(&BTreeMap::from([(
-            package_version.clone(),
-            entry,
-        )]))
-        .map_err(|e| format!("cannot serialize entry: {}", e))?;
+        let snippet =
+            serde_json::to_string_pretty(&BTreeMap::from([(package_version.clone(), entry)]))
+                .map_err(|e| format!("cannot serialize entry: {}", e))?;
         println!(
             "Add the following entry for package '{}' to your registry.json:\n{}",
             package_name, snippet
@@ -108,7 +103,12 @@ pub fn publish(options: PublishOptions<'_>) -> Result<(), String> {
     Ok(())
 }
 
-fn upload_to_github_release(file: &Path, asset_name: &str, tag: &str, repo: &str) -> Result<(), String> {
+fn upload_to_github_release(
+    file: &Path,
+    asset_name: &str,
+    tag: &str,
+    repo: &str,
+) -> Result<(), String> {
     // Verify gh is available.
     Command::new("gh")
         .arg("--version")
@@ -117,13 +117,7 @@ fn upload_to_github_release(file: &Path, asset_name: &str, tag: &str, repo: &str
 
     // Check whether the release already exists.
     let view = Command::new("gh")
-        .args([
-            "release",
-            "view",
-            tag,
-            "--repo",
-            repo,
-        ])
+        .args(["release", "view", tag, "--repo", repo])
         .output()
         .map_err(|e| format!("failed to run 'gh release view': {}", e))?;
 
@@ -145,12 +139,7 @@ fn upload_to_github_release(file: &Path, asset_name: &str, tag: &str, repo: &str
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("gh release upload failed: {}", stderr.trim()));
         }
-        println!(
-            "Uploaded {} to release {} on {}",
-            asset_name,
-            tag,
-            repo
-        );
+        println!("Uploaded {} to release {} on {}", asset_name, tag, repo);
     } else {
         // Release does not exist: create it with the asset.
         let output = Command::new("gh")
@@ -174,9 +163,7 @@ fn upload_to_github_release(file: &Path, asset_name: &str, tag: &str, repo: &str
         }
         println!(
             "Created release {} on {} and uploaded {}",
-            tag,
-            repo,
-            asset_name
+            tag, repo, asset_name
         );
     }
 
@@ -194,7 +181,9 @@ fn determine_repo(override_repo: Option<&str>) -> Result<String, String> {
         .output()
         .map_err(|e| format!("cannot run git to detect repo: {}", e))?;
     if !output.status.success() {
-        return Err("--repo is required when uploading and no git origin remote is available".to_string());
+        return Err(
+            "--repo is required when uploading and no git origin remote is available".to_string(),
+        );
     }
     let url = String::from_utf8_lossy(&output.stdout);
     parse_github_repo(url.trim())
@@ -216,7 +205,10 @@ fn parse_github_repo(url: &str) -> Result<String, String> {
             return Ok(format!("{}/{}", parts[0], parts[1]));
         }
     }
-    Err(format!("cannot parse GitHub repo from remote url '{}'", url))
+    Err(format!(
+        "cannot parse GitHub repo from remote url '{}'",
+        url
+    ))
 }
 
 fn determine_package_name(file: &Path, override_name: Option<&str>) -> Result<String, String> {
@@ -289,10 +281,8 @@ mod tests {
         let tmp = env::temp_dir().join(format!("period-publish-test-{}", std::process::id()));
         fs::create_dir_all(&tmp).expect("should create temp dir");
         let src = tmp.join("greet.period");
-        fs::write(&src,
-            "export hi.\ndefine hi with x:\n    return x.\n",
-        )
-        .expect("should write source file");
+        fs::write(&src, "export hi.\ndefine hi with x:\n    return x.\n")
+            .expect("should write source file");
 
         publish(PublishOptions {
             file: &src,
@@ -328,17 +318,21 @@ mod tests {
         .expect("publish should succeed");
 
         assert!(reg.exists());
-        let index: RegistryIndex = serde_json::from_str(&fs::read_to_string(&reg).expect("registry file should read")).expect("registry should parse as JSON");
+        let index: RegistryIndex =
+            serde_json::from_str(&fs::read_to_string(&reg).expect("registry file should read"))
+                .expect("registry should parse as JSON");
         assert_eq!(index.schema_version, "1");
         let versions = index.packages.get("greet").expect("greet package");
         assert!(versions.contains_key("1.2.3"));
-        assert!(versions
-            .get("1.2.3")
-            .expect("1.2.3 version")
-            .checksum
-            .as_ref()
-            .expect("1.2.3 checksum")
-            .starts_with("sha256:"));
+        assert!(
+            versions
+                .get("1.2.3")
+                .expect("1.2.3 version")
+                .checksum
+                .as_ref()
+                .expect("1.2.3 checksum")
+                .starts_with("sha256:")
+        );
 
         fs::remove_dir_all(&tmp).expect("should remove temp dir");
     }
@@ -377,9 +371,18 @@ mod tests {
 
     #[test]
     fn parse_github_repo_variants() {
-        assert_eq!(parse_github_repo("https://github.com/owner/repo.git").unwrap(), "owner/repo");
-        assert_eq!(parse_github_repo("https://github.com/owner/repo").unwrap(), "owner/repo");
-        assert_eq!(parse_github_repo("git@github.com:owner/repo.git").unwrap(), "owner/repo");
+        assert_eq!(
+            parse_github_repo("https://github.com/owner/repo.git").unwrap(),
+            "owner/repo"
+        );
+        assert_eq!(
+            parse_github_repo("https://github.com/owner/repo").unwrap(),
+            "owner/repo"
+        );
+        assert_eq!(
+            parse_github_repo("git@github.com:owner/repo.git").unwrap(),
+            "owner/repo"
+        );
         assert!(parse_github_repo("https://gitlab.com/owner/repo.git").is_err());
     }
 
@@ -402,7 +405,9 @@ mod tests {
         })
         .expect("publish should succeed");
 
-        let index: RegistryIndex = serde_json::from_str(&fs::read_to_string(&reg).expect("registry should read")).expect("registry should parse");
+        let index: RegistryIndex =
+            serde_json::from_str(&fs::read_to_string(&reg).expect("registry should read"))
+                .expect("registry should parse");
         let entry = index.packages.get("greet").unwrap().get("1.0.0").unwrap();
         assert_eq!(
             entry.url,

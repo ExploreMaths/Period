@@ -30,7 +30,6 @@ impl PeriodLock {
             .map_err(|e| format!("cannot serialize period.lock: {}", e))?;
         fs::write(path, text).map_err(|e| format!("cannot write {}: {}", path.display(), e))
     }
-
 }
 
 #[cfg(test)]

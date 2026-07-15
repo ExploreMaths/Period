@@ -6,7 +6,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::ast::{Program, Span};
-use crate::builtins::{install_builtins, make_math_module, make_random_module, make_string_module, make_system_module, make_time_module};
+use crate::builtins::{
+    install_builtins, make_math_module, make_random_module, make_string_module, make_system_module,
+    make_time_module,
+};
 use crate::compiler;
 use crate::environment::Environment;
 use crate::lexer::{Lexer, TokenKind};
@@ -40,7 +43,15 @@ impl Interpreter {
     pub fn new() -> Self {
         let env = Environment::new();
         install_builtins(&env.borrow());
-        Self { env, output: Vec::new(), modules: RefCell::new(HashMap::new()), loading_modules: RefCell::new(HashSet::new()), silent: false, current_path: None, loading_module: false }
+        Self {
+            env,
+            output: Vec::new(),
+            modules: RefCell::new(HashMap::new()),
+            loading_modules: RefCell::new(HashSet::new()),
+            silent: false,
+            current_path: None,
+            loading_module: false,
+        }
     }
 
     pub fn set_current_path(&mut self, path: impl Into<PathBuf>) {
@@ -49,9 +60,15 @@ impl Interpreter {
 
     pub(crate) fn resolve_path(&self, path: &str) -> PathBuf {
         let p = PathBuf::from(path);
-        if p.is_absolute() { return p; }
+        if p.is_absolute() {
+            return p;
+        }
         if let Some(current) = &self.current_path {
-            let dir = if current.is_file() { current.parent().unwrap_or(current) } else { current };
+            let dir = if current.is_file() {
+                current.parent().unwrap_or(current)
+            } else {
+                current
+            };
             return dir.join(p);
         }
         p
@@ -83,7 +100,13 @@ impl Interpreter {
             return Ok(());
         }
         if !self.loading_modules.borrow_mut().insert(path.to_string()) {
-            return Err(Control::RuntimeError(format!("Circular import detected: '{}' is already being loaded", path), span.clone()));
+            return Err(Control::RuntimeError(
+                format!(
+                    "Circular import detected: '{}' is already being loaded",
+                    path
+                ),
+                span.clone(),
+            ));
         }
 
         let result = self.import_module_inner(path, span);
@@ -101,13 +124,26 @@ impl Interpreter {
                 "string" => make_string_module(),
                 "system" => make_system_module(),
                 "time" => make_time_module(),
-                _ => return Err(Control::RuntimeError(format!("Module '{}' not found", path), span.clone())),
+                _ => {
+                    return Err(Control::RuntimeError(
+                        format!("Module '{}' not found", path),
+                        span.clone(),
+                    ));
+                }
             }
         };
 
-        self.modules.borrow_mut().insert(path.to_string(), env.clone());
+        self.modules
+            .borrow_mut()
+            .insert(path.to_string(), env.clone());
         let exposed_name = path.rsplit('/').next().unwrap_or(path);
-        self.env.borrow().define_untyped(exposed_name, Value::Module(Box::new(ModuleValue { name: path.to_string(), env: env.clone() })));
+        self.env.borrow().define_untyped(
+            exposed_name,
+            Value::Module(Box::new(ModuleValue {
+                name: path.to_string(),
+                env: env.clone(),
+            })),
+        );
         let exports = env.borrow().exported_names();
         let filter = !exports.is_empty();
         for (name, value, type_ann) in env.borrow().entries() {
@@ -118,15 +154,23 @@ impl Interpreter {
         Ok(())
     }
 
-    fn run_compiled_module_main(&mut self, main: Rc<crate::bytecode::CompiledFunction>) -> Result<(), Control> {
+    fn run_compiled_module_main(
+        &mut self,
+        main: Rc<crate::bytecode::CompiledFunction>,
+    ) -> Result<(), Control> {
         crate::vm::Vm::new(self, main).run()
     }
 
-    fn load_period_module(&mut self, name: &str, path: &std::path::Path) -> Result<Rc<RefCell<Environment>>, Control> {
+    fn load_period_module(
+        &mut self,
+        name: &str,
+        path: &std::path::Path,
+    ) -> Result<Rc<RefCell<Environment>>, Control> {
         let source = fs::read_to_string(path)
             .map_err(|e| Control::Error(format!("Cannot read module '{}': {}", name, e)))?;
-        let program = parse_module(&source)
-            .map_err(|errors| Control::Error(format!("Module '{}':\n{}", name, errors.join("\n"))))?;
+        let program = parse_module(&source).map_err(|errors| {
+            Control::Error(format!("Module '{}':\n{}", name, errors.join("\n")))
+        })?;
 
         let builtins = Environment::new();
         install_builtins(&builtins.borrow());
@@ -138,8 +182,10 @@ impl Interpreter {
         self.env = module_env.clone();
         self.silent = true;
         self.loading_module = true;
-        let main = Rc::new(compiler::Compiler::compile_program(&program.statements, true, false
-        ).map_err(|e| Control::Error(format!("Module '{}': {}", name, e.0)))?);
+        let main = Rc::new(
+            compiler::Compiler::compile_program(&program.statements, true, false)
+                .map_err(|e| Control::Error(format!("Module '{}': {}", name, e.0)))?,
+        );
         let result = self.run_compiled_module_main(main);
         self.env = old_env;
         self.silent = old_silent;
@@ -156,23 +202,30 @@ fn stdlib_locations() -> Vec<PathBuf> {
         locs.push(PathBuf::from(v));
     }
     if let Ok(exe) = env::current_exe()
-        && let Some(parent) = exe.parent() {
-            locs.push(parent.join("stdlib"));
-            // Development layout: binary next to a `period` project directory.
-            locs.push(parent.join("period").join("stdlib"));
-            // FHS-style install layout (e.g. /usr/local/bin/period -> /usr/local/share/period/stdlib)
-            if let Some(grandparent) = parent.parent() {
-                locs.push(grandparent.join("share").join("period").join("stdlib"));
-            }
-            // Rust cargo development layout: binary is at period/target/<profile>/period,
-            // stdlib is at the repository root or under period/stdlib.
-            if parent.file_name().map(|n| n == "debug" || n == "release").unwrap_or(false)
-                && let Some(repo) = parent.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
-            {
-                locs.push(repo.join("stdlib"));
-                locs.push(repo.join("period").join("stdlib"));
-            }
+        && let Some(parent) = exe.parent()
+    {
+        locs.push(parent.join("stdlib"));
+        // Development layout: binary next to a `period` project directory.
+        locs.push(parent.join("period").join("stdlib"));
+        // FHS-style install layout (e.g. /usr/local/bin/period -> /usr/local/share/period/stdlib)
+        if let Some(grandparent) = parent.parent() {
+            locs.push(grandparent.join("share").join("period").join("stdlib"));
         }
+        // Rust cargo development layout: binary is at period/target/<profile>/period,
+        // stdlib is at the repository root or under period/stdlib.
+        if parent
+            .file_name()
+            .map(|n| n == "debug" || n == "release")
+            .unwrap_or(false)
+            && let Some(repo) = parent
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+        {
+            locs.push(repo.join("stdlib"));
+            locs.push(repo.join("period").join("stdlib"));
+        }
+    }
     if let Ok(cwd) = env::current_dir() {
         locs.push(cwd.join("stdlib"));
         // Development layout: run from the repo root while stdlib lives under `period/`.
@@ -182,7 +235,9 @@ fn stdlib_locations() -> Vec<PathBuf> {
 }
 
 fn find_module_file(module: &str, current_path: Option<&std::path::Path>) -> Option<PathBuf> {
-    module_file_candidates(module, current_path).into_iter().find(|candidate| candidate.is_file())
+    module_file_candidates(module, current_path)
+        .into_iter()
+        .find(|candidate| candidate.is_file())
 }
 
 fn module_file_candidates(module: &str, current_path: Option<&std::path::Path>) -> Vec<PathBuf> {
@@ -203,7 +258,9 @@ fn module_file_candidates(module: &str, current_path: Option<&std::path::Path>) 
     } else {
         // Plain module names resolve to installed packages, the standard library,
         // or built-in modules. If a lockfile exists, prefer its listed packages.
-        let project_root = current_path.and_then(|p| p.parent()).map(PathBuf::from)
+        let project_root = current_path
+            .and_then(|p| p.parent())
+            .map(PathBuf::from)
             .or_else(|| env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
         if let Some(path) = crate::package_manager::package_path_in(module, &project_root) {
@@ -228,7 +285,9 @@ fn parse_module(source: &str) -> Result<Program, Vec<String>> {
         let t = lexer.next_token().map_err(|e| vec![e])?;
         let eof = matches!(t.kind, TokenKind::Eof);
         tokens.push(t);
-        if eof { break; }
+        if eof {
+            break;
+        }
     }
     Parser::new(tokens).parse_program()
 }

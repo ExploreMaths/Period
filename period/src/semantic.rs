@@ -44,7 +44,8 @@ fn check_program(program: &Program, current_path: Option<&Path>) -> Diagnostics 
                         errors.push((span.clone(), format!("module not found '{}'", path)));
                     } else {
                         if !seen_modules.insert(path.clone()) {
-                            warnings.push((span.clone(), format!("duplicate import of '{}'", path)));
+                            warnings
+                                .push((span.clone(), format!("duplicate import of '{}'", path)));
                         }
                         let exposed = path.rsplit('/').next().unwrap_or(path);
                         scope.add_forward_ref(exposed);
@@ -64,12 +65,21 @@ fn check_program(program: &Program, current_path: Option<&Path>) -> Diagnostics 
         }
     }
 
-    check_block(&program.statements, &mut scope, &imports, &mut errors, &mut warnings);
+    check_block(
+        &program.statements,
+        &mut scope,
+        &imports,
+        &mut errors,
+        &mut warnings,
+    );
     (errors, warnings)
 }
 
 fn builtin_globals() -> Vec<&'static str> {
-    vec!["length", "string", "number", "integer", "boolean", "type", "input", "range", "error", "append"]
+    vec![
+        "length", "string", "number", "integer", "boolean", "type", "input", "range", "error",
+        "append",
+    ]
 }
 
 /// Scoped symbol table with duplicate-detection warnings.
@@ -87,7 +97,11 @@ struct Scope {
 
 impl Scope {
     fn new(current_path: Option<&Path>) -> Self {
-        Self { frames: vec![HashSet::new()], forward_refs: HashSet::new(), current_path: current_path.map(PathBuf::from) }
+        Self {
+            frames: vec![HashSet::new()],
+            forward_refs: HashSet::new(),
+            current_path: current_path.map(PathBuf::from),
+        }
     }
 
     fn push_frame(&mut self) {
@@ -119,7 +133,13 @@ impl Scope {
     }
 }
 
-fn check_block(stmts: &[Stmt], scope: &mut Scope, imports: &[String], errors: &mut Vec<(Span, String)>, warnings: &mut Vec<(Span, String)>) {
+fn check_block(
+    stmts: &[Stmt],
+    scope: &mut Scope,
+    imports: &[String],
+    errors: &mut Vec<(Span, String)>,
+    warnings: &mut Vec<(Span, String)>,
+) {
     scope.push_frame();
     for stmt in stmts {
         check_stmt(stmt, scope, imports, errors, warnings);
@@ -127,9 +147,19 @@ fn check_block(stmts: &[Stmt], scope: &mut Scope, imports: &[String], errors: &m
     scope.pop_frame();
 }
 
-fn check_stmt(stmt: &Stmt, scope: &mut Scope, imports: &[String], errors: &mut Vec<(Span, String)>, warnings: &mut Vec<(Span, String)>) {
+fn check_stmt(
+    stmt: &Stmt,
+    scope: &mut Scope,
+    imports: &[String],
+    errors: &mut Vec<(Span, String)>,
+    warnings: &mut Vec<(Span, String)>,
+) {
     match stmt {
-        Stmt::Show(expr) | Stmt::Expr(expr) | Stmt::Return { value: Some(expr), .. } => {
+        Stmt::Show(expr)
+        | Stmt::Expr(expr)
+        | Stmt::Return {
+            value: Some(expr), ..
+        } => {
             check_expr(expr, scope, imports, errors);
         }
         Stmt::Read { name, path } => {
@@ -140,7 +170,9 @@ fn check_stmt(stmt: &Stmt, scope: &mut Scope, imports: &[String], errors: &mut V
             check_expr(content, scope, imports, errors);
             check_expr(path, scope, imports, errors);
         }
-        Stmt::Let { name, value, span, .. } => {
+        Stmt::Let {
+            name, value, span, ..
+        } => {
             check_expr(value, scope, imports, errors);
             scope.define(name, span, warnings);
         }
@@ -148,7 +180,11 @@ fn check_stmt(stmt: &Stmt, scope: &mut Scope, imports: &[String], errors: &mut V
             check_assign_target(target, scope, imports, errors);
             check_expr(value, scope, imports, errors);
         }
-        Stmt::If { cond, then_branch, else_branch } => {
+        Stmt::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
             check_expr(cond, scope, imports, errors);
             check_block(then_branch, scope, imports, errors, warnings);
             check_block(else_branch, scope, imports, errors, warnings);
@@ -157,21 +193,35 @@ fn check_stmt(stmt: &Stmt, scope: &mut Scope, imports: &[String], errors: &mut V
             check_expr(cond, scope, imports, errors);
             check_block(body, scope, imports, errors, warnings);
         }
-        Stmt::For { var, iterable, body } => {
+        Stmt::For {
+            var,
+            iterable,
+            body,
+        } => {
             check_expr(iterable, scope, imports, errors);
             scope.push_frame();
             scope.define(var, &Span { line: 0, col: 0 }, warnings);
             check_block(body, scope, imports, errors, warnings);
             scope.pop_frame();
         }
-        Stmt::Try { body, catch_var, catch_body } => {
+        Stmt::Try {
+            body,
+            catch_var,
+            catch_body,
+        } => {
             check_block(body, scope, imports, errors, warnings);
             scope.push_frame();
             scope.define(catch_var, &Span { line: 0, col: 0 }, warnings);
             check_block(catch_body, scope, imports, errors, warnings);
             scope.pop_frame();
         }
-        Stmt::Define { name, params, body, span, .. } => {
+        Stmt::Define {
+            name,
+            params,
+            body,
+            span,
+            ..
+        } => {
             // Make the function visible to itself and to later statements in the same block.
             scope.define(name, span, warnings);
             scope.push_frame();
@@ -181,7 +231,13 @@ fn check_stmt(stmt: &Stmt, scope: &mut Scope, imports: &[String], errors: &mut V
             check_block(body, scope, imports, errors, warnings);
             scope.pop_frame();
         }
-        Stmt::Class { name, init, methods, span, .. } => {
+        Stmt::Class {
+            name,
+            init,
+            methods,
+            span,
+            ..
+        } => {
             // Make the class visible to itself and to later statements in the same block.
             scope.define(name, span, warnings);
             if let Some(init) = init {
@@ -251,11 +307,15 @@ fn check_expr(expr: &Expr, scope: &Scope, imports: &[String], errors: &mut Vec<(
             }
         }
         Expr::Qualified { name, module, span } => {
-            if imports.contains(module) && !module.starts_with("./") && !module.starts_with("../")
-                && !module_exports_names(module, scope.current_path.as_deref()).contains(&name.clone()) {
-                    // module export missing; span available for future diagnostics
-                    let _ = span;
-                }
+            if imports.contains(module)
+                && !module.starts_with("./")
+                && !module.starts_with("../")
+                && !module_exports_names(module, scope.current_path.as_deref())
+                    .contains(&name.clone())
+            {
+                // module export missing; span available for future diagnostics
+                let _ = span;
+            }
             // Local modules are validated at runtime; skip static export checks here.
         }
         Expr::New { class, args, .. } => {
@@ -316,7 +376,18 @@ pub fn module_exports_names(module: &str, current_path: Option<&Path>) -> Vec<St
 
     match module {
         "math" => vec!["sin", "cos", "tan", "sqrt", "abs", "floor", "ceil"],
-        "string" => vec!["upper", "lower", "trim", "split", "contains", "starts_with", "ends_with", "replace", "slice", "substring"],
+        "string" => vec![
+            "upper",
+            "lower",
+            "trim",
+            "split",
+            "contains",
+            "starts_with",
+            "ends_with",
+            "replace",
+            "slice",
+            "substring",
+        ],
         "random" => vec!["random", "seed"],
         "system" => vec!["run", "open", "alert", "confirm", "notify"],
         "time" => vec!["now"],
@@ -385,23 +456,30 @@ fn stdlib_locations() -> Vec<PathBuf> {
         locs.push(PathBuf::from(v));
     }
     if let Ok(exe) = env::current_exe()
-        && let Some(parent) = exe.parent() {
-            locs.push(parent.join("stdlib"));
-            // Development layout: binary next to a `period` project directory.
-            locs.push(parent.join("period").join("stdlib"));
-            // FHS-style install layout (e.g. /usr/local/bin/period -> /usr/local/share/period/stdlib)
-            if let Some(grandparent) = parent.parent() {
-                locs.push(grandparent.join("share").join("period").join("stdlib"));
-            }
-            // Rust cargo development layout: binary is at period/target/<profile>/period,
-            // stdlib is at the repository root or under period/stdlib.
-            if parent.file_name().map(|n| n == "debug" || n == "release").unwrap_or(false)
-                && let Some(repo) = parent.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
-            {
-                locs.push(repo.join("stdlib"));
-                locs.push(repo.join("period").join("stdlib"));
-            }
+        && let Some(parent) = exe.parent()
+    {
+        locs.push(parent.join("stdlib"));
+        // Development layout: binary next to a `period` project directory.
+        locs.push(parent.join("period").join("stdlib"));
+        // FHS-style install layout (e.g. /usr/local/bin/period -> /usr/local/share/period/stdlib)
+        if let Some(grandparent) = parent.parent() {
+            locs.push(grandparent.join("share").join("period").join("stdlib"));
         }
+        // Rust cargo development layout: binary is at period/target/<profile>/period,
+        // stdlib is at the repository root or under period/stdlib.
+        if parent
+            .file_name()
+            .map(|n| n == "debug" || n == "release")
+            .unwrap_or(false)
+            && let Some(repo) = parent
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+        {
+            locs.push(repo.join("stdlib"));
+            locs.push(repo.join("period").join("stdlib"));
+        }
+    }
     if let Ok(cwd) = env::current_dir() {
         locs.push(cwd.join("stdlib"));
         // Development layout: run from the repo root while stdlib lives under `period/`.

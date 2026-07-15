@@ -10,8 +10,8 @@ mod lexer;
 mod lsp;
 mod package_manager;
 mod parser;
-mod reporting;
 mod repl;
+mod reporting;
 mod semantic;
 mod type_checker;
 mod types;
@@ -218,7 +218,8 @@ fn run_file(path: &str) -> i32 {
     };
 
     let current_path = std::env::current_dir().ok().map(|cwd| cwd.join(path));
-    let (sem_errors, sem_warnings) = semantic::program_diagnostics(&program, current_path.as_deref());
+    let (sem_errors, sem_warnings) =
+        semantic::program_diagnostics(&program, current_path.as_deref());
     for (span, msg) in sem_warnings {
         reporting::report_source_warning(path, &source, &span, &msg);
     }
@@ -302,4 +303,3 @@ pub(crate) fn parse_source(source: &str) -> Result<ast::Program, Vec<String>> {
     }
     parser::Parser::new(tokens).parse_program()
 }
-

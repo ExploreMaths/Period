@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::lockfile::{LockedPackage, PeriodLock};
 use super::manifest::{DependencySpec, PeriodToml};
-use super::registry::{select_version, RegistryIndex};
+use super::registry::{RegistryIndex, select_version};
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPackage {
@@ -58,7 +58,10 @@ impl<'a> Resolver<'a> {
             };
 
             for (dep_name, dep_version) in &resolved.dependencies {
-                queue.push((dep_name.clone(), DependencySpec::Version(dep_version.clone())));
+                queue.push((
+                    dep_name.clone(),
+                    DependencySpec::Version(dep_version.clone()),
+                ));
             }
 
             let file_path = PathBuf::from("period_packages").join(format!("{}.period", name));
@@ -111,11 +114,18 @@ impl<'a> Resolver<'a> {
         // a synthetic single-entry map. Lockfile entries are registry URLs.
         if locked.source.starts_with("registry+") {
             let mut map = BTreeMap::new();
-            map.insert(locked.version.clone(), super::registry::RegistryVersion {
-                url: locked.source.strip_prefix("registry+").unwrap_or(&locked.source).to_string(),
-                checksum: Some(locked.checksum.clone()),
-                dependencies: BTreeMap::new(),
-            });
+            map.insert(
+                locked.version.clone(),
+                super::registry::RegistryVersion {
+                    url: locked
+                        .source
+                        .strip_prefix("registry+")
+                        .unwrap_or(&locked.source)
+                        .to_string(),
+                    checksum: Some(locked.checksum.clone()),
+                    dependencies: BTreeMap::new(),
+                },
+            );
             select_version(constraint, &map).is_ok()
         } else {
             // Non-registry sources are not lockfile-reproducible in this way;
@@ -132,15 +142,21 @@ impl<'a> Resolver<'a> {
         if self.index.is_none() {
             self.index = Some(RegistryIndex::fetch(self.registry)?);
         }
-        let index = self.index.as_ref().ok_or_else(|| "internal error: registry index not loaded".to_string())?;
+        let index = self
+            .index
+            .as_ref()
+            .ok_or_else(|| "internal error: registry index not loaded".to_string())?;
         let versions = index
             .packages
             .get(name)
             .ok_or_else(|| format!("package '{}' not found in registry", name))?;
         let version = select_version(constraint, versions)?;
-        let entry = versions
-            .get(&version)
-            .ok_or_else(|| format!("internal error: selected version '{}' disappeared for package '{}'", version, name))?;
+        let entry = versions.get(&version).ok_or_else(|| {
+            format!(
+                "internal error: selected version '{}' disappeared for package '{}'",
+                version, name
+            )
+        })?;
         Ok(ResolvedVersion {
             version,
             source: format!("registry+{}", entry.url),
@@ -149,7 +165,8 @@ impl<'a> Resolver<'a> {
         })
     }
 
-    fn resolve_git(&self,
+    fn resolve_git(
+        &self,
         name: &str,
         git: &str,
         version: Option<&str>,
@@ -190,7 +207,10 @@ mod tests {
             },
             dependencies: BTreeMap::new(),
         };
-        manifest.dependencies.insert("self".to_string(), DependencySpec::Version("1.0.0".to_string()));
+        manifest.dependencies.insert(
+            "self".to_string(),
+            DependencySpec::Version("1.0.0".to_string()),
+        );
         assert!(resolver.resolved.is_empty());
     }
 
@@ -214,12 +234,20 @@ mod tests {
             },
             dependencies: BTreeMap::new(),
         };
-        manifest.dependencies.insert("foo".to_string(), DependencySpec::Version("^1.0.0".to_string()));
+        manifest.dependencies.insert(
+            "foo".to_string(),
+            DependencySpec::Version("^1.0.0".to_string()),
+        );
 
         // Without fetching the registry, the lockfile entry should be reused.
-        let resolved = resolver.resolve(&manifest).expect("should resolve from lockfile");
+        let resolved = resolver
+            .resolve(&manifest)
+            .expect("should resolve from lockfile");
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].version, "1.2.3");
-        assert_eq!(resolved[0].source, "registry+https://example.com/foo-1.2.3.period");
+        assert_eq!(
+            resolved[0].source,
+            "registry+https://example.com/foo-1.2.3.period"
+        );
     }
 }

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use num_bigint::BigInt;
-use num_traits::cast::{FromPrimitive, ToPrimitive};
 use num_traits::Zero;
+use num_traits::cast::{FromPrimitive, ToPrimitive};
 
 use crate::environment::Environment;
 
@@ -184,9 +184,16 @@ impl Integer {
                 return Some(self.to_bigint().cmp(&i));
             }
         }
-        let ord = self.to_f64().partial_cmp(&number).unwrap_or(std::cmp::Ordering::Equal);
+        let ord = self
+            .to_f64()
+            .partial_cmp(&number)
+            .unwrap_or(std::cmp::Ordering::Equal);
         if ord == std::cmp::Ordering::Equal {
-            Some(if number.fract() > 0.0 { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater })
+            Some(if number.fract() > 0.0 {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            })
         } else {
             Some(ord)
         }
@@ -305,7 +312,9 @@ impl std::fmt::Debug for Value {
             Value::Nothing => write!(f, "nothing"),
             Value::List(l) => write!(f, "{:?}", l.borrow()),
             Value::Dict(d) => {
-                let mut items: Vec<String> = d.borrow().iter()
+                let mut items: Vec<String> = d
+                    .borrow()
+                    .iter()
                     .map(|(k, v)| format!("{:?}: {:?}", k.to_value(), v))
                     .collect();
                 items.sort();
@@ -317,7 +326,13 @@ impl std::fmt::Debug for Value {
             Value::BuiltIn(bv) => write!(f, "<built-in {}>", bv.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),
             Value::Error(ev) => write!(f, "error: {}", ev.message),
-            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start.to_bigint(), stop.to_bigint(), step.to_bigint()),
+            Value::Range { start, stop, step } => write!(
+                f,
+                "range({}, {}, {})",
+                start.to_bigint(),
+                stop.to_bigint(),
+                step.to_bigint()
+            ),
             Value::Box(v) => write!(f, "{:?}", v.borrow()),
         }
     }
@@ -342,7 +357,9 @@ impl PartialEq for Value {
         match (self, other) {
             (Value::Integer(a), Value::Integer(b)) => a == b,
             (Value::Number(a), Value::Number(b)) => a == b,
-            (Value::Integer(a), Value::Number(b)) | (Value::Number(b), Value::Integer(a)) => integer_eq_f64(a, *b),
+            (Value::Integer(a), Value::Number(b)) | (Value::Number(b), Value::Integer(a)) => {
+                integer_eq_f64(a, *b)
+            }
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Nothing, Value::Nothing) => true,
@@ -350,8 +367,16 @@ impl PartialEq for Value {
             (Value::Dict(a), Value::Dict(b)) => a.borrow().eq(&*b.borrow()),
             (Value::Error(a), Value::Error(b)) => a.message == b.message,
             (
-                Value::Range { start: a, stop: b, step: c },
-                Value::Range { start: d, stop: e, step: f },
+                Value::Range {
+                    start: a,
+                    stop: b,
+                    step: c,
+                },
+                Value::Range {
+                    start: d,
+                    stop: e,
+                    step: f,
+                },
             ) => a == d && b == e && c == f,
             (Value::Box(a), other) => a.borrow().eq(other),
             (other, Value::Box(b)) => other.eq(&*b.borrow()),
@@ -401,7 +426,6 @@ impl Value {
             Value::Box(v) => v.borrow().type_name(),
         }
     }
-
 }
 
 impl std::fmt::Display for Value {
@@ -419,7 +443,9 @@ impl std::fmt::Display for Value {
             Value::Dict(d) => {
                 // Sorted by key text so output is deterministic across runs
                 // and execution backends (HashMap iteration order is not).
-                let mut items: Vec<String> = d.borrow().iter()
+                let mut items: Vec<String> = d
+                    .borrow()
+                    .iter()
                     .map(|(k, v)| format!("{}: {}", k.to_value(), v))
                     .collect();
                 items.sort();
@@ -430,7 +456,13 @@ impl std::fmt::Display for Value {
             Value::Instance { class, .. } => write!(f, "<instance of {:?}>", class),
             Value::BuiltIn(bv) => write!(f, "<built-in {}>", bv.name),
             Value::Module(mv) => write!(f, "<module {}>", mv.name),
-            Value::Range { start, stop, step } => write!(f, "range({}, {}, {})", start.to_bigint(), stop.to_bigint(), step.to_bigint()),
+            Value::Range { start, stop, step } => write!(
+                f,
+                "range({}, {}, {})",
+                start.to_bigint(),
+                stop.to_bigint(),
+                step.to_bigint()
+            ),
             Value::Error(ev) => write!(f, "{}:{}: {}", ev.line, ev.col, ev.message),
             Value::Box(v) => write!(f, "{}", v.borrow()),
         }
@@ -447,7 +479,6 @@ impl ValueKey {
             ValueKey::Nothing => Value::Nothing,
         }
     }
-
 }
 
 pub fn range_len(start: &Integer, stop: &Integer, step: &Integer) -> BigInt {
@@ -455,8 +486,16 @@ pub fn range_len(start: &Integer, stop: &Integer, step: &Integer) -> BigInt {
     if step == &zero || (step > &zero && start >= stop) || (step < &zero && start <= stop) {
         return BigInt::from(0);
     }
-    let diff = if step > &zero { stop.to_bigint() - start.to_bigint() } else { start.to_bigint() - stop.to_bigint() };
-    let abs_step = if step > &zero { step.to_bigint() } else { -step.to_bigint() };
+    let diff = if step > &zero {
+        stop.to_bigint() - start.to_bigint()
+    } else {
+        start.to_bigint() - stop.to_bigint()
+    };
+    let abs_step = if step > &zero {
+        step.to_bigint()
+    } else {
+        -step.to_bigint()
+    };
     (diff + &abs_step - 1) / abs_step
 }
 
@@ -465,7 +504,9 @@ pub fn range_len(start: &Integer, stop: &Integer, step: &Integer) -> BigInt {
 pub fn bigint_index(value: &Value, len: &BigInt) -> Result<BigInt, String> {
     let n = match value {
         Value::Integer(n) => n.to_bigint(),
-        Value::Number(n) if n.fract() == 0.0 => BigInt::from_f64(*n).unwrap_or_else(|| BigInt::from(0)),
+        Value::Number(n) if n.fract() == 0.0 => {
+            BigInt::from_f64(*n).unwrap_or_else(|| BigInt::from(0))
+        }
         _ => return Err("Index must be integer".to_string()),
     };
     let i = if n < BigInt::from(0) { len + n } else { n };
@@ -485,9 +526,18 @@ mod tests {
         assert_eq!(Value::integer(5), Value::Number(5.0));
         assert_ne!(Value::integer(5), Value::Number(5.5));
         // Large integers must not lose precision when compared with integral floats.
-        assert_ne!(Value::big_integer(BigInt::from(i64::MAX)), Value::Number(i64::MAX as f64));
-        assert_ne!(Value::big_integer(BigInt::from(9_007_199_254_740_993_i64)), Value::Number(9_007_199_254_740_992.0));
-        assert_eq!(Value::big_integer(BigInt::from(9_007_199_254_740_992_i64)), Value::Number(9_007_199_254_740_992.0));
+        assert_ne!(
+            Value::big_integer(BigInt::from(i64::MAX)),
+            Value::Number(i64::MAX as f64)
+        );
+        assert_ne!(
+            Value::big_integer(BigInt::from(9_007_199_254_740_993_i64)),
+            Value::Number(9_007_199_254_740_992.0)
+        );
+        assert_eq!(
+            Value::big_integer(BigInt::from(9_007_199_254_740_992_i64)),
+            Value::Number(9_007_199_254_740_992.0)
+        );
     }
 
     #[test]
@@ -518,7 +568,9 @@ mod tests {
 
     #[test]
     fn value_key_roundtrip() {
-        let key = Value::integer(42).as_key().expect("integer should be a valid dict key");
+        let key = Value::integer(42)
+            .as_key()
+            .expect("integer should be a valid dict key");
         assert_eq!(key.to_value(), Value::integer(42));
     }
 }

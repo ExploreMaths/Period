@@ -13,11 +13,19 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), exports: RefCell::new(HashSet::new()), parent: None }))
+        Rc::new(RefCell::new(Self {
+            values: RefCell::new(HashMap::new()),
+            exports: RefCell::new(HashSet::new()),
+            parent: None,
+        }))
     }
 
     pub fn with_parent(parent: Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self { values: RefCell::new(HashMap::new()), exports: RefCell::new(HashSet::new()), parent: Some(parent) }))
+        Rc::new(RefCell::new(Self {
+            values: RefCell::new(HashMap::new()),
+            exports: RefCell::new(HashSet::new()),
+            parent: Some(parent),
+        }))
     }
 
     pub fn add_export(&self, name: &str) {
@@ -29,7 +37,9 @@ impl Environment {
     }
 
     pub fn define(&self, name: &str, value: Value, type_ann: Option<String>) {
-        self.values.borrow_mut().insert(name.to_string(), (value, type_ann));
+        self.values
+            .borrow_mut()
+            .insert(name.to_string(), (value, type_ann));
     }
 
     pub fn define_untyped(&self, name: &str, value: Value) {
