@@ -5,8 +5,25 @@ on:
   pull_request:
 
 jobs:
+  format:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check rustfmt
+        working-directory: period
+        run: cargo fmt --check
+
   test:
     name: Test
+    needs: format
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +58,7 @@ jobs:
 
   build-release:
     name: Build Release
+    needs: test
     strategy:
       fail-fast: false
       matrix:
