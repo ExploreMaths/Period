@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- Package manager is now practical for real use:
+  - `period search <query>` searches the hosted registry.
+  - `period info <package>[@<version>]` prints package metadata and dependency list.
+  - `period install` reuses `period.lock` when locked versions still satisfy `period.toml`, making installs reproducible.
+  - `period update` ignores the lockfile and re-resolves from the registry.
+  - Version constraints now follow SemVer semantics: `^1.2.3`, `~1.2.3`, `=1.2.3`, `*`, and plain `1.2.3` (treated as `^1.2.3`).
+  - Transitive dependencies are resolved from the registry and recorded in the lockfile.
+
 ### Fixed
 
 - `docs/docs.html` no longer rounds `math.pi` to `3.14`; the example now uses the full `3.141592653589793` value and a regression test verifies the output. (issue #9)

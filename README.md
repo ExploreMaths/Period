@@ -129,16 +129,34 @@ period install hello
 # Install a specific version
 period install hello@1.2.3
 
+# Version constraints are SemVer-style:
+#   hello@1.2.3   means ^1.2.3 (compatible with 1.x, but not 2.0.0)
+#   hello@^1.2.3  same as above
+#   hello@~1.2.3  approximately 1.2.3 (>= 1.2.3, < 1.3.0)
+#   hello@=1.2.3  exact version 1.2.3
+#   hello@*       any version
+
 # Install from a URL or local file (legacy direct install)
 period install https://example.com/mypkg.period
 period install ./mypkg.period
 
-# Update all dependencies
+# Update all dependencies and rewrite period.lock
 period update
+
+# Search the registry
+period search json
+
+# Show package metadata
+period info hello
+period info hello@1.2.3
 ```
 
 The default registry is hosted at `https://period-lang.github.io/registry`.
 Set the `PERIOD_REGISTRY` environment variable to use a different registry root.
+
+`period install` reuses `period.lock` when the locked versions still satisfy
+`period.toml`, so installs are reproducible. `period update` ignores the lockfile
+and re-resolves from the registry.
 
 ### Publishing a package
 
@@ -149,7 +167,8 @@ entry can be merged into a local `registry.json` or printed to stdout:
 period publish ./mypkg.period --name mypkg --version 1.0.0
 ```
 
-To update an existing registry file:
+To update an existing registry file locally (for example, before opening a PR
+against `period-lang/registry`):
 
 ```bash
 period publish ./mypkg.period --name mypkg --version 1.0.0 --registry-file registry.json

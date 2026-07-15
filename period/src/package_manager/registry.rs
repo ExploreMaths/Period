@@ -38,112 +38,181 @@ impl RegistryIndex {
 }
 
 /// Select the latest version from `available` that satisfies `constraint`.
-/// For now supports exact matches (`=1.2.3`) and caret (`^1.2.3`) / wildcard
-/// patterns, plus plain version strings treated as "at least this version".
+///
+/// Supported constraints:
+/// - `*` or `x` / `X` — any version.
+/// - `=1.2.3` — exact version.
+/// - `^1.2.3` — compatible with 1.2.3 (SemVer caret).
+/// - `~1.2.3` — approximately equivalent to 1.2.3 (SemVer tilde).
+/// - `1.2.3`, `1.2`, `1` — plain versions are treated as caret constraints
+///   (`1.2.3` means `^1.2.3`), matching the usual dependency-management
+///   convention.
 pub fn select_version(constraint: &str, available: &BTreeMap<String, RegistryVersion>) -> Result<String, String> {
-    let constraint = constraint.trim();
-
-    // Wildcard: accept any version.
-    if constraint == "*" || constraint == "x" || constraint == "X" {
-        let mut best: Option<(Version, String)> = None;
-        for version in available.keys() {
-            let parts = parse_version(version)?;
-            if best.as_ref().is_none_or(|(b, _)| is_greater(&parts, b)) {
-                best = Some((parts, version.clone()));
-            }
-        }
-        return best
-            .map(|(_, v)| v)
-            .ok_or_else(|| "no versions available".to_string());
-    }
-
-    // Exact constraint.
-    if let Some(version) = constraint.strip_prefix('=') {
-        let version = version.trim();
-        if available.contains_key(version) {
-            return Ok(version.to_string());
-        }
-        return Err(format!("no version {} found", version));
-    }
-
-    // Strip optional leading ^ or ~; for the initial implementation treat them
-    // as "latest compatible" which simply means the highest available version.
-    let cleaned = constraint
-        .strip_prefix('^')
-        .or_else(|| constraint.strip_prefix('~'))
-        .unwrap_or(constraint)
-        .trim();
-
-    // Parse major.minor.patch for cleaned constraint.
-    let constraint_parts = parse_version(cleaned)?;
-
-    let mut best: Option<(Version, String)> = None;
-    for version in available.keys() {
-        let parts = parse_version(version)?;
-        if !is_compatible(cleaned, &constraint_parts, version, &parts) {
+    let req = VersionReq::parse(constraint)?;
+    let mut best: Option<Version> = None;
+    let mut best_string = String::new();
+    for version_str in available.keys() {
+        let version = Version::parse(version_str)
+            .map_err(|e| format!("registry contains invalid version '{}': {}", version_str, e))?;
+        if !req.matches(&version) {
             continue;
         }
-        if best.as_ref().is_none_or(|(b, _)| is_greater(&parts, b)) {
-            best = Some((parts, version.clone()));
+        if best.as_ref().is_none_or(|b| version.is_greater_than(b)) {
+            best = Some(version);
+            best_string = version_str.clone();
         }
     }
-
-    best.map(|(_, v)| v)
-        .ok_or_else(|| format!("no version matching '{}' found", constraint))
+    if best_string.is_empty() {
+        return Err(format!("no version matching '{}' found", constraint));
+    }
+    Ok(best_string)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Version(Vec<u64>);
-
-fn parse_version(s: &str) -> Result<Version, String> {
-    let mut parts = Vec::new();
-    for chunk in s.split('.') {
-        let num: u64 = chunk
-            .parse()
-            .map_err(|_| format!("invalid version segment '{}' in '{}'", chunk, s))?;
-        parts.push(num);
-    }
-    if parts.is_empty() {
-        return Err(format!("empty version '{}'", s));
-    }
-    Ok(Version(parts))
+/// A parsed SemVer-like version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version {
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64,
+    pub prerelease: Option<String>,
 }
 
-fn is_greater(a: &Version, b: &Version) -> bool {
-    let max_len = a.0.len().max(b.0.len());
-    for i in 0..max_len {
-        let av = a.0.get(i).copied().unwrap_or(0);
-        let bv = b.0.get(i).copied().unwrap_or(0);
-        if av != bv {
-            return av > bv;
+impl Version {
+    pub fn parse(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        let (core, prerelease) = s.split_once('-').map(|(c, p)| (c, Some(p))).unwrap_or((s, None));
+        let parts: Vec<&str> = core.split('.').collect();
+        if parts.is_empty() || parts.len() > 3 {
+            return Err(format!("invalid version '{}'", s));
+        }
+        let major = parse_number(parts[0], s)?;
+        let minor = parts.get(1).map(|p| parse_number(p, s)).transpose()?.unwrap_or(0);
+        let patch = parts.get(2).map(|p| parse_number(p, s)).transpose()?.unwrap_or(0);
+        let prerelease = prerelease.map(|p| p.to_string());
+        Ok(Version { major, minor, patch, prerelease })
+    }
+
+    pub fn as_triple(&self) -> (u64, u64, u64) {
+        (self.major, self.minor, self.patch)
+    }
+
+    pub fn is_greater_than(&self, other: &Version) -> bool {
+        match self.as_triple().cmp(&other.as_triple()) {
+            std::cmp::Ordering::Greater => true,
+            std::cmp::Ordering::Less => false,
+            std::cmp::Ordering::Equal => compare_prerelease(&self.prerelease, &other.prerelease) == std::cmp::Ordering::Greater,
         }
     }
-    false
 }
 
-fn is_compatible(
-    _constraint_str: &str,
-    constraint: &Version,
-    _version_str: &str,
-    version: &Version,
-) -> bool {
-    let max_len = constraint.0.len().max(version.0.len());
-    for i in 0..max_len {
-        let cv = constraint.0.get(i).copied().unwrap_or(0);
-        let vv = version.0.get(i).copied().unwrap_or(0);
-        if vv < cv {
-            return false;
+fn parse_number(s: &str, original: &str) -> Result<u64, String> {
+    s.parse::<u64>()
+        .map_err(|_| format!("invalid version segment '{}' in '{}'", s, original))
+}
+
+fn compare_prerelease(a: &Option<String>, b: &Option<String>) -> std::cmp::Ordering {
+    match (a, b) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (Some(a), Some(b)) => {
+            let a_parts: Vec<&str> = a.split('.').collect();
+            let b_parts: Vec<&str> = b.split('.').collect();
+            let len = a_parts.len().max(b_parts.len());
+            for i in 0..len {
+                let av = a_parts.get(i);
+                let bv = b_parts.get(i);
+                match (av, bv) {
+                    (None, None) => return std::cmp::Ordering::Equal,
+                    (None, Some(_)) => return std::cmp::Ordering::Less,
+                    (Some(_), None) => return std::cmp::Ordering::Greater,
+                    (Some(a), Some(b)) => {
+                        // Numeric identifiers compare as numbers; otherwise lexical.
+                        match (a.parse::<u64>(), b.parse::<u64>()) {
+                            (Ok(an), Ok(bn)) => match an.cmp(&bn) {
+                                std::cmp::Ordering::Equal => continue,
+                                other => return other,
+                            },
+                            (Ok(_), Err(_)) => return std::cmp::Ordering::Less,
+                            (Err(_), Ok(_)) => return std::cmp::Ordering::Greater,
+                            (Err(_), Err(_)) => match a.cmp(b) {
+                                std::cmp::Ordering::Equal => continue,
+                                other => return other,
+                            },
+                        }
+                    }
+                }
+            }
+            std::cmp::Ordering::Equal
         }
     }
-    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VersionReq {
+    Wildcard,
+    Exact(Version),
+    Caret(Version),
+    Tilde(Version),
+}
+
+impl VersionReq {
+    pub fn parse(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s == "*" || s.eq_ignore_ascii_case("x") {
+            return Ok(VersionReq::Wildcard);
+        }
+        if let Some(rest) = s.strip_prefix('=') {
+            return Ok(VersionReq::Exact(Version::parse(rest)?));
+        }
+        if let Some(rest) = s.strip_prefix('^') {
+            return Ok(VersionReq::Caret(Version::parse(rest)?));
+        }
+        if let Some(rest) = s.strip_prefix('~') {
+            return Ok(VersionReq::Tilde(Version::parse(rest)?));
+        }
+        // Plain version strings are treated as caret constraints.
+        Ok(VersionReq::Caret(Version::parse(s)?))
+    }
+
+    pub fn matches(&self, version: &Version) -> bool {
+        match self {
+            VersionReq::Wildcard => true,
+            VersionReq::Exact(req) => req.as_triple() == version.as_triple() && req.prerelease == version.prerelease,
+            VersionReq::Caret(req) => caret_matches(req, version),
+            VersionReq::Tilde(req) => tilde_matches(req, version),
+        }
+    }
+}
+
+fn caret_matches(req: &Version, version: &Version) -> bool {
+    // >= req, with upper bound depending on the most significant non-zero component.
+    if !version.is_greater_than(req) && version.as_triple() != req.as_triple() {
+        return false;
+    }
+    let upper = if req.major > 0 {
+        (req.major + 1, 0, 0)
+    } else if req.minor > 0 {
+        (0, req.minor + 1, 0)
+    } else {
+        (0, 0, req.patch + 1)
+    };
+    version.as_triple() < upper
+}
+
+fn tilde_matches(req: &Version, version: &Version) -> bool {
+    // >= req, < major.minor+1.0
+    if !version.is_greater_than(req) && version.as_triple() != req.as_triple() {
+        return false;
+    }
+    version.as_triple() < (req.major, req.minor + 1, 0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn select_latest_version() {
+    fn versions() -> BTreeMap<String, RegistryVersion> {
         let mut versions = BTreeMap::new();
         versions.insert("1.0.0".to_string(), RegistryVersion {
             url: "a".to_string(),
@@ -155,15 +224,73 @@ mod tests {
             checksum: None,
             dependencies: BTreeMap::new(),
         });
-        versions.insert("2.0.0".to_string(), RegistryVersion {
+        versions.insert("1.2.3".to_string(), RegistryVersion {
             url: "c".to_string(),
             checksum: None,
             dependencies: BTreeMap::new(),
         });
-        assert_eq!(select_version("1.0.0", &versions).expect("should select latest version"), "2.0.0");
-        assert_eq!(select_version("=1.2.0", &versions).expect("should select exact version"), "1.2.0");
-        assert_eq!(select_version("^1.0.0", &versions).expect("should select caret version"), "2.0.0");
-        assert_eq!(select_version("*", &versions).expect("should select wildcard version"), "2.0.0");
+        versions.insert("2.0.0".to_string(), RegistryVersion {
+            url: "d".to_string(),
+            checksum: None,
+            dependencies: BTreeMap::new(),
+        });
+        versions.insert("2.1.0".to_string(), RegistryVersion {
+            url: "e".to_string(),
+            checksum: None,
+            dependencies: BTreeMap::new(),
+        });
+        versions.insert("0.5.1".to_string(), RegistryVersion {
+            url: "f".to_string(),
+            checksum: None,
+            dependencies: BTreeMap::new(),
+        });
+        versions
+    }
+
+    #[test]
+    fn select_wildcard() {
+        assert_eq!(select_version("*", &versions()).unwrap(), "2.1.0");
+        assert_eq!(select_version("x", &versions()).unwrap(), "2.1.0");
+    }
+
+    #[test]
+    fn select_exact() {
+        assert_eq!(select_version("=1.2.0", &versions()).unwrap(), "1.2.0");
+        assert_eq!(select_version("=0.5.1", &versions()).unwrap(), "0.5.1");
+    }
+
+    #[test]
+    fn select_caret() {
+        // ^1.0.0 -> >=1.0.0, <2.0.0
+        assert_eq!(select_version("^1.0.0", &versions()).unwrap(), "1.2.3");
+        // ^1.2.0 -> >=1.2.0, <2.0.0
+        assert_eq!(select_version("^1.2.0", &versions()).unwrap(), "1.2.3");
+        // ^1.2.3 -> >=1.2.3, <2.0.0
+        assert_eq!(select_version("^1.2.3", &versions()).unwrap(), "1.2.3");
+        // ^0.5.1 -> >=0.5.1, <0.6.0
+        assert_eq!(select_version("^0.5.1", &versions()).unwrap(), "0.5.1");
+        // Plain version is caret.
+        assert_eq!(select_version("1.0.0", &versions()).unwrap(), "1.2.3");
+    }
+
+    #[test]
+    fn select_tilde() {
+        // ~1.2.0 -> >=1.2.0, <1.3.0
+        assert_eq!(select_version("~1.2.0", &versions()).unwrap(), "1.2.3");
+        // ~1.0.0 -> >=1.0.0, <1.1.0
+        assert_eq!(select_version("~1.0.0", &versions()).unwrap(), "1.0.0");
+    }
+
+    #[test]
+    fn select_caret_across_major_boundary() {
+        assert_eq!(select_version("^2.0.0", &versions()).unwrap(), "2.1.0");
+    }
+
+    #[test]
+    fn select_no_match() {
+        assert!(select_version("=3.0.0", &versions()).is_err());
+        assert!(select_version("^0.6.0", &versions()).is_err());
+        assert!(select_version("~1.3.0", &versions()).is_err());
     }
 
     #[test]
@@ -174,7 +301,7 @@ mod tests {
             checksum: None,
             dependencies: BTreeMap::new(),
         });
-        assert_eq!(select_version("*", &versions).expect("should select wildcard version"), "0.5.1");
+        assert_eq!(select_version("*", &versions).unwrap(), "0.5.1");
     }
 
     #[test]
@@ -200,5 +327,14 @@ mod tests {
             "https://github.com/period-lang/registry/releases/download/list-1.0.0/list-1.0.0.period"
         );
         assert_eq!(version.checksum.as_deref(), Some("sha256:abcd"));
+    }
+
+    #[test]
+    fn version_parsing_and_comparison() {
+        assert!(Version::parse("1.2.3").unwrap().is_greater_than(&Version::parse("1.2.2").unwrap()));
+        assert!(!Version::parse("1.2.3").unwrap().is_greater_than(&Version::parse("1.2.3").unwrap()));
+        assert!(Version::parse("2.0.0").unwrap().is_greater_than(&Version::parse("1.9.9").unwrap()));
+        assert!(Version::parse("1.0.0").unwrap().is_greater_than(&Version::parse("1.0.0-alpha").unwrap()));
+        assert!(Version::parse("1.0.0-alpha.2").unwrap().is_greater_than(&Version::parse("1.0.0-alpha.1").unwrap()));
     }
 }

@@ -89,6 +89,20 @@ pub fn period_run() -> i32 {
         }
         return 0;
     }
+    if args.len() >= 3 && args[1] == "search" {
+        if let Err(e) = package_manager::search(&args[2]) {
+            eprintln!("search error: {}", e);
+            return 1;
+        }
+        return 0;
+    }
+    if args.len() >= 3 && args[1] == "info" {
+        if let Err(e) = package_manager::info(&args[2]) {
+            eprintln!("info error: {}", e);
+            return 1;
+        }
+        return 0;
+    }
     if args.len() >= 2 && args[1] == "publish" {
         let mut file: Option<String> = None;
         let mut version: Option<String> = None;

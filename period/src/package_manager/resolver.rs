@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
+use super::lockfile::{LockedPackage, PeriodLock};
 use super::manifest::{DependencySpec, PeriodToml};
 use super::registry::{select_version, RegistryIndex};
 
@@ -16,15 +17,17 @@ pub struct ResolvedPackage {
 pub struct Resolver<'a> {
     registry: &'a str,
     index: Option<RegistryIndex>,
+    lockfile: Option<&'a PeriodLock>,
     resolved: BTreeMap<String, ResolvedPackage>,
     loading: HashSet<String>,
 }
 
 impl<'a> Resolver<'a> {
-    pub fn new(registry: &'a str) -> Self {
+    pub fn new(registry: &'a str, lockfile: Option<&'a PeriodLock>) -> Self {
         Self {
             registry,
             index: None,
+            lockfile,
             resolved: BTreeMap::new(),
             loading: HashSet::new(),
         }
@@ -51,7 +54,7 @@ impl<'a> Resolver<'a> {
             let resolved = if let Some(git) = spec.git_url() {
                 self.resolve_git(&name, git, spec.version())?
             } else {
-                self.resolve_registry(&name, spec.version().unwrap_or("*"))?
+                self.resolve_dependency(&name, spec.version().unwrap_or("*"))?
             };
 
             for (dep_name, dep_version) in &resolved.dependencies {
@@ -77,7 +80,52 @@ impl<'a> Resolver<'a> {
         Ok(self.resolved.values().cloned().collect())
     }
 
-    fn resolve_registry(&mut self,
+    fn resolve_dependency(
+        &mut self,
+        name: &str,
+        constraint: &str,
+    ) -> Result<ResolvedVersion, String> {
+        // If a lockfile entry exists and satisfies the constraint, reuse it
+        // for reproducible installs.
+        if let Some(lock) = self.lockfile {
+            if let Some(locked) = lock.packages.iter().find(|p| p.name == name) {
+                if self.lock_satisfies(locked, constraint) {
+                    return Ok(ResolvedVersion {
+                        version: locked.version.clone(),
+                        source: locked.source.clone(),
+                        checksum: Some(locked.checksum.clone()),
+                        dependencies: BTreeMap::new(),
+                    });
+                }
+            }
+        }
+        self.resolve_registry(name, constraint)
+    }
+
+    fn lock_satisfies(&self, locked: &LockedPackage, constraint: &str) -> bool {
+        // Exact constraints are easy.
+        if let Some(rest) = constraint.strip_prefix('=') {
+            return locked.version == rest.trim();
+        }
+        // For caret/tilde/wildcard/plain, re-use registry version selection against
+        // a synthetic single-entry map. Lockfile entries are registry URLs.
+        if locked.source.starts_with("registry+") {
+            let mut map = BTreeMap::new();
+            map.insert(locked.version.clone(), super::registry::RegistryVersion {
+                url: locked.source.strip_prefix("registry+").unwrap_or(&locked.source).to_string(),
+                checksum: Some(locked.checksum.clone()),
+                dependencies: BTreeMap::new(),
+            });
+            select_version(constraint, &map).is_ok()
+        } else {
+            // Non-registry sources are not lockfile-reproducible in this way;
+            // fall through to fresh resolution.
+            false
+        }
+    }
+
+    fn resolve_registry(
+        &mut self,
         name: &str,
         constraint: &str,
     ) -> Result<ResolvedVersion, String> {
@@ -101,7 +149,11 @@ impl<'a> Resolver<'a> {
         })
     }
 
-    fn resolve_git(&self, name: &str, git: &str, version: Option<&str>) -> Result<ResolvedVersion, String> {
+    fn resolve_git(&self,
+        name: &str,
+        git: &str,
+        version: Option<&str>,
+    ) -> Result<ResolvedVersion, String> {
         let version = version.unwrap_or("latest").to_string();
         let url = format!("{}/raw/main/{}.period", git.trim_end_matches('/'), name);
         Ok(ResolvedVersion {
@@ -127,8 +179,8 @@ mod tests {
 
     #[test]
     fn detect_cycle() {
-        // Cycle detection is verified by the loading HashSet.
-        let resolver = Resolver::new("https://example.com");
+        let lock = PeriodLock::default();
+        let resolver = Resolver::new("https://example.com", Some(&lock));
         let mut manifest = PeriodToml {
             package: super::super::manifest::Package {
                 name: "demo".to_string(),
@@ -139,7 +191,35 @@ mod tests {
             dependencies: BTreeMap::new(),
         };
         manifest.dependencies.insert("self".to_string(), DependencySpec::Version("1.0.0".to_string()));
-        // This would require a real registry; just exercise the struct here.
         assert!(resolver.resolved.is_empty());
+    }
+
+    #[test]
+    fn lockfile_reused_when_constraint_satisfied() {
+        let lock = PeriodLock {
+            packages: vec![LockedPackage {
+                name: "foo".to_string(),
+                version: "1.2.3".to_string(),
+                source: "registry+https://example.com/foo-1.2.3.period".to_string(),
+                checksum: "sha256:abcd".to_string(),
+            }],
+        };
+        let mut resolver = Resolver::new("https://example.com", Some(&lock));
+        let mut manifest = PeriodToml {
+            package: super::super::manifest::Package {
+                name: "demo".to_string(),
+                version: "1.0.0".to_string(),
+                authors: Vec::new(),
+                license: None,
+            },
+            dependencies: BTreeMap::new(),
+        };
+        manifest.dependencies.insert("foo".to_string(), DependencySpec::Version("^1.0.0".to_string()));
+
+        // Without fetching the registry, the lockfile entry should be reused.
+        let resolved = resolver.resolve(&manifest).expect("should resolve from lockfile");
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].version, "1.2.3");
+        assert_eq!(resolved[0].source, "registry+https://example.com/foo-1.2.3.period");
     }
 }

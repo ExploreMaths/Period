@@ -13,7 +13,7 @@ use crate::package_manager::downloader::{download, sha256_hex, verify_checksum};
 use crate::package_manager::lockfile::{LockedPackage, PeriodLock};
 use crate::package_manager::manifest::{default_manifest, DependencySpec, PeriodToml};
 pub use crate::package_manager::publisher::{publish, PublishOptions};
-use crate::package_manager::registry::default_registry;
+use crate::package_manager::registry::{default_registry, RegistryIndex};
 use crate::package_manager::resolver::Resolver;
 
 pub const MANIFEST_FILE: &str = "period.toml";
@@ -44,6 +44,10 @@ pub fn init_project(name: Option<&str>) -> Result<(), String> {
 }
 
 /// Install dependencies declared in `period.toml`.
+///
+/// If `period.lock` exists and every locked package still satisfies the manifest,
+/// the lockfile is reused so installs are reproducible. Run `period update` to
+/// ignore the lockfile and re-resolve from the registry.
 pub fn install() -> Result<(), String> {
     let manifest = load_manifest()?;
     resolve_and_download(&manifest, false)
@@ -54,6 +58,9 @@ pub fn install() -> Result<(), String> {
 /// If `name_or_url` is a URL (http/https/file), the file is downloaded directly
 /// without changing the manifest. Otherwise it is treated as a package name or
 /// `name@version` spec, added to `[dependencies]`, and resolved.
+///
+/// Version specs support exact (`=1.2.3`), caret (`^1.2.3`), tilde (`~1.2.3`),
+/// and wildcard (`*`). A plain version like `1.2.3` is treated as `^1.2.3`.
 pub fn install_package(name_or_url: &str) -> Result<(), String> {
     if is_url(name_or_url) {
         // Direct URL install: keep legacy behaviour.
@@ -115,7 +122,7 @@ fn download_url(url: &str, dest: &Path) -> Result<(), String> {
     }
 }
 
-/// Re-resolve all dependencies and rewrite `period.lock`.
+/// Re-resolve all dependencies from the registry and rewrite `period.lock`.
 pub fn update() -> Result<(), String> {
     let manifest = load_manifest()?;
     resolve_and_download(&manifest, true)
@@ -134,9 +141,11 @@ fn parse_package_spec(spec: &str) -> (String, String) {
     }
 }
 
-fn resolve_and_download(manifest: &PeriodToml, _force: bool) -> Result<(), String> {
+fn resolve_and_download(manifest: &PeriodToml, force: bool) -> Result<(), String> {
     let registry = default_registry();
-    let mut resolver = Resolver::new(&registry);
+    let lockfile = if force { None } else { load_lockfile_from(&env::current_dir().unwrap_or_else(|_| PathBuf::from("."))) };
+    let lock_ref = lockfile.as_ref();
+    let mut resolver = Resolver::new(&registry, lock_ref);
     let packages = resolver.resolve(manifest)?;
 
     fs::create_dir_all(PACKAGES_DIR)
@@ -145,7 +154,23 @@ fn resolve_and_download(manifest: &PeriodToml, _force: bool) -> Result<(), Strin
     let mut lock = PeriodLock::default();
     for pkg in &packages {
         let url = pkg.source.strip_prefix("registry+").or_else(|| pkg.source.strip_prefix("git+")).unwrap_or(&pkg.source);
-        let bytes = download(url, &pkg.file_path)?;
+        let bytes = if pkg.file_path.is_file() {
+            // If the file already exists, read it and verify its checksum before
+            // deciding whether to re-download.
+            let existing = fs::read(&pkg.file_path)
+                .map_err(|e| format!("cannot read {}: {}", pkg.file_path.display(), e))?;
+            if let Some(expected) = &pkg.checksum {
+                if verify_checksum(&existing, expected).is_ok() {
+                    existing
+                } else {
+                    download(url, &pkg.file_path)?
+                }
+            } else {
+                existing
+            }
+        } else {
+            download(url, &pkg.file_path)?
+        };
         if let Some(expected) = &pkg.checksum {
             verify_checksum(&bytes, expected)?;
         }
@@ -156,10 +181,57 @@ fn resolve_and_download(manifest: &PeriodToml, _force: bool) -> Result<(), Strin
             source: pkg.source.clone(),
             checksum,
         });
+        println!("Installed {} {} -> {}", pkg.name, pkg.version, pkg.file_path.display());
     }
 
     lock.save(&PathBuf::from(LOCKFILE_FILE))?;
     println!("Wrote {} with {} package(s)", LOCKFILE_FILE, lock.packages.len());
+    Ok(())
+}
+
+/// Search the registry for packages matching `query`.
+pub fn search(query: &str) -> Result<(), String> {
+    let registry = default_registry();
+    let index = RegistryIndex::fetch(&registry)?;
+    let query_lower = query.to_lowercase();
+    let mut found = false;
+    for (name, versions) in &index.packages {
+        if name.to_lowercase().contains(&query_lower) {
+            found = true;
+            let latest = versions.keys().last().map(|s| s.as_str()).unwrap_or("unknown");
+            println!("{} @ {}", name, latest);
+        }
+    }
+    if !found {
+        println!("No packages matching '{}' found in registry.", query);
+    }
+    Ok(())
+}
+
+/// Show information about a package in the registry.
+pub fn info(spec: &str) -> Result<(), String> {
+    let registry = default_registry();
+    let index = RegistryIndex::fetch(&registry)?;
+    let (name, constraint) = parse_package_spec(spec);
+    let versions = index
+        .packages
+        .get(&name)
+        .ok_or_else(|| format!("package '{}' not found in registry", name))?;
+    let version = crate::package_manager::registry::select_version(constraint.as_str(), versions)?;
+    let entry = versions
+        .get(&version)
+        .ok_or_else(|| format!("selected version '{}' disappeared for package '{}'", version, name))?;
+    println!("{} @ {}", name, version);
+    println!("  source: {}", entry.url);
+    if let Some(checksum) = &entry.checksum {
+        println!("  checksum: {}", checksum);
+    }
+    if !entry.dependencies.is_empty() {
+        println!("  dependencies:");
+        for (dep, ver) in &entry.dependencies {
+            println!("    {} = {}", dep, ver);
+        }
+    }
     Ok(())
 }
 
