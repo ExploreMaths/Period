@@ -5,12 +5,13 @@
 ### Added
 
 - Package manager is now practical for real use:
-  - `period search <query>` searches the hosted registry.
-  - `period info <package>[@<version>]` prints package metadata and dependency list.
+  - `period search query` searches the hosted registry.
+  - `period info package[@version]` prints package metadata and dependency list.
   - `period install` reuses `period.lock` when locked versions still satisfy `period.toml`, making installs reproducible.
   - `period update` ignores the lockfile and re-resolves from the registry.
   - Version constraints now follow SemVer semantics: `^1.2.3`, `~1.2.3`, `=1.2.3`, `*`, and plain `1.2.3` (treated as `^1.2.3`).
   - Transitive dependencies are resolved from the registry and recorded in the lockfile.
+- `period publish` can now upload the package file directly to a GitHub Release using the `gh` CLI (`--upload --repo owner/repo`). It also auto-detects the repo from the current git remote and generates the correct Release asset URL.
 
 ### Fixed
 

@@ -109,7 +109,9 @@ pub fn period_run() -> i32 {
         let mut name: Option<String> = None;
         let mut registry_file: Option<String> = None;
         let mut base_url: Option<String> = None;
-        let usage = "usage: period publish <file.period> [--version <version>] [--name <name>] [--registry-file <path>] [--base-url <url>]";
+        let mut upload = false;
+        let mut repo: Option<String> = None;
+        let usage = "usage: period publish <file.period> [--version <version>] [--name <name>] [--registry-file <path>] [--base-url <url>] [--upload] [--repo owner/repo]";
         let mut i = 2;
         while i < args.len() {
             match args[i].as_str() {
@@ -145,6 +147,17 @@ pub fn period_run() -> i32 {
                     }
                     base_url = Some(args[i].clone());
                 }
+                "--upload" => {
+                    upload = true;
+                }
+                "--repo" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("{}", usage);
+                        return 1;
+                    }
+                    repo = Some(args[i].clone());
+                }
                 other => {
                     if file.is_some() {
                         eprintln!("{}", usage);
@@ -167,6 +180,8 @@ pub fn period_run() -> i32 {
             version: version.as_deref(),
             registry_file: registry_file_path.as_deref(),
             base_url: base_url.as_deref(),
+            upload,
+            repo: repo.as_deref(),
         };
         if let Err(e) = package_manager::publish(options) {
             eprintln!("publish error: {}", e);

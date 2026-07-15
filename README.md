@@ -160,22 +160,22 @@ and re-resolves from the registry.
 
 ### Publishing a package
 
-Packages are published by producing a registry entry for a `.period` file. The
-entry can be merged into a local `registry.json` or printed to stdout:
+Packages are published as GitHub Release assets and registered in a hosted
+`registry.json`. The CLI can upload the asset for you if the `gh` CLI is
+installed and authenticated, or you can upload the file manually.
 
 ```bash
-period publish ./mypkg.period --name mypkg --version 1.0.0
-```
+# Upload the package to a GitHub Release and add the entry to registry.json
+period publish ./mypkg.period --name mypkg --version 1.0.0 \
+    --upload --repo myorg/registry --registry-file registry.json
 
-To update an existing registry file locally (for example, before opening a PR
-against `period-lang/registry`):
+# Same, but let the repo be detected from the current git remote
+period publish ./mypkg.period --name mypkg --version 1.0.0 \
+    --upload --registry-file registry.json
 
-```bash
+# Generate the registry entry without uploading (manual workflow)
 period publish ./mypkg.period --name mypkg --version 1.0.0 --registry-file registry.json
 ```
-
-The package file itself should be uploaded to a reachable URL (for example, a
-GitHub Release asset). The registry entry's `url` points to that location.
 
 Registry changes are submitted through the registry repository's normal
 workflow (for example, a Pull Request against `period-lang/registry`). The old
